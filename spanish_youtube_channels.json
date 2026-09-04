@@ -1,0 +1,395 @@
+{
+  "language": "es",
+  "description": "Initial Spanish-language YouTube corpus candidates for native-speech retrieval experiments.",
+  "sections": [
+    {
+      "id": "learning_and_language",
+      "name": "Language learning and language-focused content",
+      "description": "Clear native Spanish with strong linguistic or pedagogical value; useful for high-quality baseline examples.",
+      "channels": [
+        {
+          "name": "Easy Spanish",
+          "url": "https://www.youtube.com/@EasySpanish",
+          "varieties": [
+            "Spain",
+            "Mexico",
+            "Latin America"
+          ],
+          "speech_style": [
+            "street interviews",
+            "conversation",
+            "language learning"
+          ],
+          "description": "One of the strongest starting points: native speakers discussing everyday topics in street interviews and conversations, with learner-oriented presentation and unusually useful subtitle material."
+        },
+        {
+          "name": "Dreaming Spanish",
+          "url": "https://www.youtube.com/@DreamingSpanish",
+          "varieties": [
+            "Spain",
+            "Latin America"
+          ],
+          "speech_style": [
+            "comprehensible input",
+            "monologue",
+            "conversation"
+          ],
+          "description": "A very large learner-oriented corpus built around comprehensible input. Speakers are native and the material spans slow beginner speech through substantially more natural conversational Spanish."
+        },
+        {
+          "name": "Spanish After Hours",
+          "url": "https://www.youtube.com/@spanishafterhours",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "stories",
+            "explanations",
+            "conversation",
+            "language learning"
+          ],
+          "description": "Clear native European Spanish with stories, explanations and conversational material. Particularly useful for intermediate vocabulary and clean baseline retrieval examples."
+        },
+        {
+          "name": "Linguriosa",
+          "url": "https://www.youtube.com/@Linguriosa",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "linguistics",
+            "informal monologue",
+            "educational"
+          ],
+          "description": "Spanish-language linguistic outreach covering words, expressions, etymology, phonetics, grammar and register. Especially valuable because the content itself frequently discusses language usage."
+        }
+      ]
+    },
+    {
+      "id": "travel_and_real_world",
+      "name": "Travel and real-world interaction",
+      "description": "Narration mixed with spontaneous conversations and speech recorded in real situations.",
+      "channels": [
+        {
+          "name": "Luisito Comunica",
+          "url": "https://www.youtube.com/@luisitocomunica",
+          "varieties": [
+            "Mexico",
+            "Latin America"
+          ],
+          "speech_style": [
+            "travel",
+            "street interaction",
+            "vlog",
+            "conversation"
+          ],
+          "description": "A strong real-world corpus: Mexican narration combined with spontaneous interactions with people across many countries and situations."
+        },
+        {
+          "name": "Alan por el mundo",
+          "url": "https://www.youtube.com/@alanxelmundo",
+          "varieties": [
+            "Mexico",
+            "Latin America"
+          ],
+          "speech_style": [
+            "travel",
+            "narration",
+            "conversation"
+          ],
+          "description": "Travel content combining clear Mexican narration with natural conversations and practical real-world situations."
+        }
+      ]
+    },
+    {
+      "id": "long_form_conversation",
+      "name": "Long-form conversation and contemporary informal speech",
+      "description": "High-volume unscripted or semi-structured speech, useful for colloquialisms, discourse markers and phrase retrieval.",
+      "channels": [
+        {
+          "name": "The Wild Project",
+          "url": "https://www.youtube.com/@TheWildProject",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "podcast",
+            "interview",
+            "long-form conversation"
+          ],
+          "description": "Large quantities of natural European Spanish conversation. Particularly useful for colloquialisms, discourse markers and longer conversational constructions."
+        },
+        {
+          "name": "Ter",
+          "url": "https://www.youtube.com/@Ter",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "culture",
+            "humour",
+            "informal monologue"
+          ],
+          "description": "Contemporary, informal European Spanish around culture and humour. Useful as a less textbook-like source of modern vocabulary and expressive language."
+        },
+        {
+          "name": "La Ruina",
+          "url": "https://www.youtube.com/@laruinashow",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "live comedy",
+            "storytelling",
+            "conversation"
+          ],
+          "description": "Live comedy built around people telling personal stories. Valuable for spontaneous storytelling, conversational phrasing and audience interaction."
+        }
+      ]
+    },
+    {
+      "id": "argentina_rioplatense",
+      "name": "Argentina and Rioplatense Spanish",
+      "description": "A deliberately strong Argentine component for colloquial vocabulary and constructions that generic pan-Hispanic corpora often underrepresent.",
+      "channels": [
+        {
+          "name": "Gelatina",
+          "url": "https://www.youtube.com/@somosgelatina",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "streaming",
+            "conversation",
+            "interviews",
+            "humour"
+          ],
+          "description": "Long conversational programs with very natural contemporary Rioplatense Spanish, mixing politics, culture, humour, interviews and everyday discussion."
+        },
+        {
+          "name": "OLGA",
+          "url": "https://www.youtube.com/@olgaenvivo",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "streaming",
+            "podcast",
+            "conversation",
+            "humour"
+          ],
+          "description": "High-volume casual Argentine conversation with multiple speakers, celebrities and humour. Particularly attractive for colloquial expressions and naturally occurring phrase variants."
+        },
+        {
+          "name": "LUZU TV",
+          "url": "https://www.youtube.com/@luzutv",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "streaming",
+            "conversation",
+            "entertainment"
+          ],
+          "description": "A large source of casual contemporary Argentine speech, with long multi-speaker programs and substantial coverage of everyday conversational language."
+        },
+        {
+          "name": "BLENDER",
+          "url": "https://www.youtube.com/@estoesblender",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "streaming",
+            "conversation",
+            "entertainment"
+          ],
+          "description": "Contemporary Argentine conversational content and streaming, useful for informal vocabulary, humour and current spoken usage."
+        },
+        {
+          "name": "Filo News",
+          "url": "https://www.youtube.com/@filonews",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "journalism",
+            "interviews",
+            "conversation"
+          ],
+          "description": "Argentine journalism and interviews. The longer interview material is especially useful for natural but comparatively well-structured speech."
+        },
+        {
+          "name": "Televisión Pública",
+          "url": "https://www.youtube.com/@TVPublicaArgentina",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "television",
+            "interviews",
+            "culture",
+            "news"
+          ],
+          "description": "Institutional Argentine television with interviews, cultural programming and news; useful as a relatively stable source of high-quality Argentine Spanish."
+        },
+        {
+          "name": "Canal Encuentro",
+          "url": "https://www.youtube.com/@canalencuentro",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "documentary",
+            "education",
+            "history",
+            "interviews"
+          ],
+          "description": "Argentine documentary and educational programming. More formal than streaming channels, but strong for high-quality speech, interviews and broad topical vocabulary."
+        },
+        {
+          "name": "Trasnoche Paranormal",
+          "url": "https://www.youtube.com/@trasnocheparanormal",
+          "varieties": [
+            "Argentina",
+            "Rioplatense"
+          ],
+          "speech_style": [
+            "long-form conversation",
+            "storytelling",
+            "podcast"
+          ],
+          "description": "Long-form Argentine conversation and storytelling. The subject matter is niche, but the format provides many hours of naturally flowing speech."
+        }
+      ]
+    },
+    {
+      "id": "documentary_and_journalism",
+      "name": "Documentary, journalism and institutional media",
+      "description": "Stable, large archives with clean audio, interviews and a more formal register.",
+      "channels": [
+        {
+          "name": "VICE en Español",
+          "url": "https://www.youtube.com/@VICEEnEspanol",
+          "varieties": [
+            "Mexico",
+            "Colombia",
+            "Spain",
+            "Latin America"
+          ],
+          "speech_style": [
+            "documentary",
+            "street interviews",
+            "culture",
+            "journalism"
+          ],
+          "description": "Documentaries and interviews spanning culture, travel, nightlife, social issues and street-level reporting, including productions from several Spanish-speaking countries."
+        },
+        {
+          "name": "DW Español",
+          "url": "https://www.youtube.com/@dwespanol",
+          "varieties": [
+            "Latin America",
+            "Spain",
+            "international"
+          ],
+          "speech_style": [
+            "documentary",
+            "news",
+            "interviews"
+          ],
+          "description": "A large institutional archive with strong audio quality, documentaries and interviews. Useful for a cleaner and more formal complement to casual-speech channels."
+        },
+        {
+          "name": "BBC News Mundo",
+          "url": "https://www.youtube.com/@BBCMundo",
+          "varieties": [
+            "Latin America",
+            "Spain",
+            "international"
+          ],
+          "speech_style": [
+            "journalism",
+            "interviews",
+            "explainers"
+          ],
+          "description": "Clear journalistic Spanish plus interviews with speakers from many countries, giving broad regional and topical coverage."
+        },
+        {
+          "name": "RTVE",
+          "url": "https://www.youtube.com/@rtve",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "television",
+            "documentary",
+            "interviews",
+            "culture",
+            "news"
+          ],
+          "description": "Spanish public broadcasting material covering interviews, documentaries, culture, travel, science and language. Useful for stable, professionally produced European Spanish."
+        }
+      ]
+    },
+    {
+      "id": "science_and_education",
+      "name": "Science and educational narration",
+      "description": "Clearer, more structured native speech useful for educated general vocabulary and comparison against conversational data.",
+      "channels": [
+        {
+          "name": "QuantumFracture",
+          "url": "https://www.youtube.com/QuantumFracture",
+          "varieties": [
+            "Spain"
+          ],
+          "speech_style": [
+            "science",
+            "educational",
+            "narration"
+          ],
+          "description": "Clear European Spanish science communication and narration. Useful for precise, educated vocabulary and clean speech."
+        }
+      ]
+    },
+    {
+      "id": "scripted_and_interview",
+      "name": "Scripted comedy and interviews",
+      "description": "Useful for everyday situational dialogue and longer structured personal conversations.",
+      "channels": [
+        {
+          "name": "EnchufeTV",
+          "url": "https://www.youtube.com/@enchufetv",
+          "varieties": [
+            "Ecuador",
+            "Latin America"
+          ],
+          "speech_style": [
+            "scripted comedy",
+            "dialogue"
+          ],
+          "description": "Scripted comedy with everyday situational dialogue. Although less spontaneous than interviews or podcasts, it can provide concise and highly contextualized examples."
+        },
+        {
+          "name": "Yordi Rosado",
+          "url": "https://www.youtube.com/@YordiRosado",
+          "varieties": [
+            "Mexico"
+          ],
+          "speech_style": [
+            "long-form interviews",
+            "conversation"
+          ],
+          "description": "Long Mexican interviews that provide substantial amounts of natural, structured conversational speech and personal storytelling."
+        }
+      ]
+    }
+  ]
+}
