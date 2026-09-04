@@ -22,17 +22,24 @@ running acquisition and indexing because YouTube caption availability changes ov
 - A video can disable embedding or become unavailable after indexing. The viewer therefore exposes
   a timestamped link back to YouTube.
 
-## Next experiments
+## Open questions these constraints raise
 
-1. Label a small set of retrieved examples for boundary quality and learner usefulness before
-   changing the ranking formula.
-2. Compare punctuation restoration and audio pause/VAD boundaries against the deterministic
-   subtitle-only baseline.
-3. Add Spanish lemmatization as a separate retrieval mode and measure false positives rather than
-   replacing exact lookup.
-4. Use word-level ASR or forced alignment only for top-ranked candidates where timestamp refinement
-   has product value.
-5. Compare lexical candidates with embedding retrieval, then rerank within the same evaluation set.
+These are observations about what the baseline cannot yet answer, not a work plan. The
+[roadmap](plans/README.md) owns sequencing, and each linked plan carries the method:
+
+- Is lemma retrieval worth its false positives, and which analyzer should each language use
+  ([Plan 03](plans/03-morphological-retrieval.md),
+  [Plan 04](plans/04-analyzer-comparison-experiment.md))?
+- How far do caption cue boundaries diverge from real sentence boundaries and real transcripts
+  ([Plan 09](plans/09-audio-and-caption-reliability.md))?
+- Does forced alignment beat cue timing enough to be worth its cost, and only for which source
+  classes ([Plan 10](plans/10-forced-alignment.md))?
+- Do retrieved clips actually help a learner, and can any ranking beat the deterministic baseline
+  ([Plan 11](plans/11-evaluation-labeling-and-llm-judge.md),
+  [Plan 12](plans/12-ranking-features-and-diversification.md),
+  [Plan 13](plans/13-learned-multilingual-reranker.md))?
+- Would embedding retrieval add candidates that exact and lemma lookup miss? Not yet planned; it
+  needs the evaluation set to be measurable at all.
 
 ## Seed run
 

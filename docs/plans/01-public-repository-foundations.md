@@ -40,7 +40,7 @@ clear reuse terms, and no dependency on committed corpus data.
 1. Add `LICENSE`, `CONTRIBUTING.md`, and a short data/licensing section in the README.
 2. Complete package metadata with the known repository URL, license, keywords, classifiers, and
    `speech-retrieval` console entry point. Move script dispatch behind an importable CLI module; do
-   not redesign command behavior reserved for Plan 10.
+   not redesign command behavior reserved for Plan 05.
 3. Add a GitHub Actions workflow that installs from the lock files and runs Python tests, web tests,
    and the production web build on pull requests and the default branch. Begin with one supported
    version combination rather than an unnecessarily large matrix.

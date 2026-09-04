@@ -529,9 +529,12 @@ This is intended to maximize linguistic diversity rather than simply maximize th
 
 The working baseline includes channel discovery, cached subtitle acquisition, normalization and
 segmentation, exact 1–5-gram retrieval, deterministic ranking, a JSON API, and a React YouTube clip
-viewer. The canonical [remaining-work roadmap](docs/plans/README.md) breaks public-repository,
-multilingual retrieval, service, evaluation/ML, reusable-player, and Acervo integration work into
-ordered implementation sessions.
+viewer. The canonical [remaining-work roadmap](docs/plans/README.md) breaks the remaining work into
+ordered implementation sessions: public-repository foundations and multilingual retrieval first, then
+an integration-ready service and reusable player, then viewer quality and retrieval science in
+parallel, and finally scaling and release. Integration into the host application deliberately comes
+before the translation, audio, alignment, and ranking research, so that later work improves a system
+already in real use.
 
 The roadmap favors the smallest useful implementation and keeps room for research. Optional models,
 audio, and locally acquired inputs are not prerequisites for exact retrieval, while licensed

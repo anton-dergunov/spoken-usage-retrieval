@@ -79,7 +79,7 @@ data requested in a target language later.
 
 ## Non-goals
 
-- Curating new language catalogues; Plan 03 owns that content.
-- Language-aware tokenization or lemmatization; Plan 04 owns analysis.
+- Curating new language catalogues; the language-catalogue session template owns that content.
+- Language-aware tokenization or lemmatization; Plan 03 owns analysis.
 - Translations, translated-track acquisition, or cross-language retrieval.
 - Migrating irreplaceable user data; generated prototype indexes are rebuilt.
