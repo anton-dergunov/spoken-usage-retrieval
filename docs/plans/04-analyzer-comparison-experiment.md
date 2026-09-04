@@ -18,7 +18,7 @@ modeling decision in the pipeline and deserves evidence.
 
 - Plan 03 ships simplemma as the default and Stanza as an optional analyzer behind one protocol,
   chosen by language rather than by measurement.
-- `docs/feasibility-notes.md` already names lemma-mode false positives as the risk to quantify
+- [`docs/design.md`](../design.md) already names lemma-mode false positives as the risk to quantify
   before lemmatization changes default retrieval behavior.
 - No lemmatization accuracy or lemma-retrieval precision has been measured on this corpus.
 

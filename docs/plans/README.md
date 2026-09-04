@@ -124,7 +124,7 @@ for it.
 
 | Language | Catalogue file | Status | Report |
 | --- | --- | --- | --- |
-| Spanish (`es`) | `config/channels/es.json` | Pending Plan 02 migration | `docs/feasibility-notes.md` |
+| Spanish (`es`) | `config/channels/es.json` | Pending Plan 02 migration | [`docs/design.md`](../design.md) |
 | English (`en`) | — | Not started | — |
 | French (`fr`) | — | Not started | — |
 | German (`de`) | — | Not started | — |
@@ -207,9 +207,10 @@ template.
 | 16 Acervo integration and release | split into 07 (early integration) and 15 (release) |
 | — | 04 Analyzer comparison experiment, new |
 
-Feasibility findings remain in [`../feasibility-notes.md`](../feasibility-notes.md), while completed
-experimental evidence remains in [`../../experiments/index.md`](../../experiments/index.md). Plans
-describe future work; experiment reports describe observations.
+Design decisions, the measured baseline, and known constraints live in
+[`../design.md`](../design.md), while completed experimental evidence lives in
+[`../../experiments/index.md`](../../experiments/index.md). Plans describe future work; design notes
+describe why the system is shaped as it is; experiment reports describe observations.
 
 The original working brief remains in `TODO.txt` for now as a source record. It can be retired in a
 later documentation cleanup only after the owner explicitly asks for that.

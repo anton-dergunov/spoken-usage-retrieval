@@ -17,8 +17,10 @@ clear reuse terms, and no dependency on committed corpus data.
 - There is no repository license or CI workflow.
 - Generated `data/`, frontend dependencies/builds, and Python caches are ignored, but the README
   should explain what may be published and what normally stays local.
-- The README mixes implemented behavior with a long speculative roadmap now superseded by this
-  directory.
+- The README has been reduced to demonstrated behavior, with design rationale, the measured
+  baseline, and known constraints moved to `docs/design.md` and speculative interface sketches
+  dropped in favor of the plans that own them. What remains is to keep it accurate as packaging and
+  the console entry point change, and to add the data/licensing section.
 
 ## Decisions
 
@@ -48,9 +50,9 @@ clear reuse terms, and no dependency on committed corpus data.
    Checks must run locally through documented commands and in CI.
 5. Keep environment/credential files ignored and document the default local-data layout. Do not add
    a broad repository-policy test or forbid intentionally licensed research artifacts.
-6. Restructure the README around demonstrated behavior: screenshot, quick start, architecture,
-   current limitations, experiment evidence, package/service direction, and a short link to the
-   roadmap. Remove duplicated speculative implementation detail.
+6. Reconcile the README and `docs/design.md` with whatever this session changes: install and quick
+   start commands, the console entry point, the tests section, and the documentation links. The
+   structural split is already done; do not re-litigate it.
 7. Add a clean-clone smoke command that uses synthetic fixtures for indexing/API checks and does not
    contact YouTube. Keep the real acquisition command documented as an explicit network operation.
 
@@ -72,8 +74,8 @@ clear reuse terms, and no dependency on committed corpus data.
 - `speech-retrieval --help` runs from the installed wheel.
 - `git ls-files` contains no credentials or accidentally generated local corpus files. Any
   intentionally published data/model artifact has a documented source, license, and purpose.
-- README statements agree with implemented behavior and link to `docs/plans/README.md` for future
-  work.
+- README statements agree with implemented behavior and link to `docs/plans/README.md`,
+  `docs/design.md`, and `experiments/index.md`.
 
 ## Non-goals
 
