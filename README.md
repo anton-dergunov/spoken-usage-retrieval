@@ -4,6 +4,10 @@ A research-oriented information retrieval system for finding **real examples of 
 
 The project builds a searchable corpus from selected YouTube channels, retrieves occurrences of a target word or phrase, ranks the most useful examples, and returns the exact video segments where the expression is spoken. It is designed both as a reusable library for a language-learning application and as an experimental platform for work on retrieval, phrase matching, speech–text alignment, and example-quality ranking.
 
+![Web demo showing Spanish-speech search results](docs/assets/web-demo.webp)
+
+*Web demo: search results from native Spanish speech with the matching video excerpt.*
+
 ## MVP quick start
 
 The repository contains a subtitle-only acquisition pipeline, deterministic 1–5-gram index, JSON
