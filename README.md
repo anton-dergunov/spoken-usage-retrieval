@@ -506,10 +506,10 @@ A particularly interesting long-term problem is:
 
 ## Corpus configuration
 
-The broad Spanish source catalogue is defined in [`spanish_youtube_channels.json`](spanish_youtube_channels.json).
-The executable MVP subset is [`config/mvp_channels.json`](config/mvp_channels.json). Channels are
-grouped by speech style and regional value so that experiments can use either the entire collection
-or selected subsets.
+The executable Spanish MVP subset is [`config/mvp_channels.json`](config/mvp_channels.json). The
+[multilingual corpus plan](docs/plans/02-multilingual-corpus-model.md) will consolidate it with the
+broader research catalogue under `config/channels/`, retaining explicit enablement, speech-style,
+regional-variety, and descriptive metadata.
 
 The initial corpus deliberately mixes:
 
@@ -525,27 +525,18 @@ The initial corpus deliberately mixes:
 
 This is intended to maximize linguistic diversity rather than simply maximize the number of indexed videos.
 
-## Project status
+## Project status and roadmap
 
-The intended implementation order is:
+The working baseline includes channel discovery, cached subtitle acquisition, normalization and
+segmentation, exact 1–5-gram retrieval, deterministic ranking, a JSON API, and a React YouTube clip
+viewer. The canonical [remaining-work roadmap](docs/plans/README.md) breaks public-repository,
+multilingual retrieval, service, evaluation/ML, reusable-player, and Acervo integration work into
+ordered implementation sessions.
 
-```text
-[x] channel configuration
-[x] video discovery
-[x] subtitle acquisition + local cache
-[x] transcript normalization
-[x] sentence segmentation
-[x] exact word index
-[ ] CLI search
-[x] timestamped result rendering
-[x] web demo + YouTube playback
-[x] exact n-gram phrase retrieval baseline
-[x] deterministic example-quality ranking
-[ ] audio-assisted alignment
-[ ] evaluation benchmark
-[ ] learned reranking
-[ ] synchronized transcript playback
-```
+The roadmap favors the smallest useful implementation and keeps room for research. Optional models,
+audio, and locally acquired inputs are not prerequisites for exact retrieval, while licensed
+fixtures, labels, reports, datasets, and model artifacts may be published deliberately when that
+improves reproducibility.
 
 ## Design principle
 
