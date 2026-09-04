@@ -12,6 +12,15 @@ class TimedUnit:
 
 
 @dataclass(frozen=True)
+class TimedTextSegment:
+    text: str
+    start: float
+    end: float
+    char_start: int
+    char_end: int
+
+
+@dataclass(frozen=True)
 class Segment:
     id: str
     video_id: str
@@ -24,6 +33,7 @@ class Segment:
     boundary_confidence: float
     quality_score: float
     token_count: int
+    segments: tuple[TimedTextSegment, ...]
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

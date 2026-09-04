@@ -7,7 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any, Iterable
 
-from .models import Segment, TimedUnit
+from .models import Segment, TimedTextSegment, TimedUnit
 from .text import TERMINAL_RE, clean_spacing, join_text, normalize_token, tokens_with_spans
 
 ANNOTATION_RE = re.compile(r"\[(?:m[uú]sica|aplausos?|risas?|silencio|inaudible)[^]]*\]", re.IGNORECASE)
@@ -84,8 +84,22 @@ def _segment_from_units(
     caption_kind: str,
 ) -> Segment:
     text = ""
+    timed_segments: list[TimedTextSegment] = []
     for unit in units:
-        text = join_text(text, unit.text)
+        next_text = join_text(text, unit.text)
+        unit_start = len(text)
+        while unit_start < len(next_text) and next_text[unit_start].isspace():
+            unit_start += 1
+        timed_segments.append(
+            TimedTextSegment(
+                text=next_text[unit_start:],
+                start=round(unit.start, 3),
+                end=round(unit.end, 3),
+                char_start=unit_start,
+                char_end=len(next_text),
+            )
+        )
+        text = next_text
     text = clean_spacing(text)
     start = units[0].start
     end = max(units[-1].end, start + 0.08)
@@ -103,6 +117,16 @@ def _segment_from_units(
     if video_duration and video_duration > 0:
         clip_end = min(video_duration, clip_end)
     digest = hashlib.sha1(f"{video_id}:{start:.3f}:{end:.3f}:{text}".encode()).hexdigest()[:16]
+    if caption_kind == "manual":
+        timed_segments = [
+            TimedTextSegment(
+                text=text,
+                start=round(start, 3),
+                end=round(end, 3),
+                char_start=0,
+                char_end=len(text),
+            )
+        ]
     return Segment(
         id=f"seg_{digest}",
         video_id=video_id,
@@ -115,6 +139,7 @@ def _segment_from_units(
         boundary_confidence=confidence,
         quality_score=quality,
         token_count=token_count,
+        segments=tuple(timed_segments),
     )
 
 

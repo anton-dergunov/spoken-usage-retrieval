@@ -54,6 +54,13 @@ def test_index_supports_accent_tolerant_words_phrases_and_highlights(tmp_path):
     assert phrase["returned"] == 4
     assert {result["video"]["id"] for result in phrase["results"][:2]} == {"video-one", "video-two"}
     assert phrase["results"][0]["sentence"][phrase["results"][0]["match"]["char_start"]:phrase["results"][0]["match"]["char_end"]].casefold() == "la verdad"
+    assert phrase["results"][0]["segments"] == [{
+        "text": phrase["results"][0]["sentence"],
+        "start": phrase["results"][0]["sentence_start"],
+        "end": phrase["results"][0]["sentence_end"],
+        "char_start": 0,
+        "char_end": len(phrase["results"][0]["sentence"]),
+    }]
 
 
 def test_suggestions_filter_stopwords_and_include_phrases(tmp_path):

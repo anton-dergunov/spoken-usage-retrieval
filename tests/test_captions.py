@@ -22,6 +22,10 @@ def test_manual_captions_become_complete_padded_sentences():
     assert segments[0].clip_start == 0.65
     assert segments[-1].clip_end == 5.65
     assert segments[0].quality_score > 0.8
+    assert len(segments[0].segments) == 1
+    assert segments[0].segments[0].text == segments[0].text
+    assert segments[0].segments[0].char_start == 0
+    assert segments[0].segments[0].char_end == len(segments[0].text)
 
 
 def test_automatic_caption_tokens_are_timestamp_deduplicated():
@@ -33,6 +37,11 @@ def test_automatic_caption_tokens_are_timestamp_deduplicated():
     )
     assert segments[0].text == "Esto funciona muy bien."
     assert segments[0].boundary_reason == "punctuation"
+    assert [item.text for item in segments[0].segments] == ["Esto", "funciona", "muy", "bien."]
+    assert [segments[0].text[item.char_start:item.char_end] for item in segments[0].segments] == [
+        "Esto", "funciona", "muy", "bien."
+    ]
+    assert [item.start for item in segments[0].segments] == [0.5, 0.85, 1.2, 1.5]
     assert segments[1].text == "Otra prueba"
 
 
@@ -48,4 +57,3 @@ def test_long_unpunctuated_caption_is_forced_to_split():
     assert len(segments) >= 2
     assert segments[0].boundary_reason == "forced"
     assert segments[0].token_count == 32
-

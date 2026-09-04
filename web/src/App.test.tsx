@@ -16,6 +16,7 @@ const searchResponse = {
       occurrence_id: "one", sentence: "La verdad es una buena idea.",
       match: { text: "La verdad", char_start: 0, char_end: 9, accent_exact: true },
       sentence_start: 1, sentence_end: 3, clip_start: .65, clip_end: 3.65,
+      segments: [{ text: "La verdad es una buena idea.", start: 1, end: 3, char_start: 0, char_end: 29 }],
       boundary: { reason: "punctuation", confidence: 1 }, quality_score: .93,
       video: { provider: "youtube", id: "one", url: "https://youtube.test/one", title: "One",
         channel_id: "c1", channel: "Easy Spanish", varieties: ["Mexico"], speech_style: ["conversation"],
@@ -25,6 +26,7 @@ const searchResponse = {
       occurrence_id: "two", sentence: "Esa es, la verdad, otra historia.",
       match: { text: "la verdad", char_start: 8, char_end: 17, accent_exact: true },
       sentence_start: 5, sentence_end: 8, clip_start: 4.65, clip_end: 8.65,
+      segments: [{ text: "Esa es, la verdad, otra historia.", start: 5, end: 8, char_start: 0, char_end: 33 }],
       boundary: { reason: "punctuation", confidence: 1 }, quality_score: .87,
       video: { provider: "youtube", id: "two", url: "https://youtube.test/two", title: "Two",
         channel_id: "c2", channel: "LUZU TV", varieties: ["Argentina"], speech_style: ["conversation"],
@@ -57,4 +59,27 @@ it("renders API failures as an accessible notice", async () => {
   ))));
   render(<App />);
   expect(await screen.findByRole("alert")).toHaveTextContent("Search index not found");
+});
+
+it("uses the system color scheme initially and allows a session-only override", async () => {
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("suggestions") ? suggestionResponse : statusResponse;
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
+  }));
+  vi.stubGlobal("matchMedia", vi.fn(() => ({
+    matches: true,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+  })));
+
+  render(<App />);
+  const colorSwitch = screen.getByRole("switch", { name: "Use dark color scheme" });
+  expect(colorSwitch).toHaveAttribute("aria-checked", "true");
+  expect(document.documentElement).toHaveAttribute("data-theme", "dark");
+
+  fireEvent.click(colorSwitch);
+  expect(colorSwitch).toHaveAttribute("aria-checked", "false");
+  expect(document.documentElement).toHaveAttribute("data-theme", "light");
+  expect(localStorage).toHaveLength(0);
 });

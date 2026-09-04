@@ -36,6 +36,34 @@ export function HighlightedSentence({ result }: { result: SearchResult }) {
   </span>;
 }
 
+export function ProgressiveSentence({ result, current }: { result: SearchResult; current: number }) {
+  if (result.segments.length <= 1) return <HighlightedSentence result={result} />;
+
+  const renderRange = (rangeStart: number, rangeEnd: number) => {
+    const boundaries = new Set([rangeStart, rangeEnd]);
+    for (const segment of result.segments) {
+      if (segment.char_start > rangeStart && segment.char_start < rangeEnd) boundaries.add(segment.char_start);
+      if (segment.char_end > rangeStart && segment.char_end < rangeEnd) boundaries.add(segment.char_end);
+    }
+    const points = [...boundaries].sort((left, right) => left - right);
+    return points.slice(0, -1).map((start, index) => {
+      const end = points[index + 1];
+      const text = result.sentence.slice(start, end);
+      const segment = result.segments.find((item) => start >= item.char_start && end <= item.char_end);
+      const timingClass = segment
+        ? `timed-fragment ${current >= segment.start ? "spoken" : "upcoming"}`
+        : "timed-gap";
+      return <span className={timingClass} key={`${start}:${end}`}>{text}</span>;
+    });
+  };
+
+  return <span aria-label={result.sentence}>
+    {renderRange(0, result.match.char_start)}
+    <mark>{renderRange(result.match.char_start, result.match.char_end)}</mark>
+    {renderRange(result.match.char_end, result.sentence.length)}
+  </span>;
+}
+
 export default function ClipPlayer({ result }: { result: SearchResult }) {
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
@@ -320,7 +348,7 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
     </div>
 
     <div className="selected-copy">
-      <p className="selected-sentence"><HighlightedSentence result={result} /></p>
+      <p className="selected-sentence"><ProgressiveSentence result={result} current={current} /></p>
       <div className="source-line">
         <span>{result.video.channel}</span>
         <a href={youtubeUrl} target="_blank" rel="noreferrer">{formatClock(result.clip_start)} on YouTube ↗</a>

@@ -12,6 +12,11 @@ const result: SearchResult = {
   sentence_end: 82.4,
   clip_start: 76.85,
   clip_end: 83.05,
+  segments: [
+    { text: "A mí me da", start: 77.2, end: 78.5, char_start: 0, char_end: 10 },
+    { text: "mucha bronca", start: 78.6, end: 80.1, char_start: 11, char_end: 23 },
+    { text: "cuando pasa eso.", start: 80.2, end: 82.4, char_start: 24, char_end: 40 },
+  ],
   boundary: { reason: "punctuation", confidence: 1 },
   quality_score: .94,
   video: {
@@ -93,6 +98,34 @@ describe("ClipPlayer", () => {
     fireEvent.click(screen.getByRole("button", { name: "Return to excerpt start" }));
     expect(MockPlayer.latest.seekTo).toHaveBeenLastCalledWith(76.85, true);
     await waitFor(() => expect(screen.getByText("0:00", { exact: false })).toBeInTheDocument());
+  });
+
+  it("reveals timed source-caption segments as playback reaches them", async () => {
+    vi.useFakeTimers();
+    const { container } = render(<ClipPlayer result={result} />);
+    await act(async () => {});
+    expect(container.querySelectorAll(".timed-fragment.upcoming")).toHaveLength(4);
+
+    fireEvent.click(screen.getByRole("button", { name: "Play excerpt" }));
+    MockPlayer.latest.current = 79;
+    act(() => vi.advanceTimersByTime(120));
+
+    expect(container.querySelectorAll(".timed-fragment.spoken")).toHaveLength(3);
+    expect(container.querySelectorAll(".timed-fragment.upcoming")).toHaveLength(1);
+  });
+
+  it("does not apply progressive coloring to a single untimed phrase", async () => {
+    const untimed = {
+      ...result,
+      segments: [{
+        text: result.sentence, start: result.sentence_start, end: result.sentence_end,
+        char_start: 0, char_end: result.sentence.length,
+      }],
+    };
+    const { container } = render(<ClipPlayer result={untimed} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument());
+    expect(container.querySelector(".timed-fragment")).not.toBeInTheDocument();
+    expect(screen.getByText("bronca")).toBeInTheDocument();
   });
 
   it("holds the terminal frame and seeks to the start only when replayed", async () => {

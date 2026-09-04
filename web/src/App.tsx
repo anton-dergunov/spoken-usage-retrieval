@@ -7,6 +7,22 @@ function SearchIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 20-4.7-4.7a7.5 7.5 0 1 0-1 1L20 21l1-1ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z" /></svg>;
 }
 
+function SunIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 1h2v3h-2V1Zm0 19h2v3h-2v-3ZM3.5 4.9l1.4-1.4L7 5.6 5.6 7 3.5 4.9Zm13.4 13.5 1.4-1.4 2.1 2.1-1.4 1.4-2.1-2.1ZM1 11h3v2H1v-2Zm19 0h3v2h-3v-2ZM3.5 19.1 5.6 17 7 18.4l-2.1 2.1-1.4-1.4ZM16.9 5.6 19 3.5l1.4 1.4L18.4 7l-1.5-1.4ZM12 6a6 6 0 1 1 0 12 6 6 0 0 1 0-12Zm0 2a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /></svg>;
+}
+
+function MoonIcon() {
+  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20.5 15.7A8.5 8.5 0 0 1 8.3 3.5 9 9 0 1 0 20.5 15.7ZM4.8 12a7 7 0 0 1 .8-3.2 10.5 10.5 0 0 0 9.6 9.6A7 7 0 0 1 4.8 12Z" /></svg>;
+}
+
+type Theme = "light" | "dark";
+
+function systemTheme(): Theme {
+  return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
+
 function ResultCard({ result, selected, onSelect }: {
   result: SearchResult;
   selected: boolean;
@@ -25,6 +41,8 @@ function ResultCard({ result, selected, onSelect }: {
 }
 
 export default function App() {
+  const [systemColorScheme, setSystemColorScheme] = useState<Theme>(systemTheme);
+  const [themeOverride, setThemeOverride] = useState<Theme | null>(null);
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -32,6 +50,20 @@ export default function App() {
   const [status, setStatus] = useState<CorpusStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const theme = themeOverride ?? systemColorScheme;
+
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    return () => { delete document.documentElement.dataset.theme; };
+  }, [theme]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-color-scheme: dark)");
+    const update = (event: MediaQueryListEvent) => setSystemColorScheme(event.matches ? "dark" : "light");
+    media.addEventListener?.("change", update);
+    return () => media.removeEventListener?.("change", update);
+  }, []);
 
   useEffect(() => {
     Promise.all([getSuggestions(), getStatus()])
@@ -86,9 +118,16 @@ export default function App() {
         <span className="brand-glyph">O</span>
         <strong>Oído</strong>
       </a>
-      <div className="corpus-status">
-        <span className={status ? "status-dot ready" : "status-dot"} />
-        {status ? <strong>{status.videos} videos</strong> : <span>Loading…</span>}
+      <div className="topbar-tools">
+        <button type="button" role="switch" aria-checked={theme === "dark"} className="theme-switch"
+          aria-label="Use dark color scheme" title={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
+          onClick={() => setThemeOverride(theme === "dark" ? "light" : "dark")}>
+          <SunIcon /><span className="switch-track"><i /></span><MoonIcon />
+        </button>
+        <div className="corpus-status">
+          <span className={status ? "status-dot ready" : "status-dot"} />
+          {status ? <strong>{status.videos} videos</strong> : <span>Loading…</span>}
+        </div>
       </div>
     </header>
 

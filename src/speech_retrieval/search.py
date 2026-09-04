@@ -84,6 +84,7 @@ class Corpus:
                     "sentence_end": row["end"],
                     "clip_start": row["clip_start"],
                     "clip_end": row["clip_end"],
+                    "segments": json.loads(row["segments_json"]),
                     "boundary": {
                         "reason": row["boundary_reason"],
                         "confidence": row["boundary_confidence"],

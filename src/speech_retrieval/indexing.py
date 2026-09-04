@@ -5,6 +5,7 @@ import os
 import sqlite3
 import tempfile
 from collections import Counter
+from dataclasses import asdict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -46,7 +47,8 @@ CREATE TABLE segments (
     boundary_reason TEXT NOT NULL,
     boundary_confidence REAL NOT NULL,
     quality_score REAL NOT NULL,
-    token_count INTEGER NOT NULL
+    token_count INTEGER NOT NULL,
+    segments_json TEXT NOT NULL
 );
 CREATE TABLE occurrences (
     occurrence_id TEXT PRIMARY KEY,
@@ -158,7 +160,7 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
                 for segment in segments:
                     segment_output.write(json.dumps(segment.as_dict(), ensure_ascii=False) + "\n")
                     connection.execute(
-                        "INSERT INTO segments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        "INSERT INTO segments VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (
                             segment.id,
                             segment.video_id,
@@ -171,6 +173,11 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
                             segment.boundary_confidence,
                             segment.quality_score,
                             segment.token_count,
+                            json.dumps(
+                                [asdict(item) for item in segment.segments],
+                                ensure_ascii=False,
+                                separators=(",", ":"),
+                            ),
                         ),
                     )
                     boundary_counts[segment.boundary_reason] += 1

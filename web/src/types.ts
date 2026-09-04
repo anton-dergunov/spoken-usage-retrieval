@@ -26,6 +26,13 @@ export interface SearchResult {
   sentence_end: number;
   clip_start: number;
   clip_end: number;
+  segments: Array<{
+    text: string;
+    start: number;
+    end: number;
+    char_start: number;
+    char_end: number;
+  }>;
   boundary: { reason: "punctuation" | "pause" | "forced" | "end"; confidence: number };
   quality_score: number;
   video: VideoSource;
@@ -57,4 +64,3 @@ export interface CorpusStatus {
   occurrences: number;
   caption_kinds: Record<string, number>;
 }
-
