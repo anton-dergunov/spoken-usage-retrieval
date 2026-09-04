@@ -6,6 +6,7 @@ export interface YouTubePlayer {
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
   cueVideoById(options: { videoId: string; startSeconds: number; endSeconds: number }): void;
+  setOption?(module: string, option: string, value: unknown): void;
   destroy(): void;
 }
 
@@ -19,6 +20,7 @@ export interface YouTubeNamespace {
         onReady(event: { target: YouTubePlayer }): void;
         onStateChange(event: YouTubeStateEvent): void;
         onError(event: { data: number }): void;
+        onApiChange?(): void;
       };
     }
   ) => YouTubePlayer;
@@ -61,4 +63,3 @@ export function loadYouTubeApi(): Promise<YouTubeNamespace> {
   });
   return loading;
 }
-

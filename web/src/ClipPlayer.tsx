@@ -4,16 +4,6 @@ import { loadYouTubeApi, type YouTubePlayer } from "./youtube";
 
 type PlayerStatus = "connecting" | "ready" | "playing" | "paused" | "buffering" | "replay" | "error";
 
-const STATUS_LABELS: Record<PlayerStatus, string> = {
-  connecting: "Connecting to YouTube",
-  ready: "Ready",
-  playing: "Playing excerpt",
-  paused: "Paused",
-  buffering: "Buffering from YouTube",
-  replay: "Ready to replay",
-  error: "Playback unavailable",
-};
-
 function formatClock(seconds: number): string {
   const whole = Math.max(0, Math.floor(seconds));
   const hours = Math.floor(whole / 3600);
@@ -51,6 +41,15 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
   const [current, setCurrent] = useState(result.clip_start);
   const [errorMessage, setErrorMessage] = useState("");
   const clipDuration = Math.max(0.1, result.clip_end - result.clip_start);
+  const posterUrl = result.video.thumbnail ?? `https://i.ytimg.com/vi/${result.video.id}/hqdefault.jpg`;
+
+  const disableYouTubeCaptions = useCallback((player: YouTubePlayer) => {
+    try {
+      player.setOption?.("captions", "track", {});
+    } catch {
+      // Caption preferences are controlled by YouTube; keep this best-effort.
+    }
+  }, []);
 
   const finishClip = useCallback((player = playerRef.current) => {
     if (!player) return;
@@ -79,8 +78,11 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
         videoId: result.video.id,
         playerVars: {
           controls: 0,
+          cc_load_policy: 0,
           disablekb: 1,
           enablejsapi: 1,
+          fs: 0,
+          iv_load_policy: 3,
           playsinline: 1,
           rel: 0,
           start: Math.floor(result.clip_start),
@@ -90,6 +92,7 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
         events: {
           onReady: ({ target }) => {
             playerRef.current = target;
+            disableYouTubeCaptions(target);
             target.cueVideoById({
               videoId: result.video.id,
               startSeconds: result.clip_start,
@@ -110,6 +113,9 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
             setErrorMessage(unavailable ? "This video does not allow embedded playback." : `YouTube player error ${data}.`);
             setStatus("error");
           },
+          onApiChange: () => {
+            if (playerRef.current) disableYouTubeCaptions(playerRef.current);
+          },
         },
       });
       playerRef.current = player;
@@ -126,7 +132,7 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
       if (playerRef.current === player) playerRef.current = null;
       hostRef.current?.replaceChildren();
     };
-  }, [finishClip, result.clip_end, result.clip_start, result.video.id]);
+  }, [disableYouTubeCaptions, finishClip, result.clip_end, result.clip_start, result.video.id]);
 
   useEffect(() => {
     if (status !== "playing") return;
@@ -199,6 +205,7 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
     [result.clip_start, result.video.id]
   );
   const disabled = status === "connecting" || status === "error";
+  const showPoster = status === "ready" || status === "paused" || status === "replay";
 
   return <article className="clip-player" onKeyDown={handleKeys} tabIndex={0} aria-label="Selected video excerpt">
     <div className="player-chrome">
@@ -210,10 +217,14 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
         <span>{errorMessage}</span>
         <a href={youtubeUrl} target="_blank" rel="noreferrer">Open this moment on YouTube ↗</a>
       </div>}
-      {(status === "ready" || status === "paused" || status === "replay") && <button
-        className="stage-play" onClick={playOrPause} aria-label={status === "replay" ? "Replay excerpt" : "Play excerpt"}
-      ><PlayIcon /><span>{status === "replay" ? "Replay" : "Play excerpt"}</span></button>}
-      <span className={`connection-state state-${status}`}><i />{STATUS_LABELS[status]}</span>
+      {showPoster && <div className="player-poster" style={{ backgroundImage: `url("${posterUrl}")` }}>
+        <button className="stage-play" onClick={playOrPause}
+          aria-label={status === "replay" ? "Replay excerpt" : "Play excerpt"}>
+          {status === "replay" ? <RestartIcon /> : <PlayIcon />}
+        </button>
+      </div>}
+      {(status === "playing" || status === "buffering") && <button className="playback-shield"
+        onClick={playOrPause} aria-label="Pause video" />}
     </div>
 
     <div className="transport">
@@ -231,19 +242,16 @@ export default function ClipPlayer({ result }: { result: SearchResult }) {
           style={{ "--clip-progress": progress } as CSSProperties} />
         <div className="time-row">
           <span>{formatClock(relativeCurrent)} <small>/ {formatClock(clipDuration)}</small></span>
-          <span className="source-time">source {formatClock(current)}</span>
+          {status === "buffering" && <span className="buffering-state"><i />Buffering</span>}
         </div>
       </div>
     </div>
 
     <div className="selected-copy">
-      <div className="eyebrow"><span>Selected occurrence</span><span>{formatClock(result.clip_start)}–{formatClock(result.clip_end)}</span></div>
       <p className="selected-sentence"><HighlightedSentence result={result} /></p>
       <div className="source-line">
         <span>{result.video.channel}</span>
-        {result.video.varieties[0] && <span>{result.video.varieties[0]}</span>}
-        <span>{result.video.caption_kind === "manual" ? "Author captions" : "Automatic captions"}</span>
-        <a href={youtubeUrl} target="_blank" rel="noreferrer">Full video ↗</a>
+        <a href={youtubeUrl} target="_blank" rel="noreferrer">{formatClock(result.clip_start)} on YouTube ↗</a>
       </div>
     </div>
   </article>;
