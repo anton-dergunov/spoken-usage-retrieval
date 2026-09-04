@@ -1,0 +1,34 @@
+{
+  "language": "es",
+  "channels": [
+    {
+      "id": "easy-spanish",
+      "name": "Easy Spanish",
+      "url": "https://www.youtube.com/@EasySpanish/videos",
+      "varieties": ["Spain", "Mexico", "Latin America"],
+      "speech_style": ["street interviews", "conversation", "language learning"]
+    },
+    {
+      "id": "spanish-after-hours",
+      "name": "Spanish After Hours",
+      "url": "https://www.youtube.com/@spanishafterhours/videos",
+      "varieties": ["Spain"],
+      "speech_style": ["stories", "explanations", "conversation"]
+    },
+    {
+      "id": "luisito-comunica",
+      "name": "Luisito Comunica",
+      "url": "https://www.youtube.com/@luisitocomunica/videos",
+      "varieties": ["Mexico", "Latin America"],
+      "speech_style": ["travel", "street interaction", "vlog"]
+    },
+    {
+      "id": "luzu-tv",
+      "name": "LUZU TV",
+      "url": "https://www.youtube.com/@luzutv/videos",
+      "varieties": ["Argentina", "Rioplatense"],
+      "speech_style": ["streaming", "conversation", "entertainment"]
+    }
+  ]
+}
+

@@ -1,0 +1,21 @@
+{
+  "events": [
+    {"tStartMs": 500, "dDurationMs": 1800, "segs": [
+      {"utf8": "Esto", "tOffsetMs": 0},
+      {"utf8": " funciona", "tOffsetMs": 350}
+    ]},
+    {"tStartMs": 500, "dDurationMs": 1800, "segs": [
+      {"utf8": "Esto", "tOffsetMs": 0},
+      {"utf8": " funciona", "tOffsetMs": 350}
+    ]},
+    {"tStartMs": 1200, "dDurationMs": 900, "segs": [
+      {"utf8": " muy", "tOffsetMs": 0},
+      {"utf8": " bien.", "tOffsetMs": 300}
+    ]},
+    {"tStartMs": 3500, "dDurationMs": 1200, "segs": [
+      {"utf8": "Otra", "tOffsetMs": 0},
+      {"utf8": " prueba", "tOffsetMs": 400}
+    ]}
+  ]
+}
+

@@ -1,0 +1,9 @@
+{
+  "events": [
+    {"tStartMs": 1000, "dDurationMs": 500, "segs": [{"utf8": "Sí, la verdad"}]},
+    {"tStartMs": 1500, "dDurationMs": 900, "segs": [{"utf8": "es una buena idea."}]},
+    {"tStartMs": 3600, "dDurationMs": 700, "segs": [{"utf8": "La verdad"}]},
+    {"tStartMs": 4300, "dDurationMs": 700, "segs": [{"utf8": "funciona muy bien."}]}
+  ]
+}
+

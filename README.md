@@ -4,6 +4,48 @@ A research-oriented information retrieval system for finding **real examples of 
 
 The project builds a searchable corpus from selected YouTube channels, retrieves occurrences of a target word or phrase, ranks the most useful examples, and returns the exact video segments where the expression is spoken. It is designed both as a reusable library for a language-learning application and as an experimental platform for work on retrieval, phrase matching, speech–text alignment, and example-quality ranking.
 
+## MVP quick start
+
+The repository contains a subtitle-only acquisition pipeline, deterministic 1–5-gram index, JSON
+API, and custom React YouTube excerpt viewer. Video and audio files are never downloaded.
+
+Requirements: Python 3.12+, Node.js 20+, and network access for the acquisition step.
+
+```bash
+uv sync --extra test
+npm install --prefix web
+
+# Cache ten successfully captioned videos across the four MVP channels.
+uv run python scripts/download_subtitles.py --limit 10
+
+# Reconstruct utterances and build data/index/corpus.sqlite3.
+uv run python scripts/build_index.py --max-ngram 5
+
+# Build and serve the interface at http://127.0.0.1:8000.
+npm --prefix web run build
+uv run python scripts/serve.py --port 8000
+```
+
+The acquisition limit counts usable cached transcripts, not attempted videos. Repeat runs reuse
+valid cache entries. To experiment elsewhere without changing defaults, pass `--channels`,
+`--data-dir`, `--scan-limit`, or `--max-ngram` to the relevant script.
+
+For frontend development, run the API with the production build once, or construct it from
+`speech_retrieval.api.create_app`, then run `npm --prefix web run dev`; Vite proxies `/api` to port
+8000.
+
+### Tests
+
+```bash
+uv run pytest
+npm --prefix web run test
+npm --prefix web run build
+```
+
+Generated corpus data is intentionally ignored by Git. Acquisition and index reports under
+`data/reports/` make a local run inspectable. See [`docs/feasibility-notes.md`](docs/feasibility-notes.md)
+for findings and limitations from the seeded prototype.
+
 ## Motivation
 
 Dictionaries and generated examples are useful, but they often fail to answer a more practical question:
@@ -460,7 +502,10 @@ A particularly interesting long-term problem is:
 
 ## Corpus configuration
 
-The initial Spanish corpus is defined in [`channels.json`](channels.json). Channels are grouped by speech style and regional value so that experiments can use either the entire collection or selected subsets.
+The broad Spanish source catalogue is defined in [`spanish_youtube_channels.json`](spanish_youtube_channels.json).
+The executable MVP subset is [`config/mvp_channels.json`](config/mvp_channels.json). Channels are
+grouped by speech style and regional value so that experiments can use either the entire collection
+or selected subsets.
 
 The initial corpus deliberately mixes:
 
@@ -481,17 +526,17 @@ This is intended to maximize linguistic diversity rather than simply maximize th
 The intended implementation order is:
 
 ```text
-[ ] channel configuration
-[ ] video discovery
-[ ] subtitle acquisition + local cache
-[ ] transcript normalization
-[ ] sentence segmentation
-[ ] exact word index
+[x] channel configuration
+[x] video discovery
+[x] subtitle acquisition + local cache
+[x] transcript normalization
+[x] sentence segmentation
+[x] exact word index
 [ ] CLI search
-[ ] timestamped result rendering
-[ ] web demo + YouTube playback
-[ ] phrase retrieval baselines
-[ ] example-quality ranking
+[x] timestamped result rendering
+[x] web demo + YouTube playback
+[x] exact n-gram phrase retrieval baseline
+[x] deterministic example-quality ranking
 [ ] audio-assisted alignment
 [ ] evaluation benchmark
 [ ] learned reranking
