@@ -24,13 +24,20 @@ const result: SearchResult = {
 
 class MockPlayer implements YouTubePlayer {
   static latest: MockPlayer;
+  static autoPrime = true;
   current = result.clip_start;
   options: ConstructorParameters<NonNullable<typeof window.YT>["Player"]>[1];
   playVideo = vi.fn(() => this.options.events.onStateChange({ data: 1 }));
   pauseVideo = vi.fn(() => this.options.events.onStateChange({ data: 2 }));
+  loadVideoById = vi.fn((options: { videoId: string; startSeconds: number }) => {
+    this.current = options.startSeconds + .08;
+    if (MockPlayer.autoPrime) this.options.events.onStateChange({ data: 1 });
+  });
   seekTo = vi.fn((seconds: number) => { this.current = seconds; });
   getCurrentTime = vi.fn(() => this.current);
   cueVideoById = vi.fn();
+  mute = vi.fn();
+  unMute = vi.fn();
   setOption = vi.fn();
   destroy = vi.fn();
 
@@ -43,36 +50,44 @@ class MockPlayer implements YouTubePlayer {
 
 describe("ClipPlayer", () => {
   beforeEach(() => {
+    MockPlayer.autoPrime = true;
     window.YT = {
       Player: MockPlayer as NonNullable<typeof window.YT>["Player"],
       PlayerState: { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 },
     };
   });
   afterEach(() => {
+    vi.useRealTimers();
     delete window.YT;
     vi.restoreAllMocks();
   });
 
-  it("cues only the excerpt and exposes custom playback controls", async () => {
-    render(<ClipPlayer result={result} />);
-    await waitFor(() => expect(MockPlayer.latest.cueVideoById).toHaveBeenCalled());
-    expect(MockPlayer.latest.cueVideoById).toHaveBeenCalledWith({
-      videoId: "abc123", startSeconds: 76.85, endSeconds: 83.05,
+  it("primes a real opening frame muted and exposes custom playback controls", async () => {
+    const { container } = render(<ClipPlayer result={result} />);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument());
+    expect(MockPlayer.latest.mute).toHaveBeenCalledOnce();
+    expect(MockPlayer.latest.loadVideoById).toHaveBeenCalledWith({
+      videoId: "abc123", startSeconds: 76.85,
     });
+    expect(MockPlayer.latest.pauseVideo).toHaveBeenCalledOnce();
+    expect(MockPlayer.latest.seekTo).not.toHaveBeenCalled();
     expect(MockPlayer.latest.setOption).toHaveBeenCalledWith("captions", "track", {});
     expect(MockPlayer.latest.options.playerVars).toMatchObject({
       controls: 0, cc_load_policy: 0, disablekb: 1, fs: 0, iv_load_policy: 3,
     });
-    fireEvent.click(screen.getAllByRole("button", { name: "Play excerpt" })[1]);
+    expect(container.querySelector(".player-poster")).not.toBeInTheDocument();
+    expect(container.innerHTML).not.toContain("i.ytimg.com");
+    fireEvent.click(screen.getByRole("button", { name: "Play excerpt" }));
+    expect(MockPlayer.latest.unMute).toHaveBeenCalledOnce();
     expect(MockPlayer.latest.playVideo).toHaveBeenCalled();
-    expect(await screen.findAllByRole("button", { name: "Pause excerpt" })).not.toHaveLength(0);
+    expect(await screen.findByRole("button", { name: "Pause video" })).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Pause excerpt" }));
     expect(MockPlayer.latest.pauseVideo).toHaveBeenCalled();
   });
 
   it("keeps scrubbing inside the clip and returns to its start", async () => {
     render(<ClipPlayer result={result} />);
-    await waitFor(() => expect(MockPlayer.latest.cueVideoById).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument());
     fireEvent.change(screen.getByLabelText("Excerpt position"), { target: { value: "3" } });
     expect(MockPlayer.latest.seekTo).toHaveBeenLastCalledWith(79.85, true);
     fireEvent.click(screen.getByRole("button", { name: "Return to excerpt start" }));
@@ -80,32 +95,74 @@ describe("ClipPlayer", () => {
     await waitFor(() => expect(screen.getByText("0:00", { exact: false })).toBeInTheDocument());
   });
 
-  it("returns to the clip start when YouTube reaches the excerpt end", async () => {
+  it("holds the terminal frame and seeks to the start only when replayed", async () => {
     render(<ClipPlayer result={result} />);
-    await waitFor(() => expect(MockPlayer.latest.cueVideoById).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("button", { name: "Play excerpt" }));
+    MockPlayer.latest.seekTo.mockClear();
+    MockPlayer.latest.current = result.clip_end - .08;
     act(() => MockPlayer.latest.options.events.onStateChange({ data: 0 }));
     expect(MockPlayer.latest.pauseVideo).toHaveBeenCalled();
+    expect(MockPlayer.latest.seekTo).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Replay excerpt" })).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Replay excerpt" }));
     expect(MockPlayer.latest.seekTo).toHaveBeenLastCalledWith(result.clip_start, true);
+    expect(MockPlayer.latest.playVideo).toHaveBeenCalled();
+  });
+
+  it("pauses before the clip boundary without replacing the terminal frame", async () => {
+    vi.useFakeTimers();
+    render(<ClipPlayer result={result} />);
+    await act(async () => {});
+    fireEvent.click(screen.getByRole("button", { name: "Play excerpt" }));
+    MockPlayer.latest.pauseVideo.mockClear();
+    MockPlayer.latest.seekTo.mockClear();
+    MockPlayer.latest.current = result.clip_end - .04;
+
+    act(() => vi.advanceTimersByTime(120));
+    expect(MockPlayer.latest.pauseVideo).toHaveBeenCalledOnce();
+    expect(MockPlayer.latest.seekTo).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Replay excerpt" })).toBeInTheDocument();
   });
 
-  it("covers YouTube chrome whenever playback is idle", async () => {
+  it("keeps the iframe visible and paused at the current frame", async () => {
     const { container } = render(<ClipPlayer result={result} />);
-    await waitFor(() => expect(MockPlayer.latest.cueVideoById).toHaveBeenCalled());
-    expect(container.querySelector(".player-poster")).toBeInTheDocument();
-
-    act(() => MockPlayer.latest.options.events.onStateChange({ data: 1 }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument());
     expect(container.querySelector(".player-poster")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Play excerpt" }));
     expect(screen.getByRole("button", { name: "Pause video" })).toBeInTheDocument();
 
-    act(() => MockPlayer.latest.options.events.onStateChange({ data: 2 }));
-    expect(container.querySelector(".player-poster")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Pause video" })).not.toBeInTheDocument();
+    MockPlayer.latest.current = 79.4;
+    MockPlayer.latest.seekTo.mockClear();
+    fireEvent.click(screen.getByRole("button", { name: "Pause video" }));
+    expect(MockPlayer.latest.seekTo).not.toHaveBeenCalled();
+    expect(container.querySelector(".player-cover")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument();
+  });
+
+  it("offers interaction without exposing a thumbnail when muted priming is blocked", async () => {
+    vi.useFakeTimers();
+    MockPlayer.autoPrime = false;
+    const { container } = render(<ClipPlayer result={result} />);
+    await act(async () => {});
+    expect(MockPlayer.latest.loadVideoById).toHaveBeenCalledOnce();
+
+    act(() => vi.advanceTimersByTime(2600));
+    const fallback = screen.getByRole("button", { name: "Load and play excerpt" });
+    expect(fallback).toBeInTheDocument();
+    expect(container.querySelector(".player-poster")).not.toBeInTheDocument();
+    expect(container.innerHTML).not.toContain("i.ytimg.com");
+
+    fireEvent.click(fallback);
+    expect(MockPlayer.latest.unMute).toHaveBeenCalledOnce();
+    expect(MockPlayer.latest.loadVideoById).toHaveBeenCalledTimes(2);
+    expect(screen.getByText("Loading excerpt…")).toBeInTheDocument();
+    expect(container.querySelector(".loading-cover")).toBeInTheDocument();
   });
 
   it("shows a timestamped fallback when embedding is disabled", async () => {
     render(<ClipPlayer result={result} />);
-    await waitFor(() => expect(MockPlayer.latest.cueVideoById).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByRole("button", { name: "Play video" })).toBeInTheDocument());
     act(() => MockPlayer.latest.options.events.onError({ data: 101 }));
     expect(screen.getByText("This video does not allow embedded playback.")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Open this moment on YouTube ↗" })).toHaveAttribute(

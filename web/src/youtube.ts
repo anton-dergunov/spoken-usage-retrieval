@@ -3,9 +3,12 @@ export interface YouTubeStateEvent { data: number }
 export interface YouTubePlayer {
   playVideo(): void;
   pauseVideo(): void;
+  loadVideoById(options: { videoId: string; startSeconds: number; endSeconds?: number }): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
   cueVideoById(options: { videoId: string; startSeconds: number; endSeconds: number }): void;
+  mute(): void;
+  unMute(): void;
   setOption?(module: string, option: string, value: unknown): void;
   destroy(): void;
 }
