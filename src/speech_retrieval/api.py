@@ -8,6 +8,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import __version__
+from .analysis import InvalidAnalysisError, UnsupportedAnalysisError
 from .catalogue import canonical_language
 from .search import Corpus, IncompatibleIndexError, SearchError
 
@@ -17,8 +18,9 @@ def create_app(
     data_dir: str | Path = "data",
     catalogue_dir: str | Path = "config/channels",
     web_dist: str | Path | None = "web/dist",
+    models_dir: str | Path | None = None,
 ) -> FastAPI:
-    corpus = Corpus(data_dir, catalogue_dir)
+    corpus = Corpus(data_dir, catalogue_dir, models_dir=models_dir)
     app = FastAPI(title="Native Speech Retrieval", version=__version__)
     app.add_middleware(
         CORSMiddleware,
@@ -31,13 +33,22 @@ def create_app(
     def search(
         language: str,
         q: str = "",
+        match_mode: str = "auto",
         limit: int = Query(20, ge=1, le=50),
     ) -> dict:
         try:
-            return corpus.search(q, source_language=language, limit=limit)
+            return corpus.search(q, source_language=language, match_mode=match_mode, limit=limit)
+        except UnsupportedAnalysisError as error:
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "code": "unsupported_analysis",
+                    "message": str(error),
+                },
+            ) from error
         except SearchError as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-        except (FileNotFoundError, IncompatibleIndexError) as error:
+        except (FileNotFoundError, IncompatibleIndexError, InvalidAnalysisError) as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
     @app.get("/api/suggestions")
@@ -53,14 +64,14 @@ def create_app(
             }
         except (SearchError, ValueError) as error:
             raise HTTPException(status_code=400, detail=str(error)) from error
-        except (FileNotFoundError, IncompatibleIndexError) as error:
+        except (FileNotFoundError, IncompatibleIndexError, InvalidAnalysisError) as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
     @app.get("/api/status")
     def status() -> dict:
         try:
             return corpus.status()
-        except (FileNotFoundError, IncompatibleIndexError) as error:
+        except (FileNotFoundError, IncompatibleIndexError, InvalidAnalysisError) as error:
             raise HTTPException(status_code=503, detail=str(error)) from error
 
     if web_dist is not None:

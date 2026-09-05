@@ -1,6 +1,6 @@
 # Plan 03: Morphological retrieval
 
-**Status:** Planned
+**Status:** Complete
 
 **Depends on:** Plan 02
 
@@ -26,10 +26,10 @@ languages where the current Unicode-regex tokenizer cannot separate words.
   and original character offsets, plus analyzer/model identity. This protocol is the seam that keeps
   the toolkit choice cheap to revisit.
 - Ship a dependency-free Unicode fallback analyzer for exact retrieval.
-- Make [simplemma](https://github.com/adbar/simplemma) the default lemma analyzer. It is MIT
-  licensed, pure Python, about 19 MB installed with **no per-language model downloads**, covers 54
-  languages at 0.91–0.97 lemma accuracy (`es` 0.93, `pt` 0.94, `hi` 0.95, `en` 0.96, `de` 0.97) and
-  processes millions of tokens per second. Lemma mode therefore works out of the box and no
+- Make [simplemma](https://github.com/adbar/simplemma) the default lemma analyzer. It is pure Python with **no per-language model downloads**. The code is MIT licensed;
+  upstream documents the separate linguistic-data licenses. The installed 1.2.0 release ships a
+  64.4 MiB wheel. Upstream coverage and accuracy claims are not corpus-level guarantees; this
+  milestone records measured application performance instead. Lemma mode therefore works out of the box and no
   model-provisioning command is on the critical path.
 - Record simplemma's two real limits honestly. It is word-level, so it **cannot disambiguate a
   surface form with several valid lemmas**; expose the ambiguity instead of hiding a guess. And it
@@ -116,3 +116,28 @@ corpus.search(
 - Bundling Stanza model weights in the wheel or repository.
 - Making lemma matches indistinguishable from exact evidence.
 - Choosing the final per-language analyzer by intuition; Plan 04 measures that separately.
+
+## Implementation and verification record
+
+- Implemented schema 2 with separate surface/lemma lookup keys, canonical source spans, analyzed
+  tokens, nullable linguistic annotations, a frequency-bearing form lexicon, and per-language
+  provenance. Raw acquisition cache schema remains unchanged.
+- `auto` is the default in Python, HTTP, and the viewer. Exact results precede lemma-only results
+  through sentence selection and video diversification. The viewer exposes all three modes and
+  distinguishes related forms; highlights use Unicode code-point offsets.
+- Query candidates also retain a queried form that exists as a corpus lemma, covering ambiguous
+  dictionary forms such as Portuguese `casa`. All available candidates are exposed, not all possible
+  linguistic meanings. Simplemma still has documented misses; no ad hoc linguistic overrides were
+  added.
+- Stanza uses explicit `default_fast` processor packages where available, CPU execution, bounded
+  batches, cached initialization, serialized pipeline calls, and disabled downloads. The explicit
+  model command resolves and records compatible resource packages. Missing models preserve the
+  legacy surface inventory; native CJK segmentation requires local models and a rebuilt index.
+- Suggestions use analyzer-token surface keys; the retained regex inventory does not turn whole
+  unsegmented CJK runs into word suggestions. Language stopwords affect suggestions only.
+- The [benchmark](../../experiments/morphological-retrieval/README.md) records timing, index size,
+  initialization, query counts, and limitations on a temporary versioned copy of all ten cached
+  Spanish videos. Original caches and the existing local index were not modified.
+- Verification: Python tests, Ruff lint/format checks, mypy, offline smoke, web tests and production
+  build, Python distributions, and a clean wheel installation. Real-model CJK tests explicitly skip
+  without the optional extra/models; mocked Stanza contracts run in the standard suite.

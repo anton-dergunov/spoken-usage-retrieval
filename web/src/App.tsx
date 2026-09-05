@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { getStatus, getSuggestions, searchCorpus } from "./api";
 import ClipPlayer, { HighlightedSentence, formatClock } from "./ClipPlayer";
-import type { CorpusStatus, SearchResponse, SearchResult, Suggestion } from "./types";
+import type { CorpusStatus, MatchMode, SearchResponse, SearchResult, Suggestion } from "./types";
 
 function SearchIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 20-4.7-4.7a7.5 7.5 0 1 0-1 1L20 21l1-1ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z" /></svg>;
@@ -41,6 +41,7 @@ function ResultCard({ result, selected, onSelect }: {
     <span className="result-body">
       <span className="result-sentence"><HighlightedSentence result={result} /></span>
       <span className="result-meta">
+        <span className="match-type">{result.match_type === "lemma" ? "Related form" : "Exact form"}</span>
         <span>{result.video.channel}</span>
         <span>{languageName(result.source_language)}</span>
         <span>{formatClock(result.clip_start)}</span>
@@ -54,6 +55,7 @@ export default function App() {
   const [themeOverride, setThemeOverride] = useState<Theme | null>(null);
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [language, setLanguage] = useState("");
+  const [matchMode, setMatchMode] = useState<MatchMode>("auto");
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -117,11 +119,14 @@ export default function App() {
       return;
     }
     const controller = new AbortController();
+    setResponse(null);
+    setSelectedId(null);
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      searchCorpus(trimmed, language, controller.signal)
+      searchCorpus(trimmed, language, controller.signal, matchMode)
         .then((next) => {
+          if (controller.signal.aborted) return;
           setResponse(next);
           setSelectedId(next.results[0]?.occurrence_id ?? null);
         })
@@ -140,7 +145,7 @@ export default function App() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query, language]);
+  }, [query, language, matchMode]);
 
   const results = response?.results ?? [];
   const selected = results.find((item) => item.occurrence_id === selectedId) ?? results[0] ?? null;
@@ -176,6 +181,14 @@ export default function App() {
             )}
           </select>
         </label>
+        <label className="language-picker">
+          <span>Word forms</span>
+          <select value={matchMode} onChange={(event) => setMatchMode(event.target.value as MatchMode)}>
+            <option value="auto">All word forms</option>
+            <option value="exact">Exact form</option>
+            <option value="lemma">Dictionary-form matching</option>
+          </select>
+        </label>
         <form className="search-box" onSubmit={(event) => event.preventDefault()} role="search">
           <SearchIcon />
           <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
@@ -188,6 +201,9 @@ export default function App() {
             onClick={() => setQuery(suggestion.text)}>{suggestion.text}</button>)}
         </div>}
         {query && !language && status && <div className="notice">Choose a source language to search.</div>}
+        {response && !response.morphology_available && matchMode === "auto" && <div className="notice">
+          Only exact forms are available for this language in the current index.
+        </div>}
         {error && <div className="notice error-notice" role="alert">{error}</div>}
       </section>
 
@@ -198,7 +214,7 @@ export default function App() {
             {response && <span className="result-count">{response.total_occurrences} examples</span>}
           </div>
           {query && !loading && response && results.length === 0 && <div className="no-results">
-            <strong>No exact occurrence yet.</strong>
+            <strong>{matchMode === "exact" ? "No exact occurrence yet." : "No matching occurrence yet."}</strong>
             <p>Try a shorter phrase.</p>
           </div>}
           <div className="result-list">

@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Any, TextIO
 
 from . import __version__
+from .analysis import Analysis, AnalyzedToken, get_analyzer
 from .captions import segments_from_files
 from .identity import (
-    ANALYZER_ID,
     CACHE_SCHEMA_VERSION,
     DATABASE_SCHEMA_VERSION,
     REPORT_SCHEMA_VERSION,
@@ -70,7 +70,9 @@ CREATE TABLE segments (
     boundary_confidence REAL NOT NULL,
     quality_score REAL NOT NULL,
     token_count INTEGER NOT NULL,
-    segments_json TEXT NOT NULL
+    segments_json TEXT NOT NULL,
+    analysis_json TEXT NOT NULL,
+    analyzed_token_count INTEGER NOT NULL
 );
 CREATE INDEX segments_language ON segments(source_language, video_key, segment_id);
 CREATE TABLE occurrences (
@@ -84,10 +86,41 @@ CREATE TABLE occurrences (
     token_end INTEGER NOT NULL,
     char_start INTEGER NOT NULL,
     char_end INTEGER NOT NULL,
-    surface TEXT NOT NULL
+    surface TEXT NOT NULL,
+    token_count INTEGER NOT NULL
 );
 CREATE INDEX occurrences_lookup ON occurrences(source_language, normalized, n);
 CREATE INDEX occurrences_segment ON occurrences(source_language, segment_id);
+CREATE TABLE analyzers (
+    source_language TEXT PRIMARY KEY,
+    provenance_json TEXT NOT NULL,
+    morphology_available INTEGER NOT NULL,
+    unavailable_reason TEXT
+);
+CREATE TABLE occurrence_keys (
+    key_id INTEGER PRIMARY KEY,
+    source_language TEXT NOT NULL,
+    occurrence_id TEXT NOT NULL REFERENCES occurrences(occurrence_id),
+    kind TEXT NOT NULL CHECK(kind IN ('exact', 'lemma')),
+    normalized TEXT NOT NULL,
+    n INTEGER NOT NULL,
+    lemmas_json TEXT,
+    first_lemma TEXT,
+    suggestion_eligible INTEGER NOT NULL DEFAULT 0,
+    UNIQUE(occurrence_id, kind, normalized, n)
+);
+CREATE INDEX keys_surface ON occurrence_keys(source_language, kind, normalized, n);
+CREATE INDEX keys_lemma ON occurrence_keys(source_language, kind, n, first_lemma);
+CREATE TABLE form_lexicon (
+    source_language TEXT NOT NULL,
+    normalized TEXT NOT NULL,
+    lemma TEXT NOT NULL,
+    upos TEXT,
+    frequency INTEGER NOT NULL
+);
+CREATE INDEX forms_lemma ON form_lexicon(source_language, lemma);
+CREATE UNIQUE INDEX forms_unique
+    ON form_lexicon(source_language, normalized, lemma, COALESCE(upos, ''));
 CREATE TABLE ngram_stats (
     source_language TEXT NOT NULL,
     normalized TEXT NOT NULL,
@@ -180,7 +213,117 @@ def _insert_video(connection: sqlite3.Connection, metadata: dict[str, Any]) -> N
     )
 
 
-def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
+def _insert_occurrences(
+    connection: sqlite3.Connection,
+    segment_id: str,
+    language: str,
+    text: str,
+    analysis: Analysis,
+    max_ngram: int,
+) -> int:
+    # One physical occurrence can have several surface/lemma keys (including MWT spans).
+    spans: dict[tuple[int, int], str] = {}
+
+    def insert_key(
+        selected,
+        start: int,
+        kind: str,
+        normalized: str,
+        lemmas=None,
+        *,
+        suggestion=False,
+        token_count=None,
+    ):
+        bounds = (selected[0].start, selected[-1].end)
+        occurrence_id = spans.get(bounds)
+        if occurrence_id is None:
+            occurrence_id = f"{segment_id}:{bounds[0]}:{bounds[1]}"
+            spans[bounds] = occurrence_id
+            surface = text[bounds[0] : bounds[1]]
+            connection.execute(
+                "INSERT INTO occurrences VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    occurrence_id,
+                    language,
+                    normalized,
+                    accent_key(surface),
+                    len(selected),
+                    segment_id,
+                    start,
+                    start + len(selected),
+                    *bounds,
+                    surface,
+                    token_count if token_count is not None else len(analysis.tokens),
+                ),
+            )
+        connection.execute(
+            """INSERT INTO occurrence_keys(
+                source_language, occurrence_id, kind, normalized, n, lemmas_json, first_lemma,
+                suggestion_eligible
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(occurrence_id, kind, normalized, n) DO UPDATE
+            SET suggestion_eligible = MAX(suggestion_eligible, excluded.suggestion_eligible)""",
+            (
+                language,
+                occurrence_id,
+                kind,
+                normalized,
+                len(selected),
+                json.dumps(lemmas, ensure_ascii=False) if lemmas else None,
+                lemmas[0] if lemmas else None,
+                suggestion,
+            ),
+        )
+
+    # Retain the entire original regex inventory, independently of toolkit tokenization.
+    legacy = tokens_with_spans(text)
+    for start in range(len(legacy)):
+        for size in range(1, min(max_ngram, len(legacy) - start) + 1):
+            selected = legacy[start : start + size]
+            insert_key(
+                selected,
+                start,
+                "exact",
+                " ".join(token.normalized for token in selected),
+                token_count=len(legacy),
+            )
+
+    # Surface words use source-token boundaries, not synthetic MWT word strings.
+    surfaces: list[AnalyzedToken] = []
+    for token in analysis.tokens:
+        if not surfaces or (surfaces[-1].start, surfaces[-1].end) != (token.start, token.end):
+            surfaces.append(token)
+        if token.lemma:
+            connection.execute(
+                """INSERT INTO form_lexicon VALUES (?, ?, ?, ?, 1)
+                ON CONFLICT DO UPDATE SET frequency = frequency + 1""",
+                (language, token.normalized, token.lemma, token.upos),
+            )
+    for start in range(len(surfaces)):
+        for size in range(1, min(max_ngram, len(surfaces) - start) + 1):
+            selected_surface = surfaces[start : start + size]
+            insert_key(
+                selected_surface,
+                start,
+                "exact",
+                " ".join(t.normalized for t in selected_surface),
+                suggestion=True,
+                token_count=len(surfaces),
+            )
+    for start in range(len(analysis.tokens)):
+        for size in range(1, min(max_ngram, len(analysis.tokens) - start) + 1):
+            selected_words = analysis.tokens[start : start + size]
+            if all(token.lemma for token in selected_words):
+                lemmas = [token.lemma for token in selected_words]
+                insert_key(
+                    selected_words, start, "lemma", " ".join(str(lemma) for lemma in lemmas), lemmas
+                )
+    return len(spans)
+
+
+def build_index(
+    *, data_dir: Path, max_ngram: int = 5, analyzer: str = "auto", models_dir: Path | None = None
+) -> dict[str, Any]:
     if not 1 <= max_ngram <= 8:
         raise ValueError("max_ngram must be between 1 and 8")
     raw_rows = _metadata_rows(data_dir / "raw" / "corpora")
@@ -188,6 +331,12 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
         location = data_dir / "raw" / "corpora"
         raise ValueError(f"no versioned cached transcripts found under {location}")
 
+    models_dir = (models_dir or data_dir / "models" / "stanza").resolve()
+    analyzers = {
+        language: get_analyzer(language, analyzer, str(models_dir))
+        for language in sorted({row[2]["source_language"] for row in raw_rows})
+    }
+    analyzer_ids = {language: item.provenance.identity for language, item in analyzers.items()}
     index_dir = data_dir / "index"
     derived_root = data_dir / "derived" / "corpora"
     reports_dir = data_dir / "reports"
@@ -220,7 +369,22 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
                 ("package_version", __version__),
                 ("built_at", built_at),
                 ("max_ngram", str(max_ngram)),
-                ("analyzer_id", ANALYZER_ID),
+                (
+                    "analyzer_id",
+                    next(iter(analyzer_ids.values())) if len(analyzer_ids) == 1 else "mixed",
+                ),
+            ],
+        )
+        connection.executemany(
+            "INSERT INTO analyzers VALUES (?, ?, ?, ?)",
+            [
+                (
+                    language,
+                    json.dumps(item.provenance.as_dict(), ensure_ascii=False, sort_keys=True),
+                    item.morphology_available,
+                    item.unavailable_reason,
+                )
+                for language, item in analyzers.items()
             ],
         )
         for metadata_path, captions_path, metadata in raw_rows:
@@ -239,16 +403,28 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
             language_counts[language][f"caption:{metadata['caption_kind']}"] += 1
             segments = segments_from_files(metadata_path, captions_path)
             for segment in segments:
+                analysis = analyzers[language].analyze(segment.text).validate(segment.text)
+                analysis_json = json.dumps(
+                    analysis.as_dict(), ensure_ascii=False, separators=(",", ":")
+                )
                 segment_outputs[language].write(
-                    json.dumps(segment.as_dict(), ensure_ascii=False) + "\n"
+                    json.dumps(
+                        {
+                            **segment.as_dict(),
+                            "analysis": analysis.as_dict(),
+                            "analysis_schema_version": 1,
+                        },
+                        ensure_ascii=False,
+                    )
+                    + "\n"
                 )
                 connection.execute(
                     """
                     INSERT INTO segments(
                         segment_id, source_language, track_id, video_key, text, start, end,
                         clip_start, clip_end, boundary_reason, boundary_confidence, quality_score,
-                        token_count, segments_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        token_count, segments_json, analysis_json, analyzed_token_count
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         segment.id,
@@ -269,50 +445,29 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
                             ensure_ascii=False,
                             separators=(",", ":"),
                         ),
+                        analysis_json,
+                        len(analysis.tokens),
                     ),
                 )
                 boundary_counts[segment.boundary_reason] += 1
                 language_counts[language]["segments"] += 1
                 segment_count += 1
-                tokens = tokens_with_spans(segment.text)
-                for start in range(len(tokens)):
-                    for size in range(1, min(max_ngram, len(tokens) - start) + 1):
-                        selected = tokens[start : start + size]
-                        normalized = " ".join(token.normalized for token in selected)
-                        surface = segment.text[selected[0].start : selected[-1].end]
-                        occurrence_id = f"{segment.id}:{start}:{size}"
-                        connection.execute(
-                            """
-                            INSERT INTO occurrences(
-                                occurrence_id, source_language, normalized, accent_key, n,
-                                segment_id, token_start, token_end, char_start, char_end, surface
-                            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                occurrence_id,
-                                language,
-                                normalized,
-                                accent_key(surface),
-                                size,
-                                segment.id,
-                                start,
-                                start + size,
-                                selected[0].start,
-                                selected[-1].end,
-                                surface,
-                            ),
-                        )
-                        occurrence_count += 1
-                        language_counts[language]["occurrences"] += 1
+                count = _insert_occurrences(
+                    connection, segment.id, language, segment.text, analysis, max_ngram
+                )
+                occurrence_count += count
+                language_counts[language]["occurrences"] += count
         connection.execute(
             """
             INSERT INTO ngram_stats(
                 source_language, normalized, n, surface, total_count, video_count
             )
-            SELECT o.source_language, o.normalized, o.n, MIN(o.surface), COUNT(*),
+            SELECT k.source_language, k.normalized, k.n, MIN(o.surface), COUNT(*),
                    COUNT(DISTINCT s.video_key)
-            FROM occurrences o JOIN segments s ON s.segment_id = o.segment_id
-            GROUP BY o.source_language, o.normalized, o.n
+            FROM occurrence_keys k JOIN occurrences o USING(occurrence_id)
+            JOIN segments s ON s.segment_id = o.segment_id
+            WHERE k.kind = 'exact' AND k.suggestion_eligible = 1
+            GROUP BY k.source_language, k.normalized, k.n
             """
         )
         connection.commit()
@@ -346,14 +501,17 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
                 for key, value in sorted(counts.items())
                 if key.startswith("caption:")
             },
-            "analyzer_id": ANALYZER_ID,
+            "analyzer_id": analyzer_ids[language],
+            "analyzer": analyzers[language].provenance.as_dict(),
+            "morphology_available": analyzers[language].morphology_available,
         }
     report = {
         "report_schema_version": REPORT_SCHEMA_VERSION,
         "database_schema_version": DATABASE_SCHEMA_VERSION,
         "built_at": built_at,
         "package_version": __version__,
-        "analyzer_id": ANALYZER_ID,
+        "analyzer_id": next(iter(analyzer_ids.values())) if len(analyzer_ids) == 1 else "mixed",
+        "analyzers": {language: item.provenance.as_dict() for language, item in analyzers.items()},
         "max_ngram": max_ngram,
         "video_count": len(raw_rows),
         "segment_count": segment_count,

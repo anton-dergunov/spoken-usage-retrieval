@@ -24,11 +24,12 @@ audio is downloaded.
   creator-authored source-language captions preferred and original-language automatic captions as a
   visible fallback;
 - timestamp-aware reconstruction of complete utterances from caption events;
-- exact, accent-tolerant retrieval of words and contiguous 1–5-word phrases;
+- accent-tolerant surface and morphological retrieval of words and contiguous 1–5-word phrases,
+  with related word forms enabled by default and exact matches ranked first;
 - deterministic ranking, cross-video diversification, and a JSON API;
 - a React viewer that plays only the relevant excerpt and renders progressive subtitles itself.
 
-Not yet: curated catalogues beyond Spanish, inflected-form search, translation, forced alignment,
+Not yet: curated catalogues beyond Spanish, translation, forced alignment,
 and any learned ranking. Those are the [roadmap](docs/plans/README.md).
 
 ## Quick start
@@ -61,6 +62,54 @@ For frontend development, serve the API once with a production build present, or
 `speech_retrieval.api.create_app`, then run `npm --prefix web run dev`; Vite proxies `/api` to port
 8000.
 
+### Word forms and optional language models
+
+Morphology works immediately after a normal installation for simplemma-supported languages,
+including Spanish, English, Portuguese, French, German, Italian, and Hindi. No model download is
+needed. The viewer's **Word forms** selector compares the three retrieval modes:
+
+```python
+from speech_retrieval.search import Corpus
+
+corpus = Corpus("data")
+corpus.search("casas", source_language="es")  # auto: includes casa, surface matches first
+corpus.search("casas", source_language="es", match_mode="exact")
+corpus.search("casas", source_language="es", match_mode="lemma")
+```
+
+HTTP uses `/api/search?language=es&q=casas&match_mode=auto`. `exact` searches the accent-folded
+surface inventory, `lemma` searches dictionary-form sequences, and `auto` combines them. Results
+retain original text and offsets and add `match_type`, `matched_surface`, `matched_lemma`,
+`token_analysis`, and `analyzer`. `query_analyses` reports candidate lemmas by token, their origin,
+and observed frequencies; it does not claim to enumerate every possible meaning.
+`totals_by_mode` reports exact, lemma, and deduplicated auto occurrence counts before sentence
+selection and the result limit. Exact and lemma totals can overlap.
+
+Japanese, Korean, and Chinese need the optional Stanza analyzer and explicitly installed models:
+
+```bash
+uv sync --locked --extra nlp
+uv run speech-retrieval models download ja
+uv run speech-retrieval build-index
+```
+
+The default model directory is `<data-dir>/models/stanza`. `models download`, `build-index`, and
+`serve` accept `--models-dir`; Python `Corpus` and `create_app` accept `models_dir`. Downloading a
+model alone does not change an existing index: rebuild it to enable that analyzer. To compare
+Stanza on a language normally handled by simplemma, use `build-index --analyzer stanza`.
+`--analyzer unicode` creates an exact-only baseline; `--analyzer simplemma` explicitly selects the
+normal dictionary analyzer. Indexing and search never download models.
+
+Without usable morphology, `auto` returns surface matches and `morphology_available: false` with
+an explanation. Explicit `lemma` raises `UnsupportedAnalysisError`; HTTP returns 400 with
+`detail.code: "unsupported_analysis"` and `detail.message`. Incompatible schema or analysis versions
+return a rebuild requirement (HTTP 503). Schema 2 indexes must be rebuilt from versioned caption
+caches; raw acquisition files remain unchanged.
+
+Simplemma supplies neither POS nor morphological features, so those fields are nullable. It can
+miss inflections or choose an unintended lemma; related forms are candidates, not proof of the same
+meaning. See the [measured performance and limitations](experiments/morphological-retrieval/README.md).
+
 ### Tests
 
 ```bash
@@ -76,6 +125,9 @@ npm --prefix web run build
 
 The smoke command builds and queries a temporary synthetic corpus, exercises the JSON API, and uses
 no network, API key, model download, or local `data/` directory.
+The normal suite mocks Stanza and skips real CJK integration unless the `nlp` extra and local
+models are available. Set `SPEECH_RETRIEVAL_TEST_MODELS_DIR` to test models in a custom directory;
+then run `uv run pytest tests/test_stanza_analysis.py -rs`. Tests never download weights.
 
 ## How it works
 

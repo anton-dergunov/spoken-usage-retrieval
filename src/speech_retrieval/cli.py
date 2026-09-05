@@ -11,6 +11,7 @@ from typing import Any
 import uvicorn
 
 from .acquisition import acquire
+from .analysis import download_models
 from .api import create_app
 from .identity import CACHE_SCHEMA_VERSION, track_id, video_key
 from .indexing import build_index
@@ -53,22 +54,34 @@ def download_subtitles_main(argv: Sequence[str] | None = None) -> int:
 
 def _add_build_arguments(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-ngram", type=int, default=5)
+    parser.add_argument(
+        "--analyzer", choices=("auto", "unicode", "simplemma", "stanza"), default="auto"
+    )
+    parser.add_argument("--models-dir", type=Path)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
 
 
 def _build_index(args: argparse.Namespace) -> int:
-    report = build_index(data_dir=args.data_dir, max_ngram=args.max_ngram)
+    report = build_index(
+        data_dir=args.data_dir,
+        max_ngram=args.max_ngram,
+        analyzer=args.analyzer,
+        models_dir=args.models_dir,
+    )
     print(json.dumps(report, ensure_ascii=False, indent=2))
     return 0
 
 
 def build_index_main(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Build the local exact word and phrase index.")
+    parser = argparse.ArgumentParser(
+        description="Build the local surface and morphological word and phrase index."
+    )
     _add_build_arguments(parser)
     return _build_index(parser.parse_args(argv))
 
 
 def _add_serve_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--models-dir", type=Path)
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8000)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
@@ -83,6 +96,7 @@ def _serve(args: argparse.Namespace) -> int:
         data_dir=args.data_dir,
         catalogue_dir=args.catalogue_dir,
         web_dist=args.web_dist,
+        models_dir=args.models_dir,
     )
     uvicorn.run(app, host=args.host, port=args.port)
     return 0
@@ -184,6 +198,12 @@ def _smoke(_args: argparse.Namespace) -> int:
     return 0
 
 
+def _models_download(args: argparse.Namespace) -> int:
+    result = download_models(args.language, args.models_dir or args.data_dir / "models" / "stanza")
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 0
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="speech-retrieval",
@@ -199,7 +219,7 @@ def _parser() -> argparse.ArgumentParser:
     download.set_defaults(handler=_download_subtitles)
 
     build = subparsers.add_parser(
-        "build-index", help="Build the local exact word and phrase index."
+        "build-index", help="Build the local surface and morphological word and phrase index."
     )
     _add_build_arguments(build)
     build.set_defaults(handler=_build_index)
@@ -207,6 +227,16 @@ def _parser() -> argparse.ArgumentParser:
     serve = subparsers.add_parser("serve", help="Serve the API and built web viewer.")
     _add_serve_arguments(serve)
     serve.set_defaults(handler=_serve)
+
+    models = subparsers.add_parser("models", help="Manage optional local Stanza models.")
+    model_commands = models.add_subparsers(dest="model_command", required=True)
+    model_download = model_commands.add_parser(
+        "download", help="Explicitly download a language's analysis models."
+    )
+    model_download.add_argument("language")
+    model_download.add_argument("--data-dir", type=Path, default=Path("data"))
+    model_download.add_argument("--models-dir", type=Path)
+    model_download.set_defaults(handler=_models_download)
 
     smoke = subparsers.add_parser(
         "smoke", help="Run offline indexing and API checks with synthetic data."

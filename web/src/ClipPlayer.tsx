@@ -29,16 +29,18 @@ function RestartIcon() {
 
 export function HighlightedSentence({ result }: { result: SearchResult }) {
   const { char_start: start, char_end: end } = result.match;
+  const characters = Array.from(result.sentence);
   return <span>
-    {result.sentence.slice(0, start)}
-    <mark>{result.sentence.slice(start, end)}</mark>
-    {result.sentence.slice(end)}
+    {characters.slice(0, start).join("")}
+    <mark>{characters.slice(start, end).join("")}</mark>
+    {characters.slice(end).join("")}
   </span>;
 }
 
 export function ProgressiveSentence({ result, current }: { result: SearchResult; current: number }) {
   if (result.segments.length <= 1) return <HighlightedSentence result={result} />;
 
+  const characters = Array.from(result.sentence);
   const renderRange = (rangeStart: number, rangeEnd: number) => {
     const boundaries = new Set([rangeStart, rangeEnd]);
     for (const segment of result.segments) {
@@ -48,7 +50,7 @@ export function ProgressiveSentence({ result, current }: { result: SearchResult;
     const points = [...boundaries].sort((left, right) => left - right);
     return points.slice(0, -1).map((start, index) => {
       const end = points[index + 1];
-      const text = result.sentence.slice(start, end);
+      const text = characters.slice(start, end).join("");
       const segment = result.segments.find((item) => start >= item.char_start && end <= item.char_end);
       const timingClass = segment
         ? `timed-fragment ${current >= segment.start ? "spoken" : "upcoming"}`
@@ -60,7 +62,7 @@ export function ProgressiveSentence({ result, current }: { result: SearchResult;
   return <span aria-label={result.sentence}>
     {renderRange(0, result.match.char_start)}
     <mark>{renderRange(result.match.char_start, result.match.char_end)}</mark>
-    {renderRange(result.match.char_end, result.sentence.length)}
+    {renderRange(result.match.char_end, characters.length)}
   </span>;
 }
 

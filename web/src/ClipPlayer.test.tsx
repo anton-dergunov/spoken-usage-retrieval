@@ -1,10 +1,12 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import ClipPlayer from "./ClipPlayer";
+import ClipPlayer, { HighlightedSentence, ProgressiveSentence } from "./ClipPlayer";
 import type { SearchResult } from "./types";
 import type { YouTubePlayer } from "./youtube";
 
 const result: SearchResult = {
+  match_type: "exact", matched_surface: "bronca", matched_lemma: "bronca", token_analysis: [],
+  analyzer: { name: "simplemma", language: "es", package_version: "1.2.0", model_version: null, settings: {}, identity: "fixture" },
   occurrence_id: "occurrence-1",
   segment_id: "segment-1",
   source_language: "es",
@@ -205,4 +207,20 @@ describe("ClipPlayer", () => {
       "href", "https://www.youtube.com/watch?v=abc123&t=76s"
     );
   });
+});
+
+
+it("uses Unicode character offsets for static and progressive highlights", () => {
+  const unicodeResult = { ...result, sentence: "🙂 casas bonitas",
+    match: { text: "casas", char_start: 2, char_end: 7, accent_exact: true },
+    segments: [
+      { text: "🙂 casas", char_start: 0, char_end: 7, start: 1, end: 2 },
+      { text: " bonitas", char_start: 7, char_end: 15, start: 2, end: 3 },
+    ] };
+  const { container, rerender } = render(<HighlightedSentence result={unicodeResult} />);
+  expect(container.querySelector("mark")).toHaveTextContent("casas");
+  expect(container.textContent).toBe("🙂 casas bonitas");
+  rerender(<ProgressiveSentence result={unicodeResult} current={1.5} />);
+  expect(container.querySelector("mark")).toHaveTextContent("casas");
+  expect(container.textContent).toBe("🙂 casas bonitas");
 });

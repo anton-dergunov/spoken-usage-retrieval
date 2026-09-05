@@ -1,0 +1,211 @@
+{
+  "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
+  "python": "3.14.7",
+  "query_repeats": 20,
+  "analyzers": {
+    "unicode": {
+      "provenance": {
+        "name": "unicode",
+        "language": "es",
+        "package_version": "1",
+        "model_version": null,
+        "settings": {
+          "tokenizer": "unicode-regex-v1"
+        },
+        "identity": "unicode:9fef9c960305cd1e66c3"
+      },
+      "initialization_ms": 0.188,
+      "build_seconds": 5.295,
+      "index_bytes": 60891136,
+      "segments": 3264,
+      "occurrences": 102898,
+      "queries": {
+        "exact:casa": {
+          "median_ms": 1.273,
+          "p95_ms": 1.553,
+          "occurrences": 14
+        },
+        "exact:casas": {
+          "median_ms": 0.462,
+          "p95_ms": 0.59,
+          "occurrences": 1
+        },
+        "exact:estar": {
+          "median_ms": 1.848,
+          "p95_ms": 4.082,
+          "occurrences": 24
+        },
+        "exact:estoy": {
+          "median_ms": 2.804,
+          "p95_ms": 3.007,
+          "occurrences": 37
+        },
+        "exact:estaba": {
+          "median_ms": 2.516,
+          "p95_ms": 3.082,
+          "occurrences": 38
+        },
+        "exact:la verdad": {
+          "median_ms": 2.918,
+          "p95_ms": 5.377,
+          "occurrences": 42
+        },
+        "exact:bonitas": {
+          "median_ms": 0.47,
+          "p95_ms": 0.485,
+          "occurrences": 2
+        },
+        "exact:que": {
+          "median_ms": 73.727,
+          "p95_ms": 86.777,
+          "occurrences": 1215
+        },
+        "auto:casa": {
+          "median_ms": 1.196,
+          "p95_ms": 1.302,
+          "occurrences": 14
+        },
+        "auto:casas": {
+          "median_ms": 0.434,
+          "p95_ms": 0.477,
+          "occurrences": 1
+        },
+        "auto:estar": {
+          "median_ms": 1.832,
+          "p95_ms": 2.128,
+          "occurrences": 24
+        },
+        "auto:estoy": {
+          "median_ms": 2.369,
+          "p95_ms": 2.561,
+          "occurrences": 37
+        },
+        "auto:estaba": {
+          "median_ms": 2.379,
+          "p95_ms": 2.607,
+          "occurrences": 38
+        },
+        "auto:la verdad": {
+          "median_ms": 2.678,
+          "p95_ms": 3.111,
+          "occurrences": 42
+        },
+        "auto:bonitas": {
+          "median_ms": 0.464,
+          "p95_ms": 0.493,
+          "occurrences": 2
+        },
+        "auto:que": {
+          "median_ms": 73.186,
+          "p95_ms": 78.63,
+          "occurrences": 1215
+        }
+      }
+    },
+    "simplemma": {
+      "provenance": {
+        "name": "simplemma",
+        "language": "es",
+        "package_version": "1.2.0",
+        "model_version": null,
+        "settings": {
+          "tokenizer": "unicode-regex-v1",
+          "greedy": false,
+          "adapter_version": 1
+        },
+        "identity": "simplemma:3b8b85daf82084ba468b"
+      },
+      "initialization_ms": 283.953,
+      "build_seconds": 6.596,
+      "index_bytes": 85413888,
+      "segments": 3264,
+      "occurrences": 102898,
+      "queries": {
+        "exact:casa": {
+          "median_ms": 1.953,
+          "p95_ms": 2.829,
+          "occurrences": 14
+        },
+        "exact:casas": {
+          "median_ms": 1.046,
+          "p95_ms": 1.296,
+          "occurrences": 1
+        },
+        "exact:estar": {
+          "median_ms": 3.856,
+          "p95_ms": 4.008,
+          "occurrences": 24
+        },
+        "exact:estoy": {
+          "median_ms": 4.863,
+          "p95_ms": 5.409,
+          "occurrences": 37
+        },
+        "exact:estaba": {
+          "median_ms": 5.214,
+          "p95_ms": 7.368,
+          "occurrences": 38
+        },
+        "exact:la verdad": {
+          "median_ms": 9.031,
+          "p95_ms": 10.427,
+          "occurrences": 42
+        },
+        "exact:bonitas": {
+          "median_ms": 1.094,
+          "p95_ms": 1.2,
+          "occurrences": 2
+        },
+        "exact:que": {
+          "median_ms": 80.458,
+          "p95_ms": 90.076,
+          "occurrences": 1215
+        },
+        "auto:casa": {
+          "median_ms": 1.877,
+          "p95_ms": 1.905,
+          "occurrences": 15
+        },
+        "auto:casas": {
+          "median_ms": 1.877,
+          "p95_ms": 1.964,
+          "occurrences": 15
+        },
+        "auto:estar": {
+          "median_ms": 27.538,
+          "p95_ms": 29.695,
+          "occurrences": 499
+        },
+        "auto:estoy": {
+          "median_ms": 27.231,
+          "p95_ms": 36.062,
+          "occurrences": 499
+        },
+        "auto:estaba": {
+          "median_ms": 29.119,
+          "p95_ms": 42.912,
+          "occurrences": 500
+        },
+        "auto:la verdad": {
+          "median_ms": 8.414,
+          "p95_ms": 8.534,
+          "occurrences": 42
+        },
+        "auto:bonitas": {
+          "median_ms": 1.493,
+          "p95_ms": 1.52,
+          "occurrences": 11
+        },
+        "auto:que": {
+          "median_ms": 80.173,
+          "p95_ms": 95.806,
+          "occurrences": 1215
+        }
+      }
+    }
+  },
+  "seed": {
+    "transcripts": 10,
+    "captions_sha256": "4ba1921c14be5a4286445d1997859cce17c21dc9112727827a6d0bab07f8f732"
+  }
+}

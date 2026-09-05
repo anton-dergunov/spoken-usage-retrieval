@@ -91,13 +91,13 @@ def indexed_data(tmp_path: Path) -> tuple[Path, Path]:
 def test_index_supports_accent_tolerant_words_phrases_and_highlights(tmp_path):
     data_dir, catalogue_dir = indexed_data(tmp_path)
     corpus = Corpus(data_dir, catalogue_dir)
-    accented = corpus.search("si", source_language="es")
+    accented = corpus.search("si", source_language="es", match_mode="exact")
     assert accented["source_language"] == "es"
     assert accented["results"][0]["match"]["text"] == "Sí"
     assert accented["results"][0]["match"]["accent_exact"] is False
-    exact = corpus.search("Sí", source_language="es")
+    exact = corpus.search("Sí", source_language="es", match_mode="exact")
     assert exact["results"][0]["match"]["accent_exact"] is True
-    phrase = corpus.search("la verdad", source_language="es")
+    phrase = corpus.search("la verdad", source_language="es", match_mode="exact")
     assert phrase["total_occurrences"] == 4
     assert phrase["returned"] == 4
     assert {result["video"]["id"] for result in phrase["results"][:2]} == {
@@ -133,7 +133,7 @@ def test_search_suggestions_counts_and_status_are_language_scoped(tmp_path):
     report = build_index(data_dir=data_dir, max_ngram=5)
     corpus = Corpus(data_dir, catalogue_dir)
 
-    spanish = corpus.search("la verdad", source_language="es")
+    spanish = corpus.search("la verdad", source_language="es", match_mode="exact")
     english = corpus.search("la verdad", source_language="en")
     assert spanish["total_occurrences"] == 2
     assert english["total_occurrences"] == 2
@@ -194,7 +194,7 @@ def test_api_contract_requires_and_preserves_language(tmp_path):
     status = client.get("/api/status").json()
     assert status["videos"] == 2
     assert status["max_ngram"] == 5
-    assert status["database_schema_version"] == 1
+    assert status["database_schema_version"] == 2
 
 
 def test_pre_version_index_requires_a_rebuild(tmp_path):

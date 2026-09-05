@@ -1,3 +1,26 @@
+export type MatchMode = "auto" | "exact" | "lemma";
+
+export interface AnalyzerProvenance {
+  name: string;
+  language: string;
+  package_version: string;
+  model_version: string | null;
+  settings: Record<string, unknown>;
+  identity: string;
+}
+
+export interface AnalyzedToken {
+  surface: string;
+  normalized: string;
+  start: number;
+  end: number;
+  lemma: string | null;
+  upos: string | null;
+  features: Record<string, string> | null;
+  word: string | null;
+  shared_span: boolean;
+}
+
 export interface VideoSource {
   video_key: string;
   provider: "youtube" | string;
@@ -21,6 +44,11 @@ export interface SearchResult {
   segment_id: string;
   source_language: string;
   sentence: string;
+  match_type: "exact" | "lemma";
+  matched_surface: string;
+  matched_lemma: string | null;
+  token_analysis: AnalyzedToken[];
+  analyzer: AnalyzerProvenance;
   match: {
     text: string;
     char_start: number;
@@ -46,6 +74,23 @@ export interface SearchResult {
 export interface SearchResponse {
   query: string;
   normalized_query: string;
+  match_mode: MatchMode;
+  morphology_available: boolean;
+  morphology_unavailable_reason: string | null;
+  totals_by_mode: Record<MatchMode, number>;
+  query_analyzer: AnalyzerProvenance;
+  query_analyses: Array<{
+    position: number;
+    token: AnalyzedToken;
+    ambiguous: boolean;
+    candidates: Array<{
+      lemma: string;
+      upos: string | null;
+      sources: string[];
+      frequency: number;
+      analyzer: AnalyzerProvenance;
+    }>;
+  }>;
   source_language: string;
   total_occurrences: number;
   returned: number;
@@ -82,7 +127,9 @@ export interface CorpusStatus {
     segments: number;
     occurrences: number;
     caption_kinds: Record<string, number>;
-    analyzer_id: string;
+    analyzer_id: string | null;
+    analyzer: AnalyzerProvenance | null;
+    morphology_available: boolean;
   }>;
   videos: number;
   segments: number;

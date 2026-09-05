@@ -3,11 +3,21 @@ from __future__ import annotations
 import json
 import math
 import sqlite3
+from contextlib import closing
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
+from .analysis import (
+    AnalyzedToken,
+    IncompatibleAnalyzerError,
+    UnicodeAnalyzer,
+    UnsupportedAnalysisError,
+    recorded_analyzer,
+)
 from .catalogue import canonical_language, load_catalogue_directory
 from .identity import DATABASE_SCHEMA_VERSION
+from .stopwords import stopwords
 from .text import accent_key, normalized_query
 
 
@@ -24,9 +34,12 @@ class Corpus:
         self,
         data_dir: str | Path,
         catalogue_dir: str | Path = "config/channels",
+        *,
+        models_dir: str | Path | None = None,
     ):
         self.data_dir = Path(data_dir)
         self.catalogue_dir = Path(catalogue_dir)
+        self.models_dir = Path(models_dir or self.data_dir / "models" / "stanza").resolve()
         self.database = self.data_dir / "index" / "corpus.sqlite3"
 
     def _connect(self) -> sqlite3.Connection:
@@ -63,8 +76,12 @@ class Corpus:
         if indexed is None:
             raise SearchError(f"Source language is not indexed: {source_language}")
 
-    def search(self, query: str, *, source_language: str, limit: int = 20) -> dict[str, Any]:
+    def search(
+        self, query: str, *, source_language: str, match_mode: str = "auto", limit: int = 20
+    ) -> dict[str, Any]:
         source_language = self._source_language(source_language)
+        if match_mode not in ("exact", "lemma", "auto"):
+            raise SearchError("match_mode must be exact, lemma, or auto")
         normalized, query_tokens = normalized_query(query)
         if not query_tokens:
             raise SearchError("Enter a word or phrase to search for.")
@@ -72,21 +89,153 @@ class Corpus:
             raise SearchError("This prototype searches phrases of up to five words.")
         limit = max(1, min(int(limit), 50))
         query_accent_key = accent_key(query)
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._require_indexed(connection, source_language)
-            total = connection.execute(
-                """
-                SELECT COUNT(*) FROM occurrences
-                WHERE source_language = ? AND normalized = ? AND n = ?
-                """,
-                (source_language, normalized, len(query_tokens)),
-            ).fetchone()[0]
+            metadata = connection.execute(
+                "SELECT * FROM analyzers WHERE source_language = ?", (source_language,)
+            ).fetchone()
+            provenance = json.loads(metadata["provenance_json"])
+            reason = metadata["unavailable_reason"]
+            try:
+                analyzer = recorded_analyzer(provenance, self.models_dir)
+            except UnsupportedAnalysisError as error:
+                analyzer = UnicodeAnalyzer(source_language, str(error))
+                reason = str(error)
+            except IncompatibleAnalyzerError as error:
+                raise IncompatibleIndexError(str(error)) from error
+            morphology_available = analyzer.morphology_available
+            if match_mode == "lemma" and not morphology_available:
+                raise UnsupportedAnalysisError(reason or analyzer.unavailable_reason)
+            analysis = analyzer.analyze(query).validate(query)
+            if len(analysis.tokens) > 5 and match_mode != "exact":
+                raise SearchError("This prototype searches phrases of up to five analyzed words.")
+            query_analyses = []
+            candidate_sets = []
+            for position, token in enumerate(analysis.tokens):
+                candidates_by_pair: dict[tuple[str, str | None], dict[str, Any]] = {}
+                if token.lemma:
+                    candidates_by_pair[token.lemma, token.upos] = {
+                        "lemma": token.lemma,
+                        "upos": token.upos,
+                        "sources": ["query_analyzer"],
+                        "frequency": 0,
+                        "analyzer": provenance,
+                    }
+                if morphology_available:
+                    observed = connection.execute(
+                        """SELECT lemma, upos, frequency FROM form_lexicon
+                        WHERE source_language = ? AND normalized = ? ORDER BY lemma, COALESCE(upos, '')""",
+                        (source_language, token.normalized),
+                    ).fetchall()
+                    for item in observed:
+                        pair = item["lemma"], item["upos"]
+                        candidate = candidates_by_pair.setdefault(
+                            pair,
+                            {
+                                "lemma": item["lemma"],
+                                "upos": item["upos"],
+                                "sources": [],
+                                "frequency": 0,
+                                "analyzer": provenance,
+                            },
+                        )
+                        candidate["sources"].append("corpus")
+                        candidate["frequency"] = item["frequency"]
+                if morphology_available:
+                    # A dictionary-form query may itself receive a different analysis
+                    # (Portuguese "casa" -> "casar"). Retain corpus-attested lemmas too.
+                    for item in connection.execute(
+                        "SELECT DISTINCT upos FROM form_lexicon WHERE source_language = ? AND lemma = ?",
+                        (source_language, token.normalized),
+                    ):
+                        candidate = candidates_by_pair.setdefault(
+                            (token.normalized, item["upos"]),
+                            {
+                                "lemma": token.normalized,
+                                "upos": item["upos"],
+                                "sources": [],
+                                "frequency": 0,
+                                "analyzer": provenance,
+                            },
+                        )
+                        candidate["sources"].append("indexed_lemma")
+                candidates_for_token = sorted(
+                    candidates_by_pair.values(), key=lambda c: (c["lemma"], c["upos"] or "")
+                )
+                query_analyses.append(
+                    {
+                        "position": position,
+                        "token": asdict(token),
+                        "candidates": candidates_for_token,
+                        "ambiguous": len(candidates_for_token) > 1,
+                    }
+                )
+                candidate_sets.append(sorted({c["lemma"] for c in candidates_for_token}))
+
+            surface_keys = {(normalized, len(query_tokens))}
+            surfaces: list[AnalyzedToken] = []
+            for token in analysis.tokens:
+                if not surfaces or (surfaces[-1].start, surfaces[-1].end) != (
+                    token.start,
+                    token.end,
+                ):
+                    surfaces.append(token)
+            if surfaces and len(surfaces) <= 5:
+                surface_keys.add((" ".join(token.normalized for token in surfaces), len(surfaces)))
+            matches: dict[str, dict[str, Any]] = {}
+            for key, size in sorted(surface_keys):
+                for row in connection.execute(
+                    """SELECT occurrence_id FROM occurrence_keys
+                    WHERE source_language = ? AND kind = 'exact' AND normalized = ? AND n = ?""",
+                    (source_language, key, size),
+                ):
+                    matches[row["occurrence_id"]] = {
+                        "exact": True,
+                        "lemma": False,
+                        "matched_lemma": None,
+                    }
+            if morphology_available and candidate_sets and all(candidate_sets):
+                # Index the first position, then check remaining candidate sets in SQL.
+                # JSON arrays avoid SQLite's variable limit and Cartesian expansion.
+                for row in connection.execute(
+                    """SELECT occurrence_id, normalized FROM occurrence_keys k
+                    WHERE source_language = ? AND kind = 'lemma' AND n = ?
+                    AND first_lemma IN (SELECT value FROM json_each(?))
+                    AND NOT EXISTS (
+                        SELECT 1 FROM json_each(k.lemmas_json) term
+                        WHERE term.value NOT IN (
+                            SELECT value FROM json_each(json_extract(?, '$[' || term.key || ']'))
+                        )
+                    ) ORDER BY occurrence_id, normalized""",
+                    (
+                        source_language,
+                        len(candidate_sets),
+                        json.dumps(candidate_sets[0]),
+                        json.dumps(candidate_sets),
+                    ),
+                ):
+                    match = matches.setdefault(
+                        row["occurrence_id"],
+                        {"exact": False, "lemma": False, "matched_lemma": None},
+                    )
+                    match["lemma"] = True
+                    if match["matched_lemma"] is None:
+                        match["matched_lemma"] = row["normalized"]
+            totals = {
+                "exact": sum(m["exact"] for m in matches.values()),
+                "lemma": sum(m["lemma"] for m in matches.values()),
+                "auto": len(matches),
+            }
+            selected_ids = [
+                key for key, value in matches.items() if match_mode == "auto" or value[match_mode]
+            ]
             rows = connection.execute(
                 """
                 SELECT
                     o.occurrence_id, o.accent_key, o.n, o.token_start, o.char_start, o.char_end,
+                    o.token_count AS occurrence_token_count,
                     o.surface, s.segment_id, s.text, s.start, s.end, s.clip_start, s.clip_end,
-                    s.segments_json, s.boundary_reason, s.boundary_confidence, s.quality_score,
+                    s.segments_json, s.analysis_json, s.boundary_reason, s.boundary_confidence, s.quality_score,
                     s.token_count, s.track_id, v.video_key, v.provider, v.video_id, v.url, v.title,
                     v.channel_id, v.channel, v.varieties_json, v.speech_style_json, v.duration,
                     v.thumbnail, t.caption_kind, t.caption_language
@@ -94,26 +243,25 @@ class Corpus:
                 JOIN segments s ON s.segment_id = o.segment_id
                 JOIN transcripts t ON t.track_id = s.track_id
                 JOIN videos v ON v.video_key = s.video_key
-                WHERE o.source_language = ? AND o.normalized = ? AND o.n = ?
-                ORDER BY s.quality_score DESC, v.video_key, s.start
-                LIMIT ?
+                WHERE o.occurrence_id IN (SELECT value FROM json_each(?))
                 """,
-                (
-                    source_language,
-                    normalized,
-                    len(query_tokens),
-                    min(1000, max(100, limit * 20)),
-                ),
+                (json.dumps(selected_ids),),
             ).fetchall()
 
         candidates: list[dict[str, Any]] = []
-        seen_segments: set[str] = set()
         for row in rows:
-            if row["segment_id"] in seen_segments:
-                continue
-            seen_segments.add(row["segment_id"])
+            match = matches[row["occurrence_id"]]
+            stored_analysis = json.loads(row["analysis_json"])
+            matched_tokens = [
+                token
+                for token in stored_analysis["tokens"]
+                if token["start"] >= row["char_start"] and token["end"] <= row["char_end"]
+            ]
+            matched_lemma = match["matched_lemma"]
+            if matched_lemma is None and matched_tokens and all(t["lemma"] for t in matched_tokens):
+                matched_lemma = " ".join(t["lemma"] for t in matched_tokens)
             accent_exact = row["accent_key"] == query_accent_key
-            center = (row["token_start"] + row["n"] / 2) / max(row["token_count"], 1)
+            center = (row["token_start"] + row["n"] / 2) / max(row["occurrence_token_count"], 1)
             center_bonus = 0.03 * max(0.0, 1 - abs(0.5 - center) * 2)
             score = min(
                 0.99, 0.9 * row["quality_score"] + (0.04 if accent_exact else 0) + center_bonus
@@ -124,6 +272,11 @@ class Corpus:
                     "segment_id": row["segment_id"],
                     "source_language": source_language,
                     "sentence": row["text"],
+                    "match_type": "exact" if match["exact"] else "lemma",
+                    "matched_surface": row["surface"],
+                    "matched_lemma": matched_lemma,
+                    "token_analysis": matched_tokens,
+                    "analyzer": stored_analysis["analyzer"],
                     "match": {
                         "text": row["surface"],
                         "char_start": row["char_start"],
@@ -161,17 +314,37 @@ class Corpus:
             )
         candidates.sort(
             key=lambda item: (
+                item["match_type"] != "exact",
                 -item["quality_score"],
                 item["video"]["video_key"],
                 item["clip_start"],
+                item["match"]["char_start"],
+                item["occurrence_id"],
             )
         )
-        results = self._diversify(candidates, limit)
+        # Keep the strongest evidence in each sentence, then diversify within match tiers.
+        seen_segments: set[str] = set()
+        unique = []
+        for candidate in candidates:
+            if candidate["segment_id"] not in seen_segments:
+                unique.append(candidate)
+                seen_segments.add(candidate["segment_id"])
+        results = self._diversify([c for c in unique if c["match_type"] == "exact"], limit)
+        if len(results) < limit:
+            results += self._diversify(
+                [c for c in unique if c["match_type"] == "lemma"], limit - len(results)
+            )
         return {
             "query": query.strip(),
             "normalized_query": normalized,
             "source_language": source_language,
-            "total_occurrences": total,
+            "match_mode": match_mode,
+            "morphology_available": morphology_available,
+            "morphology_unavailable_reason": reason or analyzer.unavailable_reason,
+            "query_analyses": query_analyses,
+            "query_analyzer": analysis.provenance.as_dict(),
+            "totals_by_mode": totals,
+            "total_occurrences": totals[match_mode],
             "returned": len(results),
             "results": results,
         }
@@ -201,7 +374,7 @@ class Corpus:
     def suggestions(self, *, source_language: str, limit: int = 12) -> list[dict[str, Any]]:
         source_language = self._source_language(source_language)
         limit = max(1, min(int(limit), 30))
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             self._require_indexed(connection, source_language)
             rows = connection.execute(
                 """
@@ -217,7 +390,9 @@ class Corpus:
         phrases: list[dict[str, Any]] = []
         for row in rows:
             terms = row["normalized"].split()
-            if not any(len(term) > 2 for term in terms):
+            if not terms or all(
+                term in stopwords(source_language) or term.isnumeric() for term in terms
+            ):
                 continue
             item = {
                 "source_language": source_language,
@@ -247,8 +422,11 @@ class Corpus:
         enabled_languages = sorted(
             catalogue.language for catalogue in catalogues if catalogue.enabled_channels
         )
-        with self._connect() as connection:
+        with closing(self._connect()) as connection:
             meta = dict(connection.execute("SELECT key, value FROM meta").fetchall())
+            analyzer_rows = {
+                row["source_language"]: row for row in connection.execute("SELECT * FROM analyzers")
+            }
             count_rows = connection.execute(
                 """
                 SELECT source_language, 'videos' AS kind, COUNT(*) AS count FROM videos
@@ -291,7 +469,17 @@ class Corpus:
                     "segments": language_counts.get("segments", 0),
                     "occurrences": language_counts.get("occurrences", 0),
                     "caption_kinds": captions.get(language, {}),
-                    "analyzer_id": meta.get("analyzer_id"),
+                    "analyzer_id": json.loads(analyzer_rows[language]["provenance_json"])[
+                        "identity"
+                    ]
+                    if language in analyzer_rows
+                    else None,
+                    "analyzer": json.loads(analyzer_rows[language]["provenance_json"])
+                    if language in analyzer_rows
+                    else None,
+                    "morphology_available": bool(analyzer_rows[language]["morphology_available"])
+                    if language in analyzer_rows
+                    else False,
                 }
             )
         totals = {

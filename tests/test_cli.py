@@ -54,7 +54,12 @@ def test_build_index_dispatch_preserves_defaults(monkeypatch, capsys):
 
     monkeypatch.setattr(cli, "build_index", fake_build_index)
     assert cli.main(["build-index"]) == 0
-    assert received == {"data_dir": Path("data"), "max_ngram": 5}
+    assert received == {
+        "data_dir": Path("data"),
+        "max_ngram": 5,
+        "analyzer": "auto",
+        "models_dir": None,
+    }
     assert json.loads(capsys.readouterr().out) == {"video_count": 1}
 
 
@@ -85,6 +90,7 @@ def test_serve_dispatch_preserves_defaults(tmp_path, monkeypatch):
             "data_dir": Path("data"),
             "catalogue_dir": Path("config/channels"),
             "web_dist": web_dist,
+            "models_dir": None,
         },
         "run": {"app": app, "host": "127.0.0.1", "port": 8000},
     }
@@ -100,3 +106,32 @@ def test_smoke_builds_and_queries_temporary_synthetic_corpus(capsys):
         "query": "real example",
         "matches": 1,
     }
+
+
+def test_models_download_dispatch_uses_explicit_directory(tmp_path, monkeypatch, capsys):
+    received: dict[str, str | Path] = {}
+
+    def fake_download(language, models_dir):
+        received.update(language=language, models_dir=models_dir)
+        return {"models_dir": str(models_dir), "analyzer": {"name": "stanza"}}
+
+    monkeypatch.setattr(cli, "download_models", fake_download)
+    assert cli.main(["models", "download", "ja", "--data-dir", str(tmp_path)]) == 0
+    assert received == {"language": "ja", "models_dir": tmp_path / "models" / "stanza"}
+    assert json.loads(capsys.readouterr().out)["analyzer"]["name"] == "stanza"
+    override = tmp_path / "custom"
+    assert cli.main(["models", "download", "zh-Hant", "--models-dir", str(override)]) == 0
+    assert received == {"language": "zh-Hant", "models_dir": override}
+
+
+def test_build_index_passes_analyzer_and_model_directory(tmp_path, monkeypatch):
+    received = {}
+
+    def fake_build(**kwargs):
+        received.update(kwargs)
+        return {}
+
+    monkeypatch.setattr(cli, "build_index", fake_build)
+    cli.main(["build-index", "--analyzer", "stanza", "--models-dir", str(tmp_path)])
+    assert received["analyzer"] == "stanza"
+    assert received["models_dir"] == tmp_path

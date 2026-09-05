@@ -79,7 +79,7 @@ A multilingual subtitle-only architecture, verified end to end with the initial 
 - channel discovery and caption acquisition through `yt-dlp`, with no video or audio download;
 - creator-authored captions preferred, original-language automatic captions as a visible fallback;
 - timestamp-aware reconstruction of complete utterances from caption events;
-- exact, accent-tolerant retrieval of words and contiguous 1–5-word phrases;
+- accent-tolerant surface and lemma retrieval of words and contiguous 1–5-word phrases;
 - deterministic ranking, cross-video diversification, and range-limited YouTube playback with
   self-rendered progressive subtitles.
 
@@ -135,16 +135,36 @@ The baseline deliberately stops at the first two.
 
 ### Retrieval
 
-Stage one is exact normalized token matching over an inverted index of n-grams — Unicode
-normalization, case folding, diacritic folding with an accent-exactness bonus retained for ranking,
-and preserved offsets back into the original text.
+Surface retrieval retains the Unicode-regex n-gram inventory, case and diacritic folding,
+an accent-exactness ranking bonus, and offsets into the original text. Analyzer word segmentation
+adds surface keys where it supplies boundaries the regex cannot find. Suggestions use these
+analyzed word boundaries and small language-specific stopword resources; search never filters
+stopwords.
 
-Stage two is the interesting one, because real speech does not reproduce a dictionary phrase
-verbatim. `estar podrido de` appears as `estoy podrido de…`, `estaba ya podrida de…`,
-`estamos completamente podridos de…`. The approaches worth comparing are exact n-grams,
-lemma-sequence matching, POS-aware patterns, bounded token gaps, dependency-aware matching, embedding
-retrieval, and cross-encoder reranking. Lemma-sequence matching is the next step; the rest stay
-research.
+`auto` is the default: union surface and contiguous lemma matches, deduplicate physical source
+spans, select the strongest occurrence in each sentence, and diversify exact examples before
+lemma-only examples. `exact` and `lemma` remain explicit comparison modes. Occurrence counts are
+reported for each route and their union before sentence selection and limits.
+
+A small `TextAnalyzer` protocol isolates the toolkit. Simplemma is the no-model default; Stanza is
+an optional, locally provisioned CPU pipeline with tokenization, applicable multi-word expansion,
+POS, and lemmatization. Each segment is analyzed once. Provenance records the package/model version
+and settings in the index and derived cache. Query analysis uses the recorded analyzer, not whatever
+new toolkit happens to have been installed since indexing. Changing its identity requires a rebuild.
+
+Query candidates combine the analyzer's lemma, observed surface-to-lemma mappings, and the query
+form itself when it is an attested corpus lemma. This last route matters when the dictionary form is
+itself ambiguous (Portuguese `casa` can be analyzed as `casar`). Candidate sets are checked against
+indexed sequences without enumerating all combinations. Available alternatives and their origins
+are exposed, with no claim to resolve or enumerate every possible sense.
+
+Shared source spans represent Stanza multi-word expansion honestly: expanded words may not have
+independent character ranges. The viewer interprets offsets as Unicode code points. Lemmas and
+expanded word strings never replace displayed source text.
+
+`estar podrido de` can now retrieve contiguous inflections such as `estoy podrido de`.
+Discontinuous forms such as `estaba ya podrida de` still require later work on bounded gaps or
+syntactic patterns. Embedding retrieval and learned reranking also remain research.
 
 ### Ranking
 
@@ -227,8 +247,9 @@ horizontal overflow.
   boundaries are useful baselines, not reliable linguistic sentence boundaries.
 - Subtitle timestamps identify caption events, not acoustic word onsets. YouTube also seeks to nearby
   keyframes, so the player pads clips and enforces the end in JavaScript.
-- Exact n-grams do not retrieve inflections such as `estar` → `estoy`, discontinuous expressions,
-  paraphrases, or speech the captions transcribed incorrectly.
+- Lemma matching can miss inflections or group unintended senses. The no-model analyzer has no
+  context, POS, or features. Neither route retrieves discontinuous expressions, paraphrases, or
+  spelling corrections. See the [morphology benchmark](../experiments/morphological-retrieval/README.md).
 - The n-gram index is stored in full and rebuilt in full, which is fine at ten videos and will not be
   fine at a thousand.
 - A video can disable embedding or disappear after indexing, so the viewer always exposes a
@@ -239,8 +260,7 @@ horizontal overflow.
 What the baseline cannot yet answer. Each linked plan carries the method:
 
 - Is lemma retrieval worth its false positives, and which analyzer should each language use
-  ([Plan 03](plans/03-morphological-retrieval.md),
-  [Plan 04](plans/04-analyzer-comparison-experiment.md))?
+  ([Plan 04](plans/04-analyzer-comparison-experiment.md))?
 - How far do caption cue boundaries and caption text diverge from real speech
   ([Plan 09](plans/09-audio-and-caption-reliability.md))?
 - Does forced alignment beat cue timing enough to justify its cost, and for which source classes

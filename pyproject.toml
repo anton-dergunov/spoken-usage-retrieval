@@ -29,6 +29,7 @@ classifiers = [
   "Topic :: Text Processing :: Indexing",
 ]
 dependencies = [
+  "simplemma>=1.2,<2",
   "fastapi>=0.116,<1",
   "uvicorn>=0.35,<1",
   "yt-dlp>=2026.7.4",
@@ -44,6 +45,9 @@ Roadmap = "https://github.com/anton-dergunov/spoken-usage-retrieval/blob/main/do
 speech-retrieval = "speech_retrieval.cli:main"
 
 [project.optional-dependencies]
+nlp = [
+  "stanza>=1.11,<2",
+]
 test = [
   "httpx>=0.28,<1",
   "pytest>=8.4,<10",

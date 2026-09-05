@@ -18,8 +18,11 @@ const statusResponse = {
 const searchResponse = {
   query: "la verdad", normalized_query: "la verdad", source_language: "es",
   total_occurrences: 2, returned: 2,
+  match_mode: "auto", morphology_available: true, morphology_unavailable_reason: null,
+  totals_by_mode: { exact: 1, lemma: 2, auto: 2 }, query_analyses: [],
   results: [
     {
+      match_type: "exact",
       occurrence_id: "one", segment_id: "segment-one", source_language: "es",
       sentence: "La verdad es una buena idea.",
       match: { text: "La verdad", char_start: 0, char_end: 9, accent_exact: true },
@@ -31,6 +34,7 @@ const searchResponse = {
         duration: 100, thumbnail: null, track_id: "track-one", caption_kind: "manual", caption_language: "es" }
     },
     {
+      match_type: "lemma",
       occurrence_id: "two", segment_id: "segment-two", source_language: "es",
       sentence: "Esa es, la verdad, otra historia.",
       match: { text: "la verdad", char_start: 8, char_end: 17, accent_exact: true },
@@ -116,4 +120,62 @@ it("uses the system color scheme initially and allows a session-only override", 
   expect(colorSwitch).toHaveAttribute("aria-checked", "false");
   expect(document.documentElement).toHaveAttribute("data-theme", "light");
   expect(localStorage).toHaveLength(0);
+});
+
+
+it("defaults to all forms and lets users compare exact and lemma searches", async () => {
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("suggestions") ? suggestionResponse : url.includes("status") ? statusResponse : searchResponse;
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+  }));
+  render(<App />);
+  expect(screen.getByLabelText("Word forms")).toHaveValue("auto");
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  await screen.findByText("Results for “la verdad”");
+  expect(screen.getByText("Related form")).toBeInTheDocument();
+  expect(screen.getByText("Exact form", { selector: ".match-type" })).toBeInTheDocument();
+  expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("match_mode=auto"))).toBe(true);
+  for (const mode of ["exact", "lemma"]) {
+    fireEvent.change(screen.getByLabelText("Word forms"), { target: { value: mode } });
+    await waitFor(() => expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes(`match_mode=${mode}`))).toBe(true));
+  }
+});
+
+it("explains exact-only fallback and renders typed unsupported-analysis errors", async () => {
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const unsupported = url.includes("match_mode=lemma");
+    const body = url.includes("status") ? statusResponse : url.includes("suggestions") ? suggestionResponse : unsupported
+      ? { detail: { code: "unsupported_analysis", message: "No local morphology model" } }
+      : { ...searchResponse, morphology_available: false };
+    return Promise.resolve(new Response(JSON.stringify(body), { status: unsupported ? 400 : 200 }));
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  expect(await screen.findByText("Only exact forms are available for this language in the current index.")).toBeInTheDocument();
+  fireEvent.change(screen.getByLabelText("Word forms"), { target: { value: "lemma" } });
+  expect(await screen.findByRole("alert")).toHaveTextContent("No local morphology model");
+});
+
+it("aborts the previous search when the word-form mode changes", async () => {
+  let oldSignal: AbortSignal | undefined;
+  let finishOld: ((response: Response) => void) | undefined;
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("match_mode=auto")) {
+      oldSignal = init?.signal ?? undefined;
+      return new Promise<Response>((resolve) => { finishOld = resolve; });
+    }
+    const body = url.includes("status") ? statusResponse : url.includes("suggestions") ? suggestionResponse : { ...searchResponse, query: "new mode" };
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200 }));
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  await waitFor(() => expect(oldSignal).toBeDefined());
+  fireEvent.change(screen.getByLabelText("Word forms"), { target: { value: "exact" } });
+  expect(oldSignal?.aborted).toBe(true);
+  await screen.findByText("Results for “new mode”");
+  finishOld?.(new Response(JSON.stringify(searchResponse), { status: 200 }));
+  await waitFor(() => expect(screen.queryByText("Results for “la verdad”")).not.toBeInTheDocument());
 });
