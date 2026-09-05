@@ -1,6 +1,6 @@
 # Plan 01: Public repository foundations
 
-**Status:** Planned
+**Status:** Complete
 
 **Depends on:** None
 
@@ -10,17 +10,19 @@ Make the existing prototype credible to show on public GitHub without waiting fo
 multilingual, service, or ML work. A clean clone has an accurate setup path, automated verification,
 clear reuse terms, and no dependency on committed corpus data.
 
-## Current state
+## Completed state
 
-- The Python and React baselines work and have tests, but only manual commands run them.
-- `pyproject.toml` lacks project URLs, classifiers, a console script, and development/tooling extras.
-- There is no repository license or CI workflow.
-- Generated `data/`, frontend dependencies/builds, and Python caches are ignored, but the README
-  should explain what may be published and what normally stays local.
-- The README has been reduced to demonstrated behavior, with design rationale, the measured
-  baseline, and known constraints moved to `docs/design.md` and speculative interface sketches
-  dropped in favor of the plans that own them. What remains is to keep it accurate as packaging and
-  the console entry point change, and to add the data/licensing section.
+- Python and React verification runs locally and in one GitHub Actions workflow from locked
+  dependencies, without corpus acquisition or credentials.
+- Package metadata declares the supported runtime, MIT license, repository links, classifiers,
+  tooling extras, and the provisional `speech-retrieval` console entry point.
+- The existing repository scripts delegate to importable CLI handlers, and an offline smoke command
+  verifies indexing and API access against a temporary synthetic corpus.
+- Generated `data/`, frontend builds and dependencies, environment files, and tool caches are
+  ignored. The README and contribution guide explain the local-data layout and the conditions for
+  deliberately publishing a licensed research artifact.
+- The README remains limited to demonstrated behavior, while `docs/design.md` owns rationale,
+  measurements, and known constraints and the roadmap owns future interfaces.
 
 ## Decisions
 

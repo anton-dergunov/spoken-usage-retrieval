@@ -5,10 +5,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Callable, Sequence
+from typing import Any
 
 
 class AcquisitionError(RuntimeError):
@@ -28,7 +29,9 @@ def _run_ytdlp(arguments: Sequence[str]) -> str:
     command = [sys.executable, "-m", "yt_dlp", "--ignore-config", *arguments]
     result = subprocess.run(command, text=True, capture_output=True, check=False, timeout=180)
     if result.returncode:
-        message = result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "yt-dlp failed"
+        message = (
+            result.stderr.strip().splitlines()[-1] if result.stderr.strip() else "yt-dlp failed"
+        )
         raise AcquisitionError(message)
     return result.stdout
 
@@ -75,7 +78,9 @@ def _write_json(path: Path, payload: Any) -> None:
     temporary.replace(path)
 
 
-def discover_channel(channel: dict[str, Any], scan_limit: int, runner: Runner) -> list[dict[str, Any]]:
+def discover_channel(
+    channel: dict[str, Any], scan_limit: int, runner: Runner
+) -> list[dict[str, Any]]:
     info = _json_output(
         ["--flat-playlist", "--playlist-end", str(scan_limit), channel["url"]], runner
     )

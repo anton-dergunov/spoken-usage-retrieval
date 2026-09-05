@@ -132,7 +132,9 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
     reports_dir.mkdir(parents=True, exist_ok=True)
     built_at = datetime.now(UTC).isoformat()
 
-    file_descriptor, temporary_name = tempfile.mkstemp(prefix="corpus-", suffix=".sqlite3", dir=index_dir)
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        prefix="corpus-", suffix=".sqlite3", dir=index_dir
+    )
     os.close(file_descriptor)
     temporary_db = Path(temporary_name)
     temporary_segments = derived_dir / "segments.jsonl.tmp"
@@ -236,6 +238,8 @@ def build_index(*, data_dir: Path, max_ngram: int = 5) -> dict[str, Any]:
     }
     report_path = reports_dir / "index-build.json"
     temporary_report = report_path.with_suffix(".json.tmp")
-    temporary_report.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    temporary_report.write_text(
+        json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
     temporary_report.replace(report_path)
     return report

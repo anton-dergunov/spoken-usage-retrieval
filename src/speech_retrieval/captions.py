@@ -3,14 +3,17 @@ from __future__ import annotations
 import hashlib
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 from .models import Segment, TimedTextSegment, TimedUnit
 from .text import TERMINAL_RE, clean_spacing, join_text, normalize_token, tokens_with_spans
 
-ANNOTATION_RE = re.compile(r"\[(?:m[uú]sica|aplausos?|risas?|silencio|inaudible)[^]]*\]", re.IGNORECASE)
+ANNOTATION_RE = re.compile(
+    r"\[(?:m[uú]sica|aplausos?|risas?|silencio|inaudible)[^]]*\]", re.IGNORECASE
+)
 TAG_RE = re.compile(r"<[^>]+>")
 
 
@@ -111,7 +114,9 @@ def _segment_from_units(
     duration_score = 1.0 if 2 <= duration <= 12 else max(0.0, 1 - abs(duration - 7) / 12)
     length_score = 1.0 if 5 <= token_count <= 25 else max(0.0, 1 - abs(token_count - 15) / 24)
     source_score = 1.0 if caption_kind == "manual" else 0.65
-    quality = round(0.4 * confidence + 0.25 * duration_score + 0.2 * length_score + 0.15 * source_score, 4)
+    quality = round(
+        0.4 * confidence + 0.25 * duration_score + 0.2 * length_score + 0.15 * source_score, 4
+    )
     clip_start = max(0.0, start - 0.35)
     clip_end = end + 0.65
     if video_duration and video_duration > 0:
@@ -160,7 +165,10 @@ def _merge_short_segments(
             following, following_reason = groups[index + 1]
             combined = units + following
             combined_count = sum(len(tokens_with_spans(unit.text)) for unit in combined)
-            if combined[-1].end - combined[0].start <= hard_seconds and combined_count <= hard_tokens:
+            if (
+                combined[-1].end - combined[0].start <= hard_seconds
+                and combined_count <= hard_tokens
+            ):
                 merged.append((combined, following_reason))
                 index += 2
                 continue
@@ -168,7 +176,10 @@ def _merge_short_segments(
             previous, previous_reason = merged[-1]
             combined = previous + units
             combined_count = sum(len(tokens_with_spans(unit.text)) for unit in combined)
-            if combined[-1].end - combined[0].start <= hard_seconds and combined_count <= hard_tokens:
+            if (
+                combined[-1].end - combined[0].start <= hard_seconds
+                and combined_count <= hard_tokens
+            ):
                 merged[-1] = (combined, reason if reason != "end" else previous_reason)
                 index += 1
                 continue

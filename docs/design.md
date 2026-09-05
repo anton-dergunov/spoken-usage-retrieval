@@ -111,6 +111,12 @@ data/
 Generated corpus data is deliberately untracked. The reports under `data/reports/` are what make a
 local run inspectable and are the source of truth for the current corpus.
 
+The layout is an implementation detail until Plan 02 introduces a versioned multilingual schema;
+generated files may be rebuilt or changed without compatibility guarantees. Acquired captions and
+media retain their source licenses and stay local by default. A deliberately published fixture,
+dataset, report, label set, or model artifact must record its source, license, and reproducibility
+purpose alongside it.
+
 ### Segmentation
 
 Subtitle cues are poor linguistic units, so segments are built by accumulating caption events and

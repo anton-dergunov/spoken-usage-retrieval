@@ -62,7 +62,7 @@ finish with a documented negative result; they do not have to justify shipping a
 
 | Plan | Status | Depends on | Outcome |
 | --- | --- | --- | --- |
-| [01 · Public repository foundations](01-public-repository-foundations.md) | Planned | — | License, packaging, CI, contribution guidance, and pragmatic data hygiene. |
+| [01 · Public repository foundations](01-public-repository-foundations.md) | Complete | — | License, packaging, CI, contribution guidance, and pragmatic data hygiene. |
 | [02 · Multilingual corpus model](02-multilingual-corpus-model.md) | Planned | 01 | Language-neutral configuration, cache, index, API, and demo state. |
 | [03 · Morphological retrieval](03-morphological-retrieval.md) | Planned | 02 | Exact and lemma-sequence retrieval through a pluggable analyzer, with no model download required. |
 | [04 · Analyzer comparison experiment](04-analyzer-comparison-experiment.md) | Planned | 03 | Measured per-language analyzer choice and lemma-mode false-positive rate. |

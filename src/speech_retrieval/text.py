@@ -64,4 +64,3 @@ def join_text(left: str, right: str) -> str:
     if right[0] in ",.;:!?…%])}»”’" or left[-1] in "¿¡[({—-/":
         return clean_spacing(left + right)
     return clean_spacing(f"{left} {right}")
-

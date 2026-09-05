@@ -9,11 +9,67 @@ from typing import Any
 from .text import accent_key, normalized_query
 
 SPANISH_STOPWORDS = {
-    "a", "al", "algo", "como", "con", "contra", "cual", "cuando", "de", "del", "desde",
-    "donde", "el", "ella", "ellos", "en", "era", "es", "esa", "ese", "eso", "esta", "este",
-    "esto", "fue", "ha", "hay", "la", "las", "le", "les", "lo", "los", "mas", "me", "mi",
-    "muy", "no", "nos", "o", "para", "pero", "por", "porque", "que", "se", "si", "sin",
-    "sobre", "su", "sus", "te", "tiene", "todo", "tu", "un", "una", "uno", "unos", "y", "ya",
+    "a",
+    "al",
+    "algo",
+    "como",
+    "con",
+    "contra",
+    "cual",
+    "cuando",
+    "de",
+    "del",
+    "desde",
+    "donde",
+    "el",
+    "ella",
+    "ellos",
+    "en",
+    "era",
+    "es",
+    "esa",
+    "ese",
+    "eso",
+    "esta",
+    "este",
+    "esto",
+    "fue",
+    "ha",
+    "hay",
+    "la",
+    "las",
+    "le",
+    "les",
+    "lo",
+    "los",
+    "mas",
+    "me",
+    "mi",
+    "muy",
+    "no",
+    "nos",
+    "o",
+    "para",
+    "pero",
+    "por",
+    "porque",
+    "que",
+    "se",
+    "si",
+    "sin",
+    "sobre",
+    "su",
+    "sus",
+    "te",
+    "tiene",
+    "todo",
+    "tu",
+    "un",
+    "una",
+    "uno",
+    "unos",
+    "y",
+    "ya",
     "yo",
 }
 
@@ -69,7 +125,9 @@ class Corpus:
             accent_exact = row["accent_key"] == query_accent_key
             center = (row["token_start"] + row["n"] / 2) / max(row["token_count"], 1)
             center_bonus = 0.03 * max(0.0, 1 - abs(0.5 - center) * 2)
-            score = min(0.99, 0.9 * row["quality_score"] + (0.04 if accent_exact else 0) + center_bonus)
+            score = min(
+                0.99, 0.9 * row["quality_score"] + (0.04 if accent_exact else 0) + center_bonus
+            )
             candidates.append(
                 {
                     "occurrence_id": row["occurrence_id"],
@@ -106,7 +164,9 @@ class Corpus:
                     },
                 }
             )
-        candidates.sort(key=lambda item: (-item["quality_score"], item["video"]["id"], item["clip_start"]))
+        candidates.sort(
+            key=lambda item: (-item["quality_score"], item["video"]["id"], item["clip_start"])
+        )
         results = self._diversify(candidates, limit)
         return {
             "query": query.strip(),
@@ -154,7 +214,9 @@ class Corpus:
         phrases: list[dict[str, Any]] = []
         for row in rows:
             terms = row["normalized"].split()
-            content_terms = [term for term in terms if term not in SPANISH_STOPWORDS and len(term) > 2]
+            content_terms = [
+                term for term in terms if term not in SPANISH_STOPWORDS and len(term) > 2
+            ]
             if not content_terms:
                 continue
             item = {

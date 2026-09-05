@@ -10,7 +10,9 @@ from speech_retrieval.search import Corpus
 FIXTURES = Path(__file__).parent / "fixtures"
 
 
-def add_video(data_dir: Path, video_id: str, channel: str, payload_name: str = "manual.json3") -> None:
+def add_video(
+    data_dir: Path, video_id: str, channel: str, payload_name: str = "manual.json3"
+) -> None:
     video_dir = data_dir / "raw" / "videos" / video_id
     video_dir.mkdir(parents=True)
     metadata = {
@@ -53,14 +55,21 @@ def test_index_supports_accent_tolerant_words_phrases_and_highlights(tmp_path):
     assert phrase["total_occurrences"] == 4
     assert phrase["returned"] == 4
     assert {result["video"]["id"] for result in phrase["results"][:2]} == {"video-one", "video-two"}
-    assert phrase["results"][0]["sentence"][phrase["results"][0]["match"]["char_start"]:phrase["results"][0]["match"]["char_end"]].casefold() == "la verdad"
-    assert phrase["results"][0]["segments"] == [{
-        "text": phrase["results"][0]["sentence"],
-        "start": phrase["results"][0]["sentence_start"],
-        "end": phrase["results"][0]["sentence_end"],
-        "char_start": 0,
-        "char_end": len(phrase["results"][0]["sentence"]),
-    }]
+    assert (
+        phrase["results"][0]["sentence"][
+            phrase["results"][0]["match"]["char_start"] : phrase["results"][0]["match"]["char_end"]
+        ].casefold()
+        == "la verdad"
+    )
+    assert phrase["results"][0]["segments"] == [
+        {
+            "text": phrase["results"][0]["sentence"],
+            "start": phrase["results"][0]["sentence_start"],
+            "end": phrase["results"][0]["sentence_end"],
+            "char_start": 0,
+            "char_end": len(phrase["results"][0]["sentence"]),
+        }
+    ]
 
 
 def test_suggestions_filter_stopwords_and_include_phrases(tmp_path):
@@ -76,7 +85,9 @@ def test_api_contract_and_query_validation(tmp_path):
     response = client.get("/api/search", params={"q": "la verdad"})
     assert response.status_code == 200
     assert response.json()["results"][0]["video"]["provider"] == "youtube"
-    assert client.get("/api/search", params={"q": "uno dos tres cuatro cinco seis"}).status_code == 400
+    assert (
+        client.get("/api/search", params={"q": "uno dos tres cuatro cinco seis"}).status_code == 400
+    )
     assert client.get("/api/search", params={"q": "inexistente"}).json()["results"] == []
     status = client.get("/api/status").json()
     assert status["videos"] == 2

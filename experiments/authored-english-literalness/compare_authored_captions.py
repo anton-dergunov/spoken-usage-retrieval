@@ -10,7 +10,6 @@ from typing import Any
 from speech_retrieval.captions import manual_units, segment_payload
 from speech_retrieval.text import join_text
 
-
 DEFAULT_FOCUS_TERMS = (
     "hubiera",
     "acaba de",
@@ -90,9 +89,9 @@ def compare(
         )
         pairs = [
             {
-                "sample_kind": "focus" if any(
-                    term.casefold() in utterances[index].text.casefold() for term in focus_terms
-                ) else "regular",
+                "sample_kind": "focus"
+                if any(term.casefold() in utterances[index].text.casefold() for term in focus_terms)
+                else "regular",
                 "start": utterances[index].start,
                 "end": utterances[index].end,
                 "spanish": utterances[index].text,

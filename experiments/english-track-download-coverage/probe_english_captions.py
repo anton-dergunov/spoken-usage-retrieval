@@ -84,7 +84,8 @@ def probe(*, data_dir: Path, output_dir: Path, delay: float) -> dict[str, Any]:
             }
         )
         kind = "manual" if manual_keys else "automatic" if automatic_keys else None
-        language = (manual_keys or automatic_keys or [None])[0]
+        available_keys = manual_keys or automatic_keys
+        language = available_keys[0] if available_keys else None
         if kind is None or language is None:
             item["download_status"] = "no_track"
             report["videos"].append(item)
@@ -151,9 +152,15 @@ def probe(*, data_dir: Path, output_dir: Path, delay: float) -> dict[str, Any]:
     report["summary"] = {
         "total": len(videos),
         "info_success": sum(item.get("info_status") == "ok" for item in videos),
-        "manual_english_advertised": sum(bool(item.get("manual_english_tracks")) for item in videos),
-        "automatic_english_advertised": sum(bool(item.get("automatic_english_tracks")) for item in videos),
-        "download_success": sum(item.get("download_status") in {"success", "cached"} for item in videos),
+        "manual_english_advertised": sum(
+            bool(item.get("manual_english_tracks")) for item in videos
+        ),
+        "automatic_english_advertised": sum(
+            bool(item.get("automatic_english_tracks")) for item in videos
+        ),
+        "download_success": sum(
+            item.get("download_status") in {"success", "cached"} for item in videos
+        ),
         "download_failed": sum(item.get("download_status") == "failed" for item in videos),
         "no_track": sum(item.get("download_status") == "no_track" for item in videos),
     }

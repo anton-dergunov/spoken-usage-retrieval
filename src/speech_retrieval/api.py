@@ -11,7 +11,9 @@ from . import __version__
 from .search import Corpus, SearchError
 
 
-def create_app(*, data_dir: str | Path = "data", web_dist: str | Path | None = "web/dist") -> FastAPI:
+def create_app(
+    *, data_dir: str | Path = "data", web_dist: str | Path | None = "web/dist"
+) -> FastAPI:
     corpus = Corpus(data_dir)
     app = FastAPI(title="Native Speech Retrieval", version=__version__)
     app.add_middleware(
@@ -61,4 +63,3 @@ def create_app(*, data_dir: str | Path = "data", web_dist: str | Path | None = "
             return FileResponse(index)
 
     return app
-

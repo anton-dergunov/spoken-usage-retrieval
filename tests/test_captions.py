@@ -33,13 +33,19 @@ def test_automatic_caption_tokens_are_timestamp_deduplicated():
     assert [unit.text for unit in units].count("Esto") == 1
     assert [unit.text for unit in units].count("funciona") == 1
     segments = segment_payload(
-        fixture("automatic.json3"), video_id="auto-video", caption_kind="automatic", video_duration=5
+        fixture("automatic.json3"),
+        video_id="auto-video",
+        caption_kind="automatic",
+        video_duration=5,
     )
     assert segments[0].text == "Esto funciona muy bien."
     assert segments[0].boundary_reason == "punctuation"
     assert [item.text for item in segments[0].segments] == ["Esto", "funciona", "muy", "bien."]
-    assert [segments[0].text[item.char_start:item.char_end] for item in segments[0].segments] == [
-        "Esto", "funciona", "muy", "bien."
+    assert [segments[0].text[item.char_start : item.char_end] for item in segments[0].segments] == [
+        "Esto",
+        "funciona",
+        "muy",
+        "bien.",
     ]
     assert [item.start for item in segments[0].segments] == [0.5, 0.85, 1.2, 1.5]
     assert segments[1].text == "Otra prueba"
@@ -47,11 +53,14 @@ def test_automatic_caption_tokens_are_timestamp_deduplicated():
 
 def test_long_unpunctuated_caption_is_forced_to_split():
     payload = {
-        "events": [{
-            "tStartMs": index * 300,
-            "dDurationMs": 300,
-            "segs": [{"utf8": f" palabra{index}"}],
-        } for index in range(40)]
+        "events": [
+            {
+                "tStartMs": index * 300,
+                "dDurationMs": 300,
+                "segs": [{"utf8": f" palabra{index}"}],
+            }
+            for index in range(40)
+        ]
     }
     segments = segment_payload(payload, video_id="long", caption_kind="automatic")
     assert len(segments) >= 2

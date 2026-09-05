@@ -8,22 +8,79 @@ version = "0.1.0"
 description = "A prototype for retrieving real Spanish usage from timestamped YouTube captions"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+license-files = ["LICENSE"]
+keywords = [
+  "captions",
+  "information-retrieval",
+  "language-learning",
+  "speech",
+  "youtube",
+]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Intended Audience :: Science/Research",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Education",
+  "Topic :: Text Processing :: Indexing",
+]
 dependencies = [
   "fastapi>=0.116,<1",
   "uvicorn>=0.35,<1",
   "yt-dlp>=2026.7.4",
 ]
 
+[project.urls]
+Homepage = "https://github.com/anton-dergunov/spoken-usage-retrieval"
+Repository = "https://github.com/anton-dergunov/spoken-usage-retrieval"
+Issues = "https://github.com/anton-dergunov/spoken-usage-retrieval/issues"
+Roadmap = "https://github.com/anton-dergunov/spoken-usage-retrieval/blob/main/docs/plans/README.md"
+
+[project.scripts]
+speech-retrieval = "speech_retrieval.cli:main"
+
 [project.optional-dependencies]
 test = [
   "httpx>=0.28,<1",
   "pytest>=8.4,<10",
 ]
+lint = [
+  "ruff>=0.16,<0.17",
+]
+typing = [
+  "mypy>=1.20,<2",
+]
+dev = [
+  "httpx>=0.28,<1",
+  "mypy>=1.20,<2",
+  "pytest>=8.4,<10",
+  "ruff>=0.16,<0.17",
+]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/speech_retrieval"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["/AGENTS.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
 
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F", "I", "UP"]
+
+[tool.mypy]
+python_version = "3.12"
+files = ["src", "scripts", "tests", "experiments"]
+check_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_configs = true
