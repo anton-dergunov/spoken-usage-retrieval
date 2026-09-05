@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://spoken-usage-retrieval.local/schemas/morphology-experiment-v1.json",
+  "title": "Ten-language morphology experiment result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "experiment",
+    "configuration_sha256",
+    "configuration",
+    "quality",
+    "queries",
+    "retrieval",
+    "storage",
+    "diagnostics",
+    "inputs",
+    "complete"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "experiment": {"const": "morphological-retrieval-multilingual"},
+    "configuration_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "configuration": {"type": "object"},
+    "environment": {"type": "object"},
+    "complete": {"type": "boolean"},
+    "quality": {
+      "type": "array",
+      "minItems": 30,
+      "items": {
+        "type": "object",
+        "required": ["language", "treebank", "analyzer", "status", "reason"],
+        "properties": {
+          "language": {"enum": ["en", "es", "fr", "ja", "de", "ko", "it", "zh", "pt", "hi"]},
+          "analyzer": {"enum": ["unicode", "simplemma", "stanza"]},
+          "status": {"enum": ["pending", "complete", "error", "N/A"]},
+          "reason": {"type": ["string", "null"]},
+          "quality": {"type": "object"},
+          "cost": {"type": "object"},
+          "provenance": {"type": "object"},
+          "input": {"type": "object"}
+        }
+      }
+    },
+    "queries": {"type": "array", "items": {"$ref": "#/$defs/query"}},
+    "retrieval": {"type": "array", "items": {"type": "object"}},
+    "storage": {"type": "array", "items": {"type": "object"}},
+    "diagnostics": {"type": "array", "items": {"type": "object"}},
+    "inputs": {"type": "object"}
+  },
+  "$defs": {
+    "query": {
+      "type": "object",
+      "required": ["query_id", "surface", "intended_lemma", "selection_class", "observed_forms"],
+      "properties": {
+        "query_id": {"type": "string"},
+        "surface": {"type": "string"},
+        "intended_lemma": {"type": "string"},
+        "selection_class": {"enum": ["inflected_lemma", "ambiguous_form"]},
+        "observed_forms": {"type": "array", "items": {"type": "string"}}
+      }
+    }
+  }
+}

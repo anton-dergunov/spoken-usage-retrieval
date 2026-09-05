@@ -1,94 +1,51 @@
-# Plan 04: Analyzer comparison experiment
+# Plan 04: Ten-language morphology and compact-index experiment
 
-**Status:** Planned
+**Status:** Complete
 
 **Depends on:** Plan 03
 
 ## Outcome
 
-Decide, from measurements rather than intuition, which analyzer each supported language should use.
-Report intrinsic lemmatization accuracy and the retrieval-level effect of lemma matching, including
-the false positives it introduces. A documented negative result — "the fast default is good enough
-everywhere it applies" — is a valid and useful outcome.
+Measure the production Unicode, simplemma, and Stanza analyzers across the repository's ten target languages and determine whether a more compact morphology index can reproduce current retrieval semantics. The experiment informs later implementation plans; it does not change production analyzer selection or the database schema.
 
-This plan is optional and blocks nothing. It exists because analyzer choice is the first real
-modeling decision in the pipeline and deserves evidence.
+## Inputs
 
-## Current state
+- Universal Dependencies 2.18, released May 15, 2026, is pinned by archive URL and SHA-256 in [`experiments/morphological-retrieval-multilingual/config.json`](../../experiments/morphological-retrieval-multilingual/config.json).
+- The matrix uses English-EWT, Spanish-AnCora, French-GSD, Japanese-GSDLUW, German-GSD, Korean-GSD, Italian-ISDT, Chinese-GSD, Portuguese-Bosque, and Hindi-HDTB.
+- The experiment records every treebank split and license checksum. External data and Stanza weights remain under ignored `data/experiments/` paths.
+- The locked environments are simplemma 1.2.0 and Stanza 1.14.0. Unicode is evaluated everywhere, simplemma for `en`, `es`, `fr`, `de`, `it`, `pt`, and `hi`, and Stanza everywhere. Unsupported simplemma cells are explicit `N/A` rows.
+- Wiktionary-derived candidates are deferred until shipped analyzers show a material remaining need.
 
-- Plan 03 ships simplemma as the default and Stanza as an optional analyzer behind one protocol,
-  chosen by language rather than by measurement.
-- [`docs/design.md`](../design.md) already names lemma-mode false positives as the risk to quantify
-  before lemmatization changes default retrieval behavior.
-- No lemmatization accuracy or lemma-retrieval precision has been measured on this corpus.
+## Measurements
 
-## Decisions
+Each production analyzer runs against reconstructed UD raw sentences. The scorer validates canonical offsets and reports source-token boundary precision/recall/F1, syntactic-word expansion for multi-word tokens, and end-to-end lemma coverage and accuracy.
 
-- Measure three candidates behind the same `TextAnalyzer` protocol:
-  1. simplemma, the current default;
-  2. Stanza UD pipelines, POS-aware and multi-word-token aware;
-  3. a form-to-lemma lexicon derived from Wiktionary via `kaikki.org` wiktextract dumps (CC-BY-SA).
-     The third candidate is cheap to try because the companion Acervo repository already downloads
-     these dumps for 46 dictionaries and currently discards their `forms` and `inflection_templates`
-     fields, which is exactly the inflection data this task needs, with POS attached.
-- Run both an intrinsic and an extrinsic evaluation. Intrinsic accuracy is comparable to published
-  numbers; extrinsic retrieval quality is what the product actually experiences, and the two can
-  disagree.
-- Use Universal Dependencies test treebanks as intrinsic gold data. Report per-language accuracy on
-  all tokens and separately on the ambiguous subset, since ambiguity is the default analyzer's known
-  weakness.
-- Cover `es`, `en`, `pt`, `it`, `de`, `hi` where all candidates apply, plus `ja` and `zh` where
-  simplemma has no coverage at all and the comparison is Stanza against nothing.
-- Keep the extrinsic probe small and reproducible: a fixed query list with a recorded seed, run in
-  `exact`, `lemma` and `auto` modes against the same index.
-- Report cost as well as quality: cold-start time, resident memory, tokens per second, and index
-  build time. A ten-point accuracy gain that triples indexing time is a different decision from a
-  free one.
-- The outcome may be a global default change, a per-language mapping, or no change. Record whichever
-  it is with its evidence.
+Strict lemma equality uses Unicode NFC and case folding without accent removal. Production-key equivalence is reported separately so accent folding cannot hide a linguistic error. Coverage and accuracy are broken down by UPOS, unseen forms, and ambiguous forms; train and development splits define those categories. Stored error examples contain only form, gold/predicted lemma, and POS fields.
 
-## Implementation work
+A deterministic retrieval manifest uses seed `20260905`. Per language it selects up to 20 lemmas with at least two observed forms and five test occurrences, plus up to 10 ambiguous forms. The manifest records surface query, intended lemma, selection class, and observed forms. Exact, lemma, and auto probes report counts, deduplicated expansion, candidate-lemma recall, intended-lemma precision, ambiguous-union precision, and representative false positives.
 
-1. Write a versioned experiment configuration naming analyzer versions, UD treebank revisions,
-   languages, the query list, the corpus snapshot, and the random seed.
-2. Add a probe script that runs each candidate over the UD test files and reports accuracy overall,
-   on ambiguous forms, and on out-of-vocabulary forms, with per-language confusion examples.
-3. Add a lexicon builder for the wiktextract candidate that extracts form to lemma and POS mappings
-   for the tested languages, records the dump revision and license, and reports coverage.
-4. Build one index per candidate analyzer over the same cached transcripts and record build time,
-   index size, lemma-key counts, and form-lexicon size.
-5. Run the fixed query list in each mode and report, per candidate: lemma-only match counts, recall
-   gain over exact mode, and a human-reviewed precision estimate on a sampled set of lemma-only
-   matches.
-6. Measure runtime cost on the same machine and record hardware and software versions.
-7. Write a dated report under `experiments/analyzer-comparison/` with the method, tables, sampled
-   examples of every disagreement class, cost, and the resulting decision.
-8. Apply the decision in Plan 03's analyzer selection if the evidence supports a change, or record
-   why the default stands.
+Every analyzer/language measurement runs in an isolated process. It records cold initialization, peak RSS, model or dictionary bytes and checksums, sentences and tokens per second, index build time, and warm-query median/p95 over 20 repetitions.
 
-## Public interfaces and data
+## Compact-index prototype
 
-- No runtime API change. Any decision surfaces only as the default analyzer mapping and the
-  analyzer identity already recorded in index metadata.
-- The experiment adds a configuration schema and a report format, plus a reusable
-  lemmatization-accuracy scorer that later plans may call.
-- UD treebanks and wiktextract dumps are external inputs; record their revision and license. Derived
-  lexicons stay local unless their license clearly permits redistribution.
+Three SQLite layouts use identical analyzed data and queries:
 
-## Acceptance tests and verification
+1. dual exact/lemma 1–5-gram keys matching the current design;
+2. the same rows with route-specific partial indexes;
+3. token positions that store Unicode surfaces and analyzer words/lemmas once, seed lookup by the first token, and verify adjacent positions.
 
-- Scorer unit tests cover exact matches, case and diacritic differences, multi-word tokens,
-  unanalyzable tokens, and empty input.
-- The experiment reruns from its configuration and reports missing treebanks or absent optional
-  analyzers without silently shrinking the language set.
-- Both intrinsic and extrinsic sections are present for every language where the candidate applies,
-  and every aggregate can be traced to per-item rows.
-- The report distinguishes a lemma match that is linguistically wrong from one that is correct but
-  unhelpful for a learner; only the first is a lemmatization error.
-- The recorded decision names the analyzer per language and the evidence behind it.
+The position layout derives occurrence identity and highlight spans from sentence identity plus first/last source offsets. Shared MWT spans and form-to-multiple-lemma observations are retained. Size and timing are reported only after every generated exact and lemma key reproduces reference occurrence IDs, routes, counts, and character spans. `dbstat` separates tables and indexes, and size is normalized as bytes per gold token.
 
-## Non-goals
+## Delivery
 
-- Training a lemmatizer, adding a fourth toolkit, or benchmarking every UD system.
-- Judging learner usefulness of retrieved clips; Plan 11 owns human relevance labels.
-- Making analyzer accuracy a gate on shipping retrieval; exact mode never depends on this work.
+[`experiments/morphological-retrieval-multilingual/`](../../experiments/morphological-retrieval-multilingual/) contains the versioned configuration, explicit downloader, preflight command, scorer, benchmark runner, compact prototype, JSON result schema, machine-readable results, and generated report.
+
+Preflight lists missing UD splits, licenses, package versions, and Stanza models without reducing coverage. Only the explicit preparation command uses the network. The normal test suite runs a fixture-sized end-to-end experiment and covers CoNLL-U reconstruction, Unicode offsets, MWT alignment, strict versus folded scoring, ambiguity and OOV classification, deterministic query selection, explicit unsupported rows, aggregation, missing lemmas, nullable POS, phrase contiguity, and compact-layout parity.
+
+## Completion rule
+
+Mark this plan complete only when all ten languages have traceable Unicode and Stanza results, all seven supported languages have simplemma results, unsupported cells are explicit, and every compact-layout parity check passes. The report then records per-language analyzer guidance and an index-layout recommendation. Any recommended production change becomes a separate implementation plan.
+
+## Result
+
+The September 5–6, 2026 run completed all 27 applicable analyzer/language rows and recorded three explicit simplemma `N/A` rows. Stanza had the strongest coverage-adjusted strict lemma score for every target language. All partial-index and token-position parity checks passed. Across the matrix, token positions reduced SQLite storage from 873.0 MB to 130.1 MB (85.1%) while increasing median warm lookup from 0.111 ms to 0.149 ms. The report recommends a separate migration plan; production behavior remains unchanged.

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "experiment": "morphological-retrieval-multilingual",
+  "seed": 20260905,
+  "ud": {
+    "release": "2.18",
+    "release_date": "2026-05-15",
+    "landing_url": "https://hdl.handle.net/11234/1-6149",
+    "archive_url": "https://lindat.mff.cuni.cz/repository/server/api/core/bitstreams/d91b1ffc-fc31-41a0-bd8f-3b876864a1d5/content",
+    "archive_filename": "ud-treebanks-v2.18.tgz",
+    "archive_sha256": "a93fe8520bc4c5ff34670d9a93a5a7689c018c1e59643fa27e03036717841b8a"
+  },
+  "packages": {
+    "simplemma": "1.2.0",
+    "stanza": "1.14.0"
+  },
+  "query_selection": {
+    "max_inflected_lemmas": 20,
+    "minimum_forms": 2,
+    "minimum_test_occurrences": 5,
+    "max_ambiguous_forms": 10
+  },
+  "benchmark": {
+    "ngram_max": 5,
+    "warm_query_repetitions": 20
+  },
+  "languages": [
+    {"tag": "en", "treebank": "UD_English-EWT", "prefix": "en_ewt", "license": "CC BY-SA 4.0", "simplemma": true},
+    {"tag": "es", "treebank": "UD_Spanish-AnCora", "prefix": "es_ancora", "license": "CC BY 4.0", "simplemma": true},
+    {"tag": "fr", "treebank": "UD_French-GSD", "prefix": "fr_gsd", "license": "CC BY-SA 4.0", "simplemma": true},
+    {"tag": "ja", "treebank": "UD_Japanese-GSDLUW", "prefix": "ja_gsdluw", "license": "CC BY-SA 4.0", "simplemma": false},
+    {"tag": "de", "treebank": "UD_German-GSD", "prefix": "de_gsd", "license": "CC BY-SA 4.0", "simplemma": true},
+    {"tag": "ko", "treebank": "UD_Korean-GSD", "prefix": "ko_gsd", "license": "CC BY-SA 4.0", "simplemma": false},
+    {"tag": "it", "treebank": "UD_Italian-ISDT", "prefix": "it_isdt", "license": "CC BY-NC-SA 3.0", "simplemma": true},
+    {"tag": "zh", "treebank": "UD_Chinese-GSD", "prefix": "zh_gsd", "license": "CC BY-SA 4.0", "simplemma": false},
+    {"tag": "pt", "treebank": "UD_Portuguese-Bosque", "prefix": "pt_bosque", "license": "CC BY-SA 4.0", "simplemma": true},
+    {"tag": "hi", "treebank": "UD_Hindi-HDTB", "prefix": "hi_hdtb", "license": "CC BY-NC-SA 4.0", "simplemma": true}
+  ]
+}
