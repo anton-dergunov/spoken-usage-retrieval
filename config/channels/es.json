@@ -1,4 +1,5 @@
 {
+  "schema_version": 1,
   "language": "es",
   "description": "Initial Spanish-language YouTube corpus candidates for native-speech retrieval experiments.",
   "sections": [
@@ -8,8 +9,10 @@
       "description": "Clear native Spanish with strong linguistic or pedagogical value; useful for high-quality baseline examples.",
       "channels": [
         {
+          "id": "easy-spanish",
           "name": "Easy Spanish",
-          "url": "https://www.youtube.com/@EasySpanish",
+          "url": "https://www.youtube.com/@EasySpanish/videos",
+          "enabled": true,
           "varieties": [
             "Spain",
             "Mexico",
@@ -23,8 +26,10 @@
           "description": "One of the strongest starting points: native speakers discussing everyday topics in street interviews and conversations, with learner-oriented presentation and unusually useful subtitle material."
         },
         {
+          "id": "dreaming-spanish",
           "name": "Dreaming Spanish",
           "url": "https://www.youtube.com/@DreamingSpanish",
+          "enabled": false,
           "varieties": [
             "Spain",
             "Latin America"
@@ -37,8 +42,10 @@
           "description": "A very large learner-oriented corpus built around comprehensible input. Speakers are native and the material spans slow beginner speech through substantially more natural conversational Spanish."
         },
         {
+          "id": "spanish-after-hours",
           "name": "Spanish After Hours",
-          "url": "https://www.youtube.com/@spanishafterhours",
+          "url": "https://www.youtube.com/@spanishafterhours/videos",
+          "enabled": true,
           "varieties": [
             "Spain"
           ],
@@ -51,8 +58,10 @@
           "description": "Clear native European Spanish with stories, explanations and conversational material. Particularly useful for intermediate vocabulary and clean baseline retrieval examples."
         },
         {
+          "id": "linguriosa",
           "name": "Linguriosa",
           "url": "https://www.youtube.com/@Linguriosa",
+          "enabled": false,
           "varieties": [
             "Spain"
           ],
@@ -71,8 +80,10 @@
       "description": "Narration mixed with spontaneous conversations and speech recorded in real situations.",
       "channels": [
         {
+          "id": "luisito-comunica",
           "name": "Luisito Comunica",
-          "url": "https://www.youtube.com/@luisitocomunica",
+          "url": "https://www.youtube.com/@luisitocomunica/videos",
+          "enabled": true,
           "varieties": [
             "Mexico",
             "Latin America"
@@ -86,8 +97,10 @@
           "description": "A strong real-world corpus: Mexican narration combined with spontaneous interactions with people across many countries and situations."
         },
         {
+          "id": "alan-por-el-mundo",
           "name": "Alan por el mundo",
           "url": "https://www.youtube.com/@alanxelmundo",
+          "enabled": false,
           "varieties": [
             "Mexico",
             "Latin America"
@@ -107,8 +120,10 @@
       "description": "High-volume unscripted or semi-structured speech, useful for colloquialisms, discourse markers and phrase retrieval.",
       "channels": [
         {
+          "id": "the-wild-project",
           "name": "The Wild Project",
           "url": "https://www.youtube.com/@TheWildProject",
+          "enabled": false,
           "varieties": [
             "Spain"
           ],
@@ -120,8 +135,10 @@
           "description": "Large quantities of natural European Spanish conversation. Particularly useful for colloquialisms, discourse markers and longer conversational constructions."
         },
         {
+          "id": "ter",
           "name": "Ter",
           "url": "https://www.youtube.com/@Ter",
+          "enabled": false,
           "varieties": [
             "Spain"
           ],
@@ -133,8 +150,10 @@
           "description": "Contemporary, informal European Spanish around culture and humour. Useful as a less textbook-like source of modern vocabulary and expressive language."
         },
         {
+          "id": "la-ruina",
           "name": "La Ruina",
           "url": "https://www.youtube.com/@laruinashow",
+          "enabled": false,
           "varieties": [
             "Spain"
           ],
@@ -153,8 +172,10 @@
       "description": "A deliberately strong Argentine component for colloquial vocabulary and constructions that generic pan-Hispanic corpora often underrepresent.",
       "channels": [
         {
+          "id": "gelatina",
           "name": "Gelatina",
           "url": "https://www.youtube.com/@somosgelatina",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -168,8 +189,10 @@
           "description": "Long conversational programs with very natural contemporary Rioplatense Spanish, mixing politics, culture, humour, interviews and everyday discussion."
         },
         {
+          "id": "olga",
           "name": "OLGA",
           "url": "https://www.youtube.com/@olgaenvivo",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -183,8 +206,10 @@
           "description": "High-volume casual Argentine conversation with multiple speakers, celebrities and humour. Particularly attractive for colloquial expressions and naturally occurring phrase variants."
         },
         {
+          "id": "luzu-tv",
           "name": "LUZU TV",
-          "url": "https://www.youtube.com/@luzutv",
+          "url": "https://www.youtube.com/@luzutv/videos",
+          "enabled": true,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -197,8 +222,10 @@
           "description": "A large source of casual contemporary Argentine speech, with long multi-speaker programs and substantial coverage of everyday conversational language."
         },
         {
+          "id": "blender",
           "name": "BLENDER",
           "url": "https://www.youtube.com/@estoesblender",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -211,8 +238,10 @@
           "description": "Contemporary Argentine conversational content and streaming, useful for informal vocabulary, humour and current spoken usage."
         },
         {
+          "id": "filo-news",
           "name": "Filo News",
           "url": "https://www.youtube.com/@filonews",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -225,8 +254,10 @@
           "description": "Argentine journalism and interviews. The longer interview material is especially useful for natural but comparatively well-structured speech."
         },
         {
+          "id": "television-publica",
           "name": "Televisión Pública",
           "url": "https://www.youtube.com/@TVPublicaArgentina",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -240,8 +271,10 @@
           "description": "Institutional Argentine television with interviews, cultural programming and news; useful as a relatively stable source of high-quality Argentine Spanish."
         },
         {
+          "id": "canal-encuentro",
           "name": "Canal Encuentro",
           "url": "https://www.youtube.com/@canalencuentro",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -255,8 +288,10 @@
           "description": "Argentine documentary and educational programming. More formal than streaming channels, but strong for high-quality speech, interviews and broad topical vocabulary."
         },
         {
+          "id": "trasnoche-paranormal",
           "name": "Trasnoche Paranormal",
           "url": "https://www.youtube.com/@trasnocheparanormal",
+          "enabled": false,
           "varieties": [
             "Argentina",
             "Rioplatense"
@@ -276,8 +311,10 @@
       "description": "Stable, large archives with clean audio, interviews and a more formal register.",
       "channels": [
         {
+          "id": "vice-en-espanol",
           "name": "VICE en Español",
           "url": "https://www.youtube.com/@VICEEnEspanol",
+          "enabled": false,
           "varieties": [
             "Mexico",
             "Colombia",
@@ -293,8 +330,10 @@
           "description": "Documentaries and interviews spanning culture, travel, nightlife, social issues and street-level reporting, including productions from several Spanish-speaking countries."
         },
         {
+          "id": "dw-espanol",
           "name": "DW Español",
           "url": "https://www.youtube.com/@dwespanol",
+          "enabled": false,
           "varieties": [
             "Latin America",
             "Spain",
@@ -308,8 +347,10 @@
           "description": "A large institutional archive with strong audio quality, documentaries and interviews. Useful for a cleaner and more formal complement to casual-speech channels."
         },
         {
+          "id": "bbc-news-mundo",
           "name": "BBC News Mundo",
           "url": "https://www.youtube.com/@BBCMundo",
+          "enabled": false,
           "varieties": [
             "Latin America",
             "Spain",
@@ -323,8 +364,10 @@
           "description": "Clear journalistic Spanish plus interviews with speakers from many countries, giving broad regional and topical coverage."
         },
         {
+          "id": "rtve",
           "name": "RTVE",
           "url": "https://www.youtube.com/@rtve",
+          "enabled": false,
           "varieties": [
             "Spain"
           ],
@@ -345,8 +388,10 @@
       "description": "Clearer, more structured native speech useful for educated general vocabulary and comparison against conversational data.",
       "channels": [
         {
+          "id": "quantumfracture",
           "name": "QuantumFracture",
           "url": "https://www.youtube.com/QuantumFracture",
+          "enabled": false,
           "varieties": [
             "Spain"
           ],
@@ -365,8 +410,10 @@
       "description": "Useful for everyday situational dialogue and longer structured personal conversations.",
       "channels": [
         {
+          "id": "enchufetv",
           "name": "EnchufeTV",
           "url": "https://www.youtube.com/@enchufetv",
+          "enabled": false,
           "varieties": [
             "Ecuador",
             "Latin America"
@@ -378,8 +425,10 @@
           "description": "Scripted comedy with everyday situational dialogue. Although less spontaneous than interviews or podcasts, it can provide concise and highly contextualized examples."
         },
         {
+          "id": "yordi-rosado",
           "name": "Yordi Rosado",
           "url": "https://www.youtube.com/@YordiRosado",
+          "enabled": false,
           "varieties": [
             "Mexico"
           ],

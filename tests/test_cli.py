@@ -27,7 +27,7 @@ def test_download_subtitles_dispatch_preserves_defaults(monkeypatch, capsys):
     monkeypatch.setattr(cli, "acquire", fake_acquire)
     assert cli.main(["download-subtitles"]) == 0
     assert received == {
-        "config_path": Path("config/mvp_channels.json"),
+        "config_path": Path("config/channels/es.json"),
         "data_dir": Path("data"),
         "limit": 10,
         "scan_limit": 25,
@@ -81,7 +81,11 @@ def test_serve_dispatch_preserves_defaults(tmp_path, monkeypatch):
     monkeypatch.setattr(cli.uvicorn, "run", fake_run)
     assert cli.main(["serve", "--web-dist", str(web_dist)]) == 0
     assert received == {
-        "create_app": {"data_dir": Path("data"), "web_dist": web_dist},
+        "create_app": {
+            "data_dir": Path("data"),
+            "catalogue_dir": Path("config/channels"),
+            "web_dist": web_dist,
+        },
         "run": {"app": app, "host": "127.0.0.1", "port": 8000},
     }
 
@@ -93,6 +97,6 @@ def test_smoke_builds_and_queries_temporary_synthetic_corpus(capsys):
         "ready": True,
         "videos": 1,
         "segments": 1,
-        "query": "la verdad",
+        "query": "real example",
         "matches": 1,
     }

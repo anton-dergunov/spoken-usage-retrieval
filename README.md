@@ -17,17 +17,19 @@ example-quality ranking.
 
 ## Current state
 
-A working Spanish subtitle-only baseline. No video or audio is downloaded.
+A working multilingual subtitle-only architecture with an initial Spanish catalogue. No video or
+audio is downloaded.
 
-- channel discovery and caption acquisition via `yt-dlp`, with creator-authored captions preferred
-  and original-language automatic captions as a visible fallback;
+- versioned per-language channel catalogues and caption acquisition via `yt-dlp`, with
+  creator-authored source-language captions preferred and original-language automatic captions as a
+  visible fallback;
 - timestamp-aware reconstruction of complete utterances from caption events;
 - exact, accent-tolerant retrieval of words and contiguous 1–5-word phrases;
 - deterministic ranking, cross-video diversification, and a JSON API;
 - a React viewer that plays only the relevant excerpt and renders progressive subtitles itself.
 
-Not yet: other languages, inflected-form search, translation, forced alignment, and any learned
-ranking. Those are the [roadmap](docs/plans/README.md).
+Not yet: curated catalogues beyond Spanish, inflected-form search, translation, forced alignment,
+and any learned ranking. Those are the [roadmap](docs/plans/README.md).
 
 ## Quick start
 
@@ -38,7 +40,7 @@ access for the acquisition step.
 uv sync --locked
 npm ci --prefix web
 
-# Cache ten successfully captioned videos across the four MVP channels.
+# Cache ten successfully captioned videos across the four enabled Spanish channels.
 uv run speech-retrieval download-subtitles --limit 10
 
 # Reconstruct utterances and build data/index/corpus.sqlite3.
@@ -50,8 +52,9 @@ uv run speech-retrieval serve --port 8000
 ```
 
 `download-subtitles` is the only quick-start command that contacts YouTube. Its limit counts usable
-cached transcripts, not attempted videos, and repeat runs reuse valid cache entries. Pass
-`--channels`, `--data-dir`, `--scan-limit`, or `--max-ngram` to experiment without changing defaults.
+cached transcripts, not attempted videos, and repeat runs reuse valid cache entries. It defaults to
+`config/channels/es.json`; pass `--channels`, `--data-dir`, `--scan-limit`, or `--max-ngram` to
+experiment without changing defaults.
 The repository scripts remain available as compatibility wrappers around the same CLI handlers.
 
 For frontend development, serve the API once with a production build present, or construct it from
@@ -93,11 +96,9 @@ constraints, and the open research questions are in [`docs/design.md`](docs/desi
 
 ## Corpus configuration
 
-The executable Spanish MVP subset is [`config/mvp_channels.json`](config/mvp_channels.json); the
-broader curated catalogue is `spanish_youtube_channels.json`. The
-[multilingual corpus plan](docs/plans/02-multilingual-corpus-model.md) consolidates them under
-`config/channels/`, keeping explicit enablement, speech-style, regional-variety, and descriptive
-metadata.
+The versioned Spanish catalogue is [`config/channels/es.json`](config/channels/es.json). It preserves
+all 24 curated sources and marks the four executable MVP channels as enabled. Additional catalogues
+use the same schema and a canonical BCP-47 filename under `config/channels/`.
 
 Source selection optimizes linguistic diversity rather than volume: street interviews, unscripted
 conversation, podcasts, travel, documentary, educational material, scripted comedy, and journalism,
@@ -114,18 +115,19 @@ Generated corpus data stays local and untracked by default:
 
 ```text
 data/
-├── raw/videos/<video_id>/       # acquired metadata and captions; immutable inputs
-├── derived/                     # rebuildable segments and debug artifacts
+├── raw/corpora/<language>/<video-key>/<track-id>/
+│                                  # acquired metadata and captions; immutable inputs
+├── derived/corpora/<language>/  # rebuildable segments and debug artifacts
 ├── index/corpus.sqlite3         # rebuildable search index
 └── reports/                     # acquisition and index-build reports
 ```
 
-These generated formats have no stability or compatibility guarantee until
-[Plan 02](docs/plans/02-multilingual-corpus-model.md) defines the versioned multilingual corpus
-schema. A small fixture, dataset, label set, report, or model artifact may be deliberately published
-when redistribution is permitted, its size is reasonable, and it materially improves
-reproducibility. Its source, license, and purpose must be documented alongside it. Credentials,
-cookies, tokens, and personal environment files must never be committed.
+The multilingual cache and index carry explicit schema versions. Pre-version local data is not read;
+rerun acquisition and rebuild the disposable index after upgrading. A small fixture, dataset, label
+set, report, or model artifact may be deliberately published when redistribution is permitted, its
+size is reasonable, and it materially improves reproducibility. Its source, license, and purpose
+must be documented alongside it. Credentials, cookies, tokens, and personal environment files must
+never be committed.
 
 ## Documentation
 

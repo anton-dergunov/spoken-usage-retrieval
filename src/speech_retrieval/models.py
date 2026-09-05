@@ -23,7 +23,10 @@ class TimedTextSegment:
 @dataclass(frozen=True)
 class Segment:
     id: str
+    video_key: str
     video_id: str
+    source_language: str
+    track_id: str
     text: str
     start: float
     end: float

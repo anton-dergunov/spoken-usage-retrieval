@@ -74,7 +74,7 @@ Two rules follow from it, and both have already paid for themselves:
 
 ## What exists today
 
-A subtitle-only Spanish baseline, verified end to end on a real corpus:
+A multilingual subtitle-only architecture, verified end to end with the initial Spanish corpus:
 
 - channel discovery and caption acquisition through `yt-dlp`, with no video or audio download;
 - creator-authored captions preferred, original-language automatic captions as a visible fallback;
@@ -91,29 +91,29 @@ a stable content-derived ID, and the provenance of the track it came from. Occur
 1–5-gram inside a segment are stored separately with their token and character spans, so a match can
 be highlighted in the original text without re-tokenizing at query time.
 
-Metadata travels with the segment rather than being looked up later: channel and video identity,
-regional varieties, speech style, caption kind and language, and the boundary reason that produced
-the segment. Later work adds source language, analyzer identity, alignment coverage, and ranking
-features to the same row.
+Metadata travels with the segment rather than being inferred later: source language, stable
+video/track identity, channel identity, regional varieties, speech style, caption kind and track
+language, analyzer identity, and the boundary reason that produced the segment. Later work adds
+alignment coverage and ranking features to the same row.
 
 ### Cache layout
 
 ```text
 data/
-├── raw/videos/<video_id>/       # immutable acquired input
-│   ├── metadata.json
-│   └── subtitles.raw.json3
+├── raw/corpora/<language>/<video-key>/<track-id>/
+│   ├── metadata.json            # immutable acquired input and provenance
+│   └── subtitles.raw.json3      # unchanged source-caption strings
 ├── index/corpus.sqlite3         # derived, rebuildable
-├── derived/                     # derived debug dumps
+├── derived/corpora/<language>/  # language-partitioned derived debug dumps
 └── reports/                     # what a local run actually did
 ```
 
 Generated corpus data is deliberately untracked. The reports under `data/reports/` are what make a
 local run inspectable and are the source of truth for the current corpus.
 
-The layout is an implementation detail until Plan 02 introduces a versioned multilingual schema;
-generated files may be rebuilt or changed without compatibility guarantees. Acquired captions and
-media retain their source licenses and stay local by default. A deliberately published fixture,
+The cache and database carry explicit schema versions. Pre-version prototype data is deliberately
+rebuilt rather than supported through compatibility readers. Acquired captions and media retain
+their source licenses and stay local by default. A deliberately published fixture,
 dataset, report, label set, or model artifact must record its source, license, and reproducibility
 purpose alongside it.
 
@@ -188,8 +188,9 @@ retrieval.
 
 ## Corpus selection
 
-Source selection optimizes linguistic diversity rather than volume. The Spanish starter corpus mixes
-street interviews, unscripted conversation, podcasts and streaming, travel, documentary, educational
+Source selection optimizes linguistic diversity rather than volume. Each BCP-47 source language has
+one versioned catalogue with explicit activation. The Spanish starter corpus mixes street
+interviews, unscripted conversation, podcasts and streaming, travel, documentary, educational
 material, scripted comedy, and journalism, across several regional varieties.
 
 Channel entries are editorial content: each records its varieties, speech styles, and a concrete

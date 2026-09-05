@@ -17,6 +17,14 @@ function MoonIcon() {
 
 type Theme = "light" | "dark";
 
+function languageName(language: string): string {
+  try {
+    return new Intl.DisplayNames([navigator.language], { type: "language" }).of(language) ?? language;
+  } catch {
+    return language;
+  }
+}
+
 function systemTheme(): Theme {
   return typeof window.matchMedia === "function" && window.matchMedia("(prefers-color-scheme: dark)").matches
     ? "dark"
@@ -34,6 +42,7 @@ function ResultCard({ result, selected, onSelect }: {
       <span className="result-sentence"><HighlightedSentence result={result} /></span>
       <span className="result-meta">
         <span>{result.video.channel}</span>
+        <span>{languageName(result.source_language)}</span>
         <span>{formatClock(result.clip_start)}</span>
       </span>
     </span>
@@ -44,6 +53,7 @@ export default function App() {
   const [systemColorScheme, setSystemColorScheme] = useState<Theme>(systemTheme);
   const [themeOverride, setThemeOverride] = useState<Theme | null>(null);
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
+  const [language, setLanguage] = useState("");
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -66,17 +76,40 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    Promise.all([getSuggestions(), getStatus()])
-      .then(([suggested, corpusStatus]) => {
-        setSuggestions(suggested);
+    getStatus()
+      .then((corpusStatus) => {
         setStatus(corpusStatus);
+        const requested = new URLSearchParams(window.location.search).get("language");
+        if (requested && corpusStatus.indexed_languages.includes(requested)) {
+          setLanguage(requested);
+          return;
+        }
+        const enabledIndexed = corpusStatus.enabled_languages.filter((item) =>
+          corpusStatus.indexed_languages.includes(item)
+        );
+        if (enabledIndexed.length === 1) setLanguage(enabledIndexed[0]);
       })
       .catch((reason: Error) => setError(reason.message));
   }, []);
 
   useEffect(() => {
+    setSuggestions([]);
+    setResponse(null);
+    setSelectedId(null);
+    setError("");
+    if (!language) return;
+    const controller = new AbortController();
+    getSuggestions(language, controller.signal)
+      .then(setSuggestions)
+      .catch((reason: Error) => {
+        if (reason.name !== "AbortError") setError(reason.message);
+      });
+    return () => controller.abort();
+  }, [language]);
+
+  useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
+    if (!trimmed || !language) {
       setResponse(null);
       setSelectedId(null);
       setLoading(false);
@@ -87,7 +120,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      searchCorpus(trimmed, controller.signal)
+      searchCorpus(trimmed, language, controller.signal)
         .then((next) => {
           setResponse(next);
           setSelectedId(next.results[0]?.occurrence_id ?? null);
@@ -107,7 +140,7 @@ export default function App() {
       window.clearTimeout(timer);
       controller.abort();
     };
-  }, [query]);
+  }, [query, language]);
 
   const results = response?.results ?? [];
   const selected = results.find((item) => item.occurrence_id === selectedId) ?? results[0] ?? null;
@@ -134,20 +167,31 @@ export default function App() {
     <main>
       <section className="search-intro">
         <h1>Find it in <em>real speech.</em></h1>
+        <label className="language-picker">
+          <span>Source language</span>
+          <select value={language} onChange={(event) => setLanguage(event.target.value)}>
+            <option value="">Choose a language</option>
+            {status?.indexed_languages.map((item) =>
+              <option key={item} value={item}>{languageName(item)} ({item})</option>
+            )}
+          </select>
+        </label>
         <form className="search-box" onSubmit={(event) => event.preventDefault()} role="search">
           <SearchIcon />
           <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
-            placeholder="Try ‘entonces’ or ‘la verdad’" aria-label="Search Spanish speech" />
+            disabled={!language} placeholder={language ? "Search a word or phrase" : "Choose a source language"}
+            aria-label="Search source-language speech" />
           {loading ? <span className="search-spinner" aria-label="Searching" /> : query && <button type="button" className="clear-search" onClick={() => setQuery("")} aria-label="Clear search">×</button>}
         </form>
         {!query && suggestions.length > 0 && <div className="suggestions" aria-label="Popular searches">
           {suggestions.map((suggestion) => <button key={`${suggestion.size}:${suggestion.normalized}`}
             onClick={() => setQuery(suggestion.text)}>{suggestion.text}</button>)}
         </div>}
+        {query && !language && status && <div className="notice">Choose a source language to search.</div>}
         {error && <div className="notice error-notice" role="alert">{error}</div>}
       </section>
 
-      {query && <div className={`workspace${selected ? "" : " single-column"}`}>
+      {query && language && <div className={`workspace${selected ? "" : " single-column"}`}>
         <section className="results-panel" aria-label="Search results">
           <div className="panel-heading">
             <h2>{response ? <>Results for “{response.query}”</> : "Searching…"}</h2>

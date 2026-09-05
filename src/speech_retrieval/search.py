@@ -6,81 +6,27 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
+from .catalogue import canonical_language, load_catalogue_directory
+from .identity import DATABASE_SCHEMA_VERSION
 from .text import accent_key, normalized_query
-
-SPANISH_STOPWORDS = {
-    "a",
-    "al",
-    "algo",
-    "como",
-    "con",
-    "contra",
-    "cual",
-    "cuando",
-    "de",
-    "del",
-    "desde",
-    "donde",
-    "el",
-    "ella",
-    "ellos",
-    "en",
-    "era",
-    "es",
-    "esa",
-    "ese",
-    "eso",
-    "esta",
-    "este",
-    "esto",
-    "fue",
-    "ha",
-    "hay",
-    "la",
-    "las",
-    "le",
-    "les",
-    "lo",
-    "los",
-    "mas",
-    "me",
-    "mi",
-    "muy",
-    "no",
-    "nos",
-    "o",
-    "para",
-    "pero",
-    "por",
-    "porque",
-    "que",
-    "se",
-    "si",
-    "sin",
-    "sobre",
-    "su",
-    "sus",
-    "te",
-    "tiene",
-    "todo",
-    "tu",
-    "un",
-    "una",
-    "uno",
-    "unos",
-    "y",
-    "ya",
-    "yo",
-}
 
 
 class SearchError(ValueError):
     pass
 
 
+class IncompatibleIndexError(RuntimeError):
+    pass
+
+
 class Corpus:
-    def __init__(self, data_dir: str | Path):
+    def __init__(
+        self,
+        data_dir: str | Path,
+        catalogue_dir: str | Path = "config/channels",
+    ):
         self.data_dir = Path(data_dir)
+        self.catalogue_dir = Path(catalogue_dir)
         self.database = self.data_dir / "index" / "corpus.sqlite3"
 
     def _connect(self) -> sqlite3.Connection:
@@ -88,9 +34,37 @@ class Corpus:
             raise FileNotFoundError(f"search index not found: {self.database}")
         connection = sqlite3.connect(f"file:{self.database}?mode=ro", uri=True)
         connection.row_factory = sqlite3.Row
+        try:
+            meta = dict(connection.execute("SELECT key, value FROM meta").fetchall())
+        except sqlite3.Error as error:
+            connection.close()
+            raise IncompatibleIndexError(
+                "search index predates the versioned corpus schema; rebuild it"
+            ) from error
+        if meta.get("schema_version") != str(DATABASE_SCHEMA_VERSION):
+            connection.close()
+            raise IncompatibleIndexError(
+                "incompatible search index schema; rebuild the corpus index"
+            )
         return connection
 
-    def search(self, query: str, limit: int = 20) -> dict[str, Any]:
+    @staticmethod
+    def _source_language(value: str) -> str:
+        try:
+            return canonical_language(value)
+        except ValueError as error:
+            raise SearchError(str(error)) from error
+
+    @staticmethod
+    def _require_indexed(connection: sqlite3.Connection, source_language: str) -> None:
+        indexed = connection.execute(
+            "SELECT 1 FROM videos WHERE source_language = ? LIMIT 1", (source_language,)
+        ).fetchone()
+        if indexed is None:
+            raise SearchError(f"Source language is not indexed: {source_language}")
+
+    def search(self, query: str, *, source_language: str, limit: int = 20) -> dict[str, Any]:
+        source_language = self._source_language(source_language)
         normalized, query_tokens = normalized_query(query)
         if not query_tokens:
             raise SearchError("Enter a word or phrase to search for.")
@@ -99,21 +73,37 @@ class Corpus:
         limit = max(1, min(int(limit), 50))
         query_accent_key = accent_key(query)
         with self._connect() as connection:
+            self._require_indexed(connection, source_language)
             total = connection.execute(
-                "SELECT COUNT(*) FROM occurrences WHERE normalized = ? AND n = ?",
-                (normalized, len(query_tokens)),
+                """
+                SELECT COUNT(*) FROM occurrences
+                WHERE source_language = ? AND normalized = ? AND n = ?
+                """,
+                (source_language, normalized, len(query_tokens)),
             ).fetchone()[0]
             rows = connection.execute(
                 """
-                SELECT o.*, s.*, v.*
+                SELECT
+                    o.occurrence_id, o.accent_key, o.n, o.token_start, o.char_start, o.char_end,
+                    o.surface, s.segment_id, s.text, s.start, s.end, s.clip_start, s.clip_end,
+                    s.segments_json, s.boundary_reason, s.boundary_confidence, s.quality_score,
+                    s.token_count, s.track_id, v.video_key, v.provider, v.video_id, v.url, v.title,
+                    v.channel_id, v.channel, v.varieties_json, v.speech_style_json, v.duration,
+                    v.thumbnail, t.caption_kind, t.caption_language
                 FROM occurrences o
                 JOIN segments s ON s.segment_id = o.segment_id
-                JOIN videos v ON v.video_id = s.video_id
-                WHERE o.normalized = ? AND o.n = ?
-                ORDER BY s.quality_score DESC, s.video_id, s.start
+                JOIN transcripts t ON t.track_id = s.track_id
+                JOIN videos v ON v.video_key = s.video_key
+                WHERE o.source_language = ? AND o.normalized = ? AND o.n = ?
+                ORDER BY s.quality_score DESC, v.video_key, s.start
                 LIMIT ?
                 """,
-                (normalized, len(query_tokens), min(1000, max(100, limit * 20))),
+                (
+                    source_language,
+                    normalized,
+                    len(query_tokens),
+                    min(1000, max(100, limit * 20)),
+                ),
             ).fetchall()
 
         candidates: list[dict[str, Any]] = []
@@ -131,6 +121,8 @@ class Corpus:
             candidates.append(
                 {
                     "occurrence_id": row["occurrence_id"],
+                    "segment_id": row["segment_id"],
+                    "source_language": source_language,
                     "sentence": row["text"],
                     "match": {
                         "text": row["surface"],
@@ -149,28 +141,36 @@ class Corpus:
                     },
                     "quality_score": round(score, 4),
                     "video": {
+                        "video_key": row["video_key"],
                         "provider": row["provider"],
                         "id": row["video_id"],
                         "url": row["url"],
                         "title": row["title"],
                         "channel_id": row["channel_id"],
                         "channel": row["channel"],
+                        "source_language": source_language,
                         "varieties": json.loads(row["varieties_json"]),
                         "speech_style": json.loads(row["speech_style_json"]),
                         "duration": row["duration"],
                         "thumbnail": row["thumbnail"],
+                        "track_id": row["track_id"],
                         "caption_kind": row["caption_kind"],
                         "caption_language": row["caption_language"],
                     },
                 }
             )
         candidates.sort(
-            key=lambda item: (-item["quality_score"], item["video"]["id"], item["clip_start"])
+            key=lambda item: (
+                -item["quality_score"],
+                item["video"]["video_key"],
+                item["clip_start"],
+            )
         )
         results = self._diversify(candidates, limit)
         return {
             "query": query.strip(),
             "normalized_query": normalized,
+            "source_language": source_language,
             "total_occurrences": total,
             "returned": len(results),
             "results": results,
@@ -183,43 +183,44 @@ class Corpus:
         for allowed_per_video in range(1, limit + 1):
             video_counts: dict[str, int] = {}
             for item in selected:
-                video_id = item["video"]["id"]
-                video_counts[video_id] = video_counts.get(video_id, 0) + 1
+                key = item["video"]["video_key"]
+                video_counts[key] = video_counts.get(key, 0) + 1
             for candidate in candidates:
                 if candidate["occurrence_id"] in selected_ids:
                     continue
-                video_id = candidate["video"]["id"]
-                if video_counts.get(video_id, 0) >= allowed_per_video:
+                key = candidate["video"]["video_key"]
+                if video_counts.get(key, 0) >= allowed_per_video:
                     continue
                 selected.append(candidate)
                 selected_ids.add(candidate["occurrence_id"])
-                video_counts[video_id] = video_counts.get(video_id, 0) + 1
+                video_counts[key] = video_counts.get(key, 0) + 1
                 if len(selected) >= limit:
                     return selected
         return selected
 
-    def suggestions(self, limit: int = 12) -> list[dict[str, Any]]:
+    def suggestions(self, *, source_language: str, limit: int = 12) -> list[dict[str, Any]]:
+        source_language = self._source_language(source_language)
         limit = max(1, min(int(limit), 30))
         with self._connect() as connection:
+            self._require_indexed(connection, source_language)
             rows = connection.execute(
                 """
                 SELECT normalized, n, surface, total_count, video_count
                 FROM ngram_stats
-                WHERE n BETWEEN 1 AND 3
+                WHERE source_language = ? AND n BETWEEN 1 AND 3
                 ORDER BY video_count DESC, total_count DESC, n ASC
                 LIMIT 1000
-                """
+                """,
+                (source_language,),
             ).fetchall()
         words: list[dict[str, Any]] = []
         phrases: list[dict[str, Any]] = []
         for row in rows:
             terms = row["normalized"].split()
-            content_terms = [
-                term for term in terms if term not in SPANISH_STOPWORDS and len(term) > 2
-            ]
-            if not content_terms:
+            if not any(len(term) > 2 for term in terms):
                 continue
             item = {
+                "source_language": source_language,
                 "text": row["surface"].casefold(),
                 "normalized": row["normalized"],
                 "size": row["n"],
@@ -241,21 +242,79 @@ class Corpus:
         return selected
 
     def status(self) -> dict[str, Any]:
+        catalogues = load_catalogue_directory(self.catalogue_dir)
+        configured = {catalogue.language: catalogue for catalogue in catalogues}
+        enabled_languages = sorted(
+            catalogue.language for catalogue in catalogues if catalogue.enabled_channels
+        )
         with self._connect() as connection:
             meta = dict(connection.execute("SELECT key, value FROM meta").fetchall())
-            videos = connection.execute("SELECT COUNT(*) FROM videos").fetchone()[0]
-            segments = connection.execute("SELECT COUNT(*) FROM segments").fetchone()[0]
-            occurrences = connection.execute("SELECT COUNT(*) FROM occurrences").fetchone()[0]
-            caption_rows = connection.execute(
-                "SELECT caption_kind, COUNT(*) AS count FROM videos GROUP BY caption_kind"
+            count_rows = connection.execute(
+                """
+                SELECT source_language, 'videos' AS kind, COUNT(*) AS count FROM videos
+                GROUP BY source_language
+                UNION ALL
+                SELECT source_language, 'segments', COUNT(*) FROM segments GROUP BY source_language
+                UNION ALL
+                SELECT source_language, 'occurrences', COUNT(*) FROM occurrences
+                GROUP BY source_language
+                """
             ).fetchall()
+            caption_rows = connection.execute(
+                """
+                SELECT source_language, caption_kind, COUNT(*) AS count
+                FROM transcripts GROUP BY source_language, caption_kind
+                """
+            ).fetchall()
+        indexed_languages = sorted(
+            {row["source_language"] for row in count_rows if row["kind"] == "videos"}
+        )
+        counts: dict[str, dict[str, int]] = {}
+        for row in count_rows:
+            counts.setdefault(row["source_language"], {})[row["kind"]] = row["count"]
+        captions: dict[str, dict[str, int]] = {}
+        for row in caption_rows:
+            captions.setdefault(row["source_language"], {})[row["caption_kind"]] = row["count"]
+        languages = []
+        for language in sorted(set(configured) | set(indexed_languages)):
+            catalogue = configured.get(language)
+            language_counts = counts.get(language, {})
+            languages.append(
+                {
+                    "source_language": language,
+                    "configured": catalogue is not None,
+                    "enabled": bool(catalogue and catalogue.enabled_channels),
+                    "indexed": language in indexed_languages,
+                    "configured_channels": len(catalogue.channels) if catalogue else 0,
+                    "enabled_channels": len(catalogue.enabled_channels) if catalogue else 0,
+                    "videos": language_counts.get("videos", 0),
+                    "segments": language_counts.get("segments", 0),
+                    "occurrences": language_counts.get("occurrences", 0),
+                    "caption_kinds": captions.get(language, {}),
+                    "analyzer_id": meta.get("analyzer_id"),
+                }
+            )
+        totals = {
+            kind: sum(item.get(kind, 0) for item in counts.values())
+            for kind in ("videos", "segments", "occurrences")
+        }
+        aggregate_captions: dict[str, int] = {}
+        for items in captions.values():
+            for kind, count in items.items():
+                aggregate_captions[kind] = aggregate_captions.get(kind, 0) + count
         return {
             "ready": True,
-            "version": meta.get("version"),
+            "package_version": meta.get("package_version"),
+            "database_schema_version": int(meta["schema_version"]),
             "built_at": meta.get("built_at"),
             "max_ngram": int(meta.get("max_ngram", 0)),
-            "videos": videos,
-            "segments": segments,
-            "occurrences": occurrences,
-            "caption_kinds": {row["caption_kind"]: row["count"] for row in caption_rows},
+            "analyzer_id": meta.get("analyzer_id"),
+            "configured_languages": sorted(configured),
+            "enabled_languages": enabled_languages,
+            "indexed_languages": indexed_languages,
+            "languages": languages,
+            "videos": totals["videos"],
+            "segments": totals["segments"],
+            "occurrences": totals["occurrences"],
+            "caption_kinds": dict(sorted(aggregate_captions.items())),
         }

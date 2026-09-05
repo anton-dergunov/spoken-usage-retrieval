@@ -1,6 +1,6 @@
 # Plan 02: Multilingual corpus model
 
-**Status:** Planned
+**Status:** Complete
 
 **Depends on:** Plan 01
 

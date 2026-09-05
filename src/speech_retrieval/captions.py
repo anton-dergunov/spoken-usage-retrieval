@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from collections.abc import Iterable
@@ -8,6 +7,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
+from .identity import segment_id
 from .models import Segment, TimedTextSegment, TimedUnit
 from .text import TERMINAL_RE, clean_spacing, join_text, normalize_token, tokens_with_spans
 
@@ -81,6 +81,9 @@ def _deduplicate_units(units: list[TimedUnit]) -> list[TimedUnit]:
 
 def _segment_from_units(
     video_id: str,
+    video_key: str,
+    source_language: str,
+    track_id: str,
     units: list[TimedUnit],
     boundary_reason: str,
     video_duration: float | None,
@@ -121,7 +124,6 @@ def _segment_from_units(
     clip_end = end + 0.65
     if video_duration and video_duration > 0:
         clip_end = min(video_duration, clip_end)
-    digest = hashlib.sha1(f"{video_id}:{start:.3f}:{end:.3f}:{text}".encode()).hexdigest()[:16]
     if caption_kind == "manual":
         timed_segments = [
             TimedTextSegment(
@@ -133,8 +135,18 @@ def _segment_from_units(
             )
         ]
     return Segment(
-        id=f"seg_{digest}",
+        id=segment_id(
+            provider_video_id=video_id,
+            source_language=source_language,
+            track=track_id,
+            start=start,
+            end=end,
+            text=text,
+        ),
+        video_key=video_key,
         video_id=video_id,
+        source_language=source_language,
+        track_id=track_id,
         text=text,
         start=round(start, 3),
         end=round(end, 3),
@@ -192,6 +204,9 @@ def segment_payload(
     payload: dict[str, Any],
     *,
     video_id: str,
+    video_key: str | None = None,
+    source_language: str = "und",
+    track_id: str = "unknown",
     caption_kind: str,
     video_duration: float | None = None,
     pause_seconds: float = 0.9,
@@ -229,7 +244,16 @@ def segment_payload(
         video_id, groups, video_duration, caption_kind, hard_seconds, hard_tokens
     )
     segments = [
-        _segment_from_units(video_id, group, reason, video_duration, caption_kind)
+        _segment_from_units(
+            video_id,
+            video_key or video_id,
+            source_language,
+            track_id,
+            group,
+            reason,
+            video_duration,
+            caption_kind,
+        )
         for group, reason in groups
     ]
     return [segment for segment in segments if segment.token_count > 0 and segment.text]
@@ -241,6 +265,9 @@ def segments_from_files(metadata_path: Path, captions_path: Path) -> list[Segmen
     return segment_payload(
         payload,
         video_id=metadata["video_id"],
+        video_key=metadata["video_key"],
+        source_language=metadata["source_language"],
+        track_id=metadata["track_id"],
         caption_kind=metadata["caption_kind"],
         video_duration=metadata.get("duration"),
     )

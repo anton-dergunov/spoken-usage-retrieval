@@ -6,6 +6,8 @@ import type { YouTubePlayer } from "./youtube";
 
 const result: SearchResult = {
   occurrence_id: "occurrence-1",
+  segment_id: "segment-1",
+  source_language: "es",
   sentence: "A mí me da mucha bronca cuando pasa eso.",
   match: { text: "bronca", char_start: 17, char_end: 23, accent_exact: true },
   sentence_start: 77.2,
@@ -20,10 +22,11 @@ const result: SearchResult = {
   boundary: { reason: "punctuation", confidence: 1 },
   quality_score: .94,
   video: {
-    provider: "youtube", id: "abc123", url: "https://youtube.test/abc123",
+    video_key: "video-1", provider: "youtube", id: "abc123", url: "https://youtube.test/abc123",
     title: "A conversation", channel_id: "channel", channel: "Easy Spanish",
+    source_language: "es",
     varieties: ["Mexico"], speech_style: ["conversation"], duration: 120,
-    thumbnail: null, caption_kind: "manual", caption_language: "es",
+    thumbnail: null, track_id: "track-1", caption_kind: "manual", caption_language: "es",
   },
 };
 

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "spoken-usage-retrieval"
 version = "0.1.0"
-description = "A prototype for retrieving real Spanish usage from timestamped YouTube captions"
+description = "A multilingual prototype for retrieving real usage from timestamped video captions"
 readme = "README.md"
 requires-python = ">=3.12"
 license = "MIT"
