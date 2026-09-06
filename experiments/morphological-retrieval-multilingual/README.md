@@ -175,6 +175,8 @@ Strict lemma scoring uses Unicode NFC plus case folding and keeps accents. Folde
 
 Physical occurrences, the form lexicon, token rows, and secondary indexes are separated by SQLite `dbstat` in each result. Because exact and lemma keys share pages in the production-shaped key table, `logical_breakdown` separately records their row counts and payload bytes. Compact timing is reported only after occurrence IDs, match routes, counts, and character spans match the dual-key reference.
 
+The token-position layout still stores the token text, lemma, character offsets, and its ordinal position. For a segment containing `I was in the house`, it stores token rows such as `(segment, 0, I, I)`, `(segment, 1, was, be)`, and `(segment, 2, in, in)` once. A query for `be in` finds `be` and verifies that `in` occupies the next position. The current dual-key layout instead materializes `I`, `I was`, `I was in`, `was`, `was in`, and every other contiguous one-to-five-token key for both the surface and lemma routes. Positions are local to an indexed transcript segment; the segment retains its video and timing identity, and first/last character offsets reconstruct the occurrence and highlight.
+
 ## Retrieval and anomalous mappings
 
 The query manifest is selected by stable SHA-256 order with seed `20260905`. It includes up to 20 lemmas with at least two observed test forms and five test occurrences, plus up to 10 forms that have multiple train/dev analyses. Results include exact count, deduplicated auto expansion, candidate-lemma recall, intended-lemma precision, and ambiguous-union precision.
@@ -211,6 +213,19 @@ The query manifest is selected by stable SHA-256 order with seed `20260905`. It 
 
 simplemma's raw English dictionary maps `went` to `wend`. That mapping is historically explainable but incorrect for ordinary modern-English retrieval, where `went` is the past tense of `go`. The experiment records it as a false positive. The production system intentionally preserves available observed candidates and ranks exact matches first; later ranking and the dictionary-article LLM can reject semantically unsuitable clips.
 
+### Representative analyzer errors
+
+| Analyzer | Language | Surface | Gold lemma / UPOS | Predicted lemma / UPOS | Error |
+| --- | --- | --- | --- | --- | --- |
+| simplemma | English | `went` | `go` / VERB | `wend` / — | Obsolete dictionary interpretation for modern usage |
+| simplemma | English | `found` | `find` / VERB | `found` / — | Irregular inflection missed |
+| simplemma | Portuguese | `seria` | `ser` / AUX | `seriar` / — | Ambiguous form resolved to the wrong verb |
+| Stanza | English | `dedicated` | `dedicated` / ADJ | `dedicate` / VERB | Contextual POS and lemma error |
+| Stanza | Italian | `l'` | `la` / PRON | `lo` / PRON | Elided article/pronoun ambiguity resolved incorrectly |
+| Stanza | Chinese | `我們` | `我` / PRON | `我們` / PROPN | Pronoun suffix and POS analysis missed |
+
+These examples come from the recorded diagnostics and token-level UD comparisons. Some strict-score differences elsewhere in the results are caused by the production search normalizer removing combining marks, rather than by the underlying model. This especially affects accents, Japanese voiced marks, and Hindi vowel signs, so those rows must not all be read as Stanza model errors.
+
 ## Reproduction
 
 ```console
@@ -241,7 +256,11 @@ The completed run passed all 54 partial/token compact-layout parity checks. Repo
 | pt | stanza | 0.866703 |
 | hi | stanza | 0.552499 |
 
-The analyzer recommendation maximizes strict lemma accuracy multiplied by end-to-end lemma coverage. Runtime and downstream LLM filtering remain deployment considerations; this experiment does not change production defaults.
+The analyzer recommendation maximizes strict lemma accuracy multiplied by end-to-end lemma coverage. It is a quality recommendation, not a claim that Stanza is the cheapest analyzer. Runtime and downstream LLM filtering remain deployment considerations; this experiment does not change production defaults.
+
+Stanza's approximately three-second initialization is a cold, per-language, per-process cost. Production caches each analyzer pipeline, so it is not added to every request. A separate 20-repeat warm spot check put single-word query analysis at roughly 3.5–10.8 ms median across these ten models; the sub-millisecond storage timings above measure only SQLite lookup. A service can preload its active language at startup. Loading many language pipelines in one process would add their memory costs, while the table's per-language analysis RSS already reaches 1049 MB for Spanish and the complete Spanish worker reached 1561.9 MB.
+
+Using simplemma for queries against a Stanza-built index is not recommended without a separate cross-analyzer parity experiment. The base-form strings often agree, but tokenization, multi-word expansion, POS-sensitive choices, and lemma conventions do not always agree. A mismatch can miss the Stanza key or introduce another sense, especially for phrases; simplemma also has no configured support for Japanese, Korean, or Chinese. Production currently enforces the analyzer identity recorded in the index and would reject this mixture. Keeping Stanza warm, caching query analyses, or bypassing morphology for explicit exact searches offers lower latency without weakening that contract.
 
 The token-position prototype preserves semantics and saves 85.1% across completed rows at 1.34× median query time. This is material enough for a separate production migration plan.
 
