@@ -10,6 +10,7 @@ from speech_retrieval.api import create_app
 from speech_retrieval.identity import CACHE_SCHEMA_VERSION, track_id, video_key
 from speech_retrieval.indexing import build_index
 from speech_retrieval.search import Corpus, IncompatibleIndexError
+from speech_retrieval.settings import Settings
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -170,28 +171,36 @@ def test_suggestions_use_no_hidden_language_specific_stopwords(tmp_path):
 
 def test_api_contract_requires_and_preserves_language(tmp_path):
     data_dir, catalogue_dir = indexed_data(tmp_path)
-    client = TestClient(create_app(data_dir=data_dir, catalogue_dir=catalogue_dir, web_dist=None))
-    assert client.get("/api/search", params={"q": "la verdad"}).status_code == 422
-    response = client.get("/api/search", params={"q": "la verdad", "language": "es"})
-    assert response.status_code == 200
-    assert response.json()["source_language"] == "es"
-    assert response.json()["results"][0]["video"]["provider"] == "youtube"
-    assert (
-        client.get(
-            "/api/search",
-            params={"q": "uno dos tres cuatro cinco seis", "language": "es"},
-        ).status_code
-        == 400
-    )
-    assert (
-        client.get("/api/search", params={"q": "inexistente", "language": "es"}).json()["results"]
-        == []
-    )
-    assert client.get("/api/search", params={"q": "test", "language": "pt-BR"}).status_code == 400
-    assert client.get("/api/suggestions", params={"language": "not_a_tag"}).status_code == 400
-    suggestion_body = client.get("/api/suggestions", params={"language": "es"}).json()
-    assert suggestion_body["source_language"] == "es"
-    status = client.get("/api/status").json()
+    app = create_app(Settings(data_dir=data_dir, catalogue_dir=catalogue_dir))
+    with TestClient(app) as client:
+        assert client.get("/api/v1/search", params={"q": "la verdad"}).status_code == 422
+        response = client.get("/api/v1/search", params={"q": "la verdad", "language": "es"})
+        assert response.status_code == 200
+        assert response.json()["source_language"] == "es"
+        assert response.json()["results"][0]["video"]["provider"] == "youtube"
+        assert (
+            client.get(
+                "/api/v1/search",
+                params={"q": "uno dos tres cuatro cinco seis", "language": "es"},
+            ).status_code
+            == 400
+        )
+        assert (
+            client.get("/api/v1/search", params={"q": "inexistente", "language": "es"}).json()[
+                "results"
+            ]
+            == []
+        )
+        assert (
+            client.get("/api/v1/search", params={"q": "test", "language": "pt-BR"}).status_code
+            == 400
+        )
+        assert (
+            client.get("/api/v1/suggestions", params={"language": "not_a_tag"}).status_code == 400
+        )
+        suggestion_body = client.get("/api/v1/suggestions", params={"language": "es"}).json()
+        assert suggestion_body["source_language"] == "es"
+        status = client.get("/api/v1/status").json()
     assert status["videos"] == 2
     assert status["max_ngram"] == 5
     assert status["analyzer_selection"] == "auto"

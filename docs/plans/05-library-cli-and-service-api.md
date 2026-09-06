@@ -1,6 +1,6 @@
 # Plan 05: Library, CLI, and service API
 
-**Status:** Planned
+**Status:** Complete
 
 **Depends on:** Plans 02 and 03
 
@@ -109,3 +109,24 @@ create_app(settings)
 - Incremental indexing, job scheduling, or worker pause/resume; Plan 14 owns those.
 - GraphQL, multiple API versions at launch, or abstractions for hypothetical transports.
 - Translation, UI packaging, and ranking model implementation.
+
+## Implementation and verification record
+
+- Added one immutable settings source and a package-root library surface for typed corpus search,
+  clip lookup, suggestions, status/statistics, channel management, full updates, and reindexing.
+- Added deterministic ranked and seeded-random search with returned seed, rank, score, strict bounds,
+  and source-only clip contracts that reserve translation and alignment states.
+- Replaced provisional commands and unversioned routes with the foreground CLI and `/api/v1`, while
+  retaining repository script entry points for development compatibility.
+- Added opt-in bearer-protected channel mutations, request IDs, structured errors/logs, request
+  bounds, resilient status, analyzer-aware readiness, graceful lifespan cleanup, and a checked-in
+  OpenAPI contract.
+- Persisted update activity/failures and exposed dashboard-oriented language/channel statistics;
+  full updates continue across per-language acquisition failures and rebuild atomically from cached
+  inputs.
+- Updated the demo and public documentation to consume the stable routes and settings-based Python
+  API.
+- Verification: Ruff lint/format, mypy, 81 sandboxed Python tests plus the separately verified real
+  subprocess lifecycle test, 17 web tests, the production web build, offline smoke and doctor,
+  lock consistency, source/wheel builds, and clean-wheel public imports/CLI help; three optional
+  real-model CJK tests remain skipped without local models.

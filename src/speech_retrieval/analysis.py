@@ -367,3 +367,25 @@ def download_models(language: str, models_dir: Path) -> dict[str, Any]:
     clear_analyzer_cache()
     analyzer = get_analyzer(language, "stanza", str(models_dir.resolve()))
     return {"models_dir": str(models_dir), "analyzer": analyzer.provenance.as_dict()}
+
+
+def list_models(models_dir: Path) -> list[dict[str, Any]]:
+    """List locally present Stanza language resources without loading a model."""
+    try:
+        resources = json.loads((models_dir / "resources.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    results = []
+    for directory in sorted(path for path in models_dir.iterdir() if path.is_dir()):
+        language = directory.name
+        entry = resources.get(language, {})
+        processors = sorted(
+            child.name
+            for child in directory.iterdir()
+            if child.is_dir() and any(child.glob("*.pt"))
+        )
+        if entry or processors:
+            results.append(
+                {"language": language, "installed": bool(processors), "processors": processors}
+            )
+    return results

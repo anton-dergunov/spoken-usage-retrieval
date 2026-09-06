@@ -1263,6 +1263,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },
+    { name = "pydantic" },
     { name = "simplemma" },
     { name = "uvicorn" },
     { name = "yt-dlp" },
@@ -1296,6 +1297,7 @@ requires-dist = [
     { name = "httpx", marker = "extra == 'test'", specifier = ">=0.28,<1" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.20,<2" },
     { name = "mypy", marker = "extra == 'typing'", specifier = ">=1.20,<2" },
+    { name = "pydantic", specifier = ">=2.11,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.4,<10" },
     { name = "pytest", marker = "extra == 'test'", specifier = ">=8.4,<10" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },

@@ -5,6 +5,7 @@ import type { SearchResult } from "./types";
 import type { YouTubePlayer } from "./youtube";
 
 const result: SearchResult = {
+  rank: 1, score: .93,
   match_type: "exact", matched_surface: "bronca", matched_lemma: "bronca", token_analysis: [],
   analyzer: { name: "simplemma", language: "es", package_version: "1.2.0", model_version: null, settings: {}, identity: "fixture" },
   occurrence_id: "occurrence-1",

@@ -7,23 +7,25 @@ const suggestionResponse = {
   suggestions: [{ source_language: "es", text: "la verdad", normalized: "la verdad", size: 2, occurrences: 4, videos: 2 }]
 };
 const statusResponse = {
-  ready: true, package_version: "0.1.0", database_schema_version: 1,
+  ready: true, error: null, package_version: "0.1.0", database_schema_version: 1,
   built_at: "2026-09-04T00:00:00Z", max_ngram: 5, analyzer_selection: "auto",
   analyzer_id: "unicode-regex-v1",
   configured_languages: ["es"], enabled_languages: ["es"], indexed_languages: ["es"],
   languages: [{ source_language: "es", configured: true, enabled: true, indexed: true,
     configured_channels: 24, enabled_channels: 4, videos: 10, segments: 321, occurrences: 4000,
     caption_kinds: { manual: 2, automatic: 8 }, analyzer_id: "unicode-regex-v1" }],
-  videos: 10, segments: 321, occurrences: 4000, caption_kinds: { manual: 2, automatic: 8 }
+  videos: 10, segments: 321, occurrences: 4000, caption_kinds: { manual: 2, automatic: 8 },
+  channel_mutations_enabled: false,
 };
 const searchResponse = {
   query: "la verdad", normalized_query: "la verdad", source_language: "es",
   total_occurrences: 2, returned: 2,
-  match_mode: "auto", morphology_available: true, morphology_unavailable_reason: null,
+  match_mode: "auto", order: "ranked", seed: null, morphology_available: true, morphology_unavailable_reason: null,
   totals_by_mode: { exact: 1, lemma: 2, auto: 2 }, query_analyses: [],
   results: [
     {
       match_type: "exact",
+      rank: 1, score: .93,
       occurrence_id: "one", segment_id: "segment-one", source_language: "es",
       sentence: "La verdad es una buena idea.",
       match: { text: "La verdad", char_start: 0, char_end: 9, accent_exact: true },
@@ -36,6 +38,7 @@ const searchResponse = {
     },
     {
       match_type: "lemma",
+      rank: 2, score: .87,
       occurrence_id: "two", segment_id: "segment-two", source_language: "es",
       sentence: "Esa es, la verdad, otra historia.",
       match: { text: "la verdad", char_start: 8, char_end: 17, accent_exact: true },
@@ -93,7 +96,7 @@ it("requires a language choice when several enabled corpora are indexed", async 
 
 it("renders API failures as an accessible notice", async () => {
   vi.stubGlobal("fetch", vi.fn(() => Promise.resolve(new Response(
-    JSON.stringify({ detail: "Search index not found" }),
+    JSON.stringify({ error: { code: "corpus_unavailable", message: "Search index not found" }, request_id: "test" }),
     { status: 503, headers: { "Content-Type": "application/json" } }
   ))));
   render(<App />);
@@ -148,7 +151,7 @@ it("explains exact-only fallback and renders typed unsupported-analysis errors",
     const url = String(input);
     const unsupported = url.includes("match_mode=lemma");
     const body = url.includes("status") ? statusResponse : url.includes("suggestions") ? suggestionResponse : unsupported
-      ? { detail: { code: "unsupported_analysis", message: "No local morphology model" } }
+      ? { error: { code: "unsupported_analysis", message: "No local morphology model" }, request_id: "test" }
       : { ...searchResponse, morphology_available: false };
     return Promise.resolve(new Response(JSON.stringify(body), { status: unsupported ? 400 : 200 }));
   }));

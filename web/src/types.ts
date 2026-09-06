@@ -1,4 +1,5 @@
 export type MatchMode = "auto" | "exact" | "lemma";
+export type SearchOrder = "ranked" | "random";
 
 export interface AnalyzerProvenance {
   name: string;
@@ -68,6 +69,8 @@ export interface SearchResult {
   }>;
   boundary: { reason: "punctuation" | "pause" | "forced" | "end"; confidence: number };
   quality_score: number;
+  score: number;
+  rank: number;
   video: VideoSource;
 }
 
@@ -75,6 +78,8 @@ export interface SearchResponse {
   query: string;
   normalized_query: string;
   match_mode: MatchMode;
+  order: SearchOrder;
+  seed: number | null;
   morphology_available: boolean;
   morphology_unavailable_reason: string | null;
   totals_by_mode: Record<MatchMode, number>;
@@ -108,12 +113,13 @@ export interface Suggestion {
 
 export interface CorpusStatus {
   ready: boolean;
+  error: string | null;
   package_version: string;
-  database_schema_version: number;
-  built_at: string;
-  max_ngram: number;
+  database_schema_version: number | null;
+  built_at: string | null;
+  max_ngram: number | null;
   analyzer_selection: "auto" | "unicode" | "simplemma" | "stanza" | null;
-  analyzer_id: string;
+  analyzer_id: string | null;
   configured_languages: string[];
   enabled_languages: string[];
   indexed_languages: string[];
@@ -136,4 +142,5 @@ export interface CorpusStatus {
   segments: number;
   occurrences: number;
   caption_kinds: Record<string, number>;
+  channel_mutations_enabled: boolean;
 }

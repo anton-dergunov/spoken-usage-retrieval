@@ -41,26 +41,48 @@ access for the acquisition step.
 uv sync --locked
 npm ci --prefix web
 
-# Cache ten successfully captioned videos across the four enabled Spanish channels.
-uv run speech-retrieval download-subtitles --limit 10
-
-# Reconstruct utterances and build data/index/corpus.sqlite3.
-uv run speech-retrieval build-index --max-ngram 5
+# Cache captions from every enabled catalogue and rebuild data/index/corpus.sqlite3.
+uv run speech-retrieval update --once --limit 10
 
 # Build and serve the interface at http://127.0.0.1:8000.
 npm --prefix web run build
-uv run speech-retrieval serve --port 8000
+uv run speech-retrieval serve --port 8000 --web-dist web/dist
 ```
 
-`download-subtitles` is the only quick-start command that contacts YouTube. Its limit counts usable
-cached transcripts, not attempted videos, and repeat runs reuse valid cache entries. It defaults to
-`config/channels/es.json`; pass `--channels`, `--data-dir`, `--scan-limit`, or `--max-ngram` to
-experiment without changing defaults.
-The repository scripts remain available as compatibility wrappers around the same CLI handlers.
+`update --once` is the only quick-start command that contacts YouTube. Its limit counts usable cached
+transcripts per enabled language, not attempted videos, and repeat runs reuse valid cache entries.
+Use `reindex` to rebuild solely from immutable local caption caches. The repository scripts remain
+available as compatibility wrappers, but the installed CLI exposes only the stable command set.
 
-For frontend development, serve the API once with a production build present, or construct it from
-`speech_retrieval.api.create_app`, then run `npm --prefix web run dev`; Vite proxies `/api` to port
-8000.
+`serve` is API-only unless `--web-dist` is supplied. For frontend development, run it without a web
+build and then run `npm --prefix web run dev`; Vite proxies `/api` to port 8000.
+
+### Library, CLI, and service
+
+The supported Python surface is importable from the package root and returns immutable typed
+models:
+
+```python
+from speech_retrieval import Corpus, Settings, create_app
+
+settings = Settings(data_dir="data", catalogue_dir="config/channels")
+with Corpus(settings) as corpus:
+    response = corpus.search("casas", source_language="es", order="random", seed=42, limit=20)
+    clip = corpus.clip(response.results[0].segment_id)
+
+app = create_app(settings)
+```
+
+The foreground CLI provides `serve`, `update --once`, `search`, `channels`, `status`, `reindex`,
+`models`, and `doctor`. Every non-server command supports `--json`. Defaults can be supplied with
+`SPEECH_RETRIEVAL_*` environment variables and overridden by command flags.
+
+The public HTTP contract is versioned under `/api/v1`; its checked-in OpenAPI document is
+[`docs/openapi-v1.json`](docs/openapi-v1.json). Liveness and readiness are separate at
+`/api/v1/health/live` and `/api/v1/health/ready`. Channel mutations are disabled by default. Enable
+them explicitly with `SPEECH_RETRIEVAL_ENABLE_CHANNEL_MUTATIONS=true`; a non-loopback service also
+requires `SPEECH_RETRIEVAL_OPERATOR_TOKEN`, sent as a bearer token. API errors have a stable
+`error.code`, message, and request ID.
 
 ### Word forms and optional language models
 
@@ -69,15 +91,15 @@ including Spanish, English, Portuguese, French, German, Italian, and Hindi. No m
 needed. The viewer's **Word forms** selector compares the three retrieval modes:
 
 ```python
-from speech_retrieval.search import Corpus
+from speech_retrieval import Corpus, Settings
 
-corpus = Corpus("data")
+corpus = Corpus(Settings(data_dir="data"))
 corpus.search("casas", source_language="es")  # auto: includes casa, surface matches first
 corpus.search("casas", source_language="es", match_mode="exact")
 corpus.search("casas", source_language="es", match_mode="lemma")
 ```
 
-HTTP uses `/api/search?language=es&q=casas&match_mode=auto`. `exact` searches the accent-folded
+HTTP uses `/api/v1/search?language=es&q=casas&match_mode=auto`. `exact` searches the accent-folded
 surface inventory, `lemma` searches dictionary-form sequences, and `auto` combines them. Results
 retain original text and offsets and add `match_type`, `matched_surface`, `matched_lemma`,
 `token_analysis`, and `analyzer`. `query_analyses` reports candidate lemmas by token, their origin,
@@ -90,26 +112,26 @@ Japanese, Korean, and Chinese need the optional Stanza analyzer and explicitly i
 ```bash
 uv sync --locked --extra nlp
 uv run speech-retrieval models download ja
-uv run speech-retrieval build-index
+uv run speech-retrieval reindex
 ```
 
-The default model directory is `<data-dir>/models/stanza`. `models download`, `build-index`, and
-`serve` accept `--models-dir`; Python `Corpus` and `create_app` accept `models_dir`. Downloading a
-model alone does not change an existing index: rebuild it to enable that analyzer. To compare
-Stanza on a language normally handled by simplemma, use `build-index --analyzer stanza`.
+The default model directory is `<data-dir>/models/stanza`. `models download`, `reindex`, and `serve`
+accept `--models-dir`; library callers configure it through `Settings`. Downloading a model alone
+does not change an existing index: rebuild it to enable that analyzer. To compare Stanza on a
+language normally handled by simplemma, use `reindex --analyzer stanza`.
 `--analyzer unicode` creates an exact-only baseline; `--analyzer simplemma` explicitly selects the
 normal dictionary analyzer. Indexing and search never download models.
 
 Analyzer selection belongs to index creation and applies to every language in that build:
 
 ```bash
-uv run speech-retrieval build-index --analyzer unicode
-uv run speech-retrieval build-index --analyzer simplemma
-uv run speech-retrieval build-index --analyzer stanza --models-dir data/models/stanza
+uv run speech-retrieval reindex --analyzer unicode
+uv run speech-retrieval reindex --analyzer simplemma
+uv run speech-retrieval reindex --analyzer stanza --models-dir data/models/stanza
 ```
 
 `auto` remains the default and resolves each language to a locally installed Stanza model, then
-simplemma, then Unicode. The build report and `/api/status` expose `analyzer_selection` plus the resolved
+simplemma, then Unicode. The build report and `/api/v1/status` expose `analyzer_selection` plus the resolved
 analyzer and compatibility identity for every indexed language. Python and HTTP search requests do
 not select another analyzer: they read that language's recorded provenance from the index and reuse
 the same implementation automatically. Search responses expose the resolved `query_analyzer`.

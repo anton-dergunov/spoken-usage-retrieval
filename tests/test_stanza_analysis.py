@@ -19,6 +19,7 @@ from speech_retrieval.analysis import (
 from speech_retrieval.api import create_app
 from speech_retrieval.indexing import build_index
 from speech_retrieval.search import Corpus, IncompatibleIndexError
+from speech_retrieval.settings import Settings
 
 
 @pytest.fixture
@@ -172,9 +173,9 @@ def test_explicit_index_analyzer_is_recorded_and_reused_by_python_and_http_queri
     assert result["results"][0]["analyzer"]["name"] == expected_name
     assert result["morphology_available"] is morphology_available
 
-    with TestClient(create_app(data_dir=tmp_path, web_dist=None, models_dir=model_dir)) as client:
+    with TestClient(create_app(Settings(data_dir=tmp_path, models_dir=model_dir))) as client:
         response = client.get(
-            "/api/search",
+            "/api/v1/search",
             params={"q": "casas", "language": "es", "match_mode": "exact"},
         )
     assert response.status_code == 200
@@ -190,10 +191,10 @@ def test_missing_recorded_stanza_models_never_download_and_returns_503(tmp_path,
     corpus = Corpus(tmp_path, models_dir=model_dir)
     with pytest.raises(IncompatibleIndexError, match="built with stanza.*unavailable"):
         corpus.search("東京大学", source_language="ja")
-    with TestClient(create_app(data_dir=tmp_path, web_dist=None, models_dir=model_dir)) as client:
-        response = client.get("/api/search", params={"q": "東京大学", "language": "ja"})
+    with TestClient(create_app(Settings(data_dir=tmp_path, models_dir=model_dir))) as client:
+        response = client.get("/api/v1/search", params={"q": "東京大学", "language": "ja"})
     assert response.status_code == 503
-    assert "Restore the recorded analyzer" in response.json()["detail"]
+    assert "Restore the recorded analyzer" in response.json()["error"]["message"]
     package.download.assert_not_called()
 
 

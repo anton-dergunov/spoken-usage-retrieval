@@ -21,6 +21,7 @@ from speech_retrieval.analysis import (
 from speech_retrieval.api import create_app
 from speech_retrieval.indexing import build_index
 from speech_retrieval.search import Corpus, IncompatibleIndexError, SearchError
+from speech_retrieval.settings import Settings
 
 
 def add_text(data_dir: Path, text: str, *, language="es", video="one", repeats=1):
@@ -217,15 +218,17 @@ def test_unsupported_language_modes_and_api_errors(tmp_path, monkeypatch):
     assert response["totals_by_mode"] == {"exact": 1, "lemma": 0, "auto": 1}
     with pytest.raises(UnsupportedAnalysisError):
         corpus.search("你好世界", source_language="zh", match_mode="lemma")
-    with TestClient(create_app(data_dir=tmp_path, web_dist=None)) as client:
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
         response = client.get(
-            "/api/search", params={"q": "你好世界", "language": "zh", "match_mode": "lemma"}
+            "/api/v1/search",
+            params={"q": "你好世界", "language": "zh", "match_mode": "lemma"},
         )
         assert response.status_code == 400
-        assert response.json()["detail"]["code"] == "unsupported_analysis"
+        assert response.json()["error"]["code"] == "unsupported_analysis"
         assert (
             client.get(
-                "/api/search", params={"q": "你好世界", "language": "zh", "match_mode": "wrong"}
+                "/api/v1/search",
+                params={"q": "你好世界", "language": "zh", "match_mode": "wrong"},
             ).status_code
             == 400
         )
@@ -261,8 +264,10 @@ def test_versions_determinism_and_existing_analyzer_selection(tmp_path, monkeypa
         connection.execute("UPDATE analyzers SET provenance_json = ?", (json.dumps(record),))
     with pytest.raises(IncompatibleIndexError, match="rebuild"):
         corpus.search("casa", source_language="es")
-    with TestClient(create_app(data_dir=tmp_path, web_dist=None)) as client:
-        assert client.get("/api/search", params={"language": "es", "q": "casa"}).status_code == 503
+    with TestClient(create_app(Settings(data_dir=tmp_path))) as client:
+        assert (
+            client.get("/api/v1/search", params={"language": "es", "q": "casa"}).status_code == 503
+        )
     build_index(data_dir=tmp_path, analyzer="unicode")
     assert corpus.search("casa", source_language="es")["morphology_available"] is False
     assert corpus.search("casas", source_language="es")["total_occurrences"] == 1
