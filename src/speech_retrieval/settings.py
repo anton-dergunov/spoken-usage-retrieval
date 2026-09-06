@@ -40,6 +40,12 @@ class Settings:
     max_query_length: int = 200
     max_json_body_bytes: int = 65_536
     recent_failure_limit: int = 20
+    gemini_api_key: str | None = field(default=None, repr=False)
+    translation_model: str = "gemini-3.1-flash-lite"
+    translation_timeout_seconds: float = 30.0
+    translation_concurrency: int = 4
+    translation_target_languages: tuple[str, ...] = ("en", "ru")
+    default_target_language: str = "en"
 
     def __post_init__(self) -> None:
         for name in ("data_dir", "catalogue_dir"):
@@ -64,6 +70,22 @@ class Settings:
             raise ValueError("request limits must be positive")
         if self.recent_failure_limit < 1:
             raise ValueError("recent_failure_limit must be positive")
+        if not self.translation_model.strip():
+            raise ValueError("translation_model must not be empty")
+        if self.translation_timeout_seconds <= 0:
+            raise ValueError("translation_timeout_seconds must be positive")
+        if not 1 <= self.translation_concurrency <= 32:
+            raise ValueError("translation_concurrency must be between 1 and 32")
+        from .catalogue import canonical_language
+
+        languages = tuple(canonical_language(item) for item in self.translation_target_languages)
+        if not languages or len(set(languages)) != len(languages):
+            raise ValueError("translation_target_languages must contain unique language tags")
+        object.__setattr__(self, "translation_target_languages", languages)
+        default_language = canonical_language(self.default_target_language)
+        if default_language not in languages:
+            raise ValueError("default_target_language must be advertised")
+        object.__setattr__(self, "default_target_language", default_language)
 
     @property
     def resolved_models_dir(self) -> Path:
@@ -92,6 +114,14 @@ class Settings:
             "max_query_length": int,
             "max_json_body_bytes": int,
             "recent_failure_limit": int,
+            "gemini_api_key": str,
+            "translation_model": str,
+            "translation_timeout_seconds": float,
+            "translation_concurrency": int,
+            "translation_target_languages": lambda value: tuple(
+                item.strip() for item in value.split(",") if item.strip()
+            ),
+            "default_target_language": str,
         }
         values: dict[str, Any] = {}
         for item in fields(cls):
@@ -106,6 +136,10 @@ class Settings:
                     values[item.name] = converters[item.name](raw)
                 except (TypeError, ValueError) as error:
                     raise ValueError(f"invalid {variable}: {error}") from error
+        if "gemini_api_key" not in values and os.environ.get("GEMINI_API_KEY"):
+            values["gemini_api_key"] = os.environ["GEMINI_API_KEY"]
+        if "translation_model" not in values and os.environ.get("GEMINI_MODEL"):
+            values["translation_model"] = os.environ["GEMINI_MODEL"]
         return cls(**values)
 
     def with_overrides(self, **values: Any) -> Settings:

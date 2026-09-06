@@ -380,6 +380,27 @@
         "title": "ChannelUpdate",
         "type": "object"
       },
+      "CharacterRange": {
+        "additionalProperties": false,
+        "properties": {
+          "end": {
+            "minimum": 0.0,
+            "title": "End",
+            "type": "integer"
+          },
+          "start": {
+            "minimum": 0.0,
+            "title": "Start",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "CharacterRange",
+        "type": "object"
+      },
       "Clip": {
         "additionalProperties": false,
         "properties": {
@@ -594,6 +615,9 @@
             "title": "Segments",
             "type": "integer"
           },
+          "translation_cache": {
+            "$ref": "#/components/schemas/TranslationCacheStatistics"
+          },
           "videos": {
             "title": "Videos",
             "type": "integer"
@@ -737,6 +761,9 @@
           "segments": {
             "title": "Segments",
             "type": "integer"
+          },
+          "translation": {
+            "$ref": "#/components/schemas/TranslationServiceStatus"
           },
           "videos": {
             "title": "Videos",
@@ -1331,6 +1358,37 @@
         "title": "SearchResult",
         "type": "object"
       },
+      "SemanticAlignmentGroup": {
+        "additionalProperties": false,
+        "properties": {
+          "group_id": {
+            "minimum": 1.0,
+            "title": "Group Id",
+            "type": "integer"
+          },
+          "source_ranges": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterRange"
+            },
+            "title": "Source Ranges",
+            "type": "array"
+          },
+          "target_ranges": {
+            "items": {
+              "$ref": "#/components/schemas/CharacterRange"
+            },
+            "title": "Target Ranges",
+            "type": "array"
+          }
+        },
+        "required": [
+          "group_id",
+          "source_ranges",
+          "target_ranges"
+        ],
+        "title": "SemanticAlignmentGroup",
+        "type": "object"
+      },
       "Suggestion": {
         "additionalProperties": false,
         "properties": {
@@ -1507,9 +1565,530 @@
         "title": "TokenInfo",
         "type": "object"
       },
+      "TranslationBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "counts": {
+            "$ref": "#/components/schemas/TranslationBatchCounts"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "jobs": {
+            "items": {
+              "$ref": "#/components/schemas/TranslationBatchItem"
+            },
+            "title": "Jobs",
+            "type": "array"
+          },
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "target_language",
+          "total",
+          "counts",
+          "jobs",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TranslationBatch",
+        "type": "object"
+      },
+      "TranslationBatchCounts": {
+        "additionalProperties": false,
+        "properties": {
+          "cached": {
+            "default": 0,
+            "title": "Cached",
+            "type": "integer"
+          },
+          "cancelled": {
+            "default": 0,
+            "title": "Cancelled",
+            "type": "integer"
+          },
+          "complete": {
+            "default": 0,
+            "title": "Complete",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "interrupted": {
+            "default": 0,
+            "title": "Interrupted",
+            "type": "integer"
+          },
+          "queued": {
+            "default": 0,
+            "title": "Queued",
+            "type": "integer"
+          },
+          "running": {
+            "default": 0,
+            "title": "Running",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "unavailable": {
+            "default": 0,
+            "title": "Unavailable",
+            "type": "integer"
+          }
+        },
+        "title": "TranslationBatchCounts",
+        "type": "object"
+      },
+      "TranslationBatchItem": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_hit": {
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "not_requested",
+              "queued",
+              "running",
+              "complete",
+              "failed",
+              "cancelled",
+              "interrupted",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id",
+          "job_id",
+          "status",
+          "cache_hit"
+        ],
+        "title": "TranslationBatchItem",
+        "type": "object"
+      },
+      "TranslationBatchRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_ids",
+          "target_language"
+        ],
+        "title": "TranslationBatchRequest",
+        "type": "object"
+      },
+      "TranslationCacheStatistics": {
+        "additionalProperties": false,
+        "properties": {
+          "active_jobs": {
+            "default": 0,
+            "title": "Active Jobs",
+            "type": "integer"
+          },
+          "completed_entries": {
+            "default": 0,
+            "title": "Completed Entries",
+            "type": "integer"
+          },
+          "concurrency": {
+            "default": 0,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "database_bytes": {
+            "default": 0,
+            "title": "Database Bytes",
+            "type": "integer"
+          },
+          "failed_entries": {
+            "default": 0,
+            "title": "Failed Entries",
+            "type": "integer"
+          },
+          "hits": {
+            "default": 0,
+            "title": "Hits",
+            "type": "integer"
+          },
+          "invalid_entries": {
+            "default": 0,
+            "title": "Invalid Entries",
+            "type": "integer"
+          },
+          "misses": {
+            "default": 0,
+            "title": "Misses",
+            "type": "integer"
+          }
+        },
+        "title": "TranslationCacheStatistics",
+        "type": "object"
+      },
+      "TranslationErrorInfo": {
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "title": "Code",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "retryable": {
+            "default": false,
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "TranslationErrorInfo",
+        "type": "object"
+      },
+      "TranslationJob": {
+        "additionalProperties": false,
+        "properties": {
+          "cache_hit": {
+            "default": false,
+            "title": "Cache Hit",
+            "type": "boolean"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationErrorInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "job_id": {
+            "title": "Job Id",
+            "type": "string"
+          },
+          "result": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranslationResult"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "segment_id": {
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "not_requested",
+              "queued",
+              "running",
+              "complete",
+              "failed",
+              "cancelled",
+              "interrupted",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          },
+          "updated_at": {
+            "title": "Updated At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "job_id",
+          "segment_id",
+          "target_language",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "TranslationJob",
+        "type": "object"
+      },
+      "TranslationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target_language"
+        ],
+        "title": "TranslationRequest",
+        "type": "object"
+      },
+      "TranslationResult": {
+        "additionalProperties": false,
+        "properties": {
+          "alignment_groups": {
+            "items": {
+              "$ref": "#/components/schemas/SemanticAlignmentGroup"
+            },
+            "title": "Alignment Groups",
+            "type": "array"
+          },
+          "authored_track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authored Track Id"
+          },
+          "authored_track_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Authored Track Language"
+          },
+          "latency_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latency Ms"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "prompt_version": {
+            "title": "Prompt Version",
+            "type": "string"
+          },
+          "provenance": {
+            "enum": [
+              "llm",
+              "authored_track"
+            ],
+            "title": "Provenance",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "provider_metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider Metadata"
+          },
+          "schema_version": {
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "source_language": {
+            "title": "Source Language",
+            "type": "string"
+          },
+          "source_text_hash": {
+            "title": "Source Text Hash",
+            "type": "string"
+          },
+          "target_language": {
+            "title": "Target Language",
+            "type": "string"
+          },
+          "target_text": {
+            "title": "Target Text",
+            "type": "string"
+          },
+          "usage": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "integer"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Usage"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_language",
+          "target_language",
+          "source_text_hash",
+          "target_text",
+          "alignment_groups",
+          "provenance",
+          "provider",
+          "model",
+          "prompt_version",
+          "schema_version"
+        ],
+        "title": "TranslationResult",
+        "type": "object"
+      },
+      "TranslationServiceStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "cache": {
+            "$ref": "#/components/schemas/TranslationCacheStatistics"
+          },
+          "default_target_language": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Default Target Language"
+          },
+          "model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model"
+          },
+          "provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provider"
+          },
+          "provider_available": {
+            "default": false,
+            "title": "Provider Available",
+            "type": "boolean"
+          },
+          "target_languages": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Target Languages",
+            "type": "array"
+          }
+        },
+        "title": "TranslationServiceStatus",
+        "type": "object"
+      },
       "VideoInfo": {
         "additionalProperties": false,
         "properties": {
+          "caption_is_source": {
+            "default": true,
+            "title": "Caption Is Source",
+            "type": "boolean"
+          },
           "caption_kind": {
             "title": "Caption Kind",
             "type": "string"
@@ -1517,6 +2096,32 @@
           "caption_language": {
             "title": "Caption Language",
             "type": "string"
+          },
+          "caption_provider_track_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption Provider Track Id"
+          },
+          "caption_track_kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "authored",
+                  "automatic"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Caption Track Kind"
           },
           "channel": {
             "title": "Channel",
@@ -2291,6 +2896,115 @@
         "summary": "Clip"
       }
     },
+    "/api/v1/clips/{segment_id}/translations": {
+      "post": {
+        "operationId": "request_translation_api_v1_clips__segment_id__translations_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "segment_id",
+            "required": true,
+            "schema": {
+              "title": "Segment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Request Translation"
+      }
+    },
     "/api/v1/health/live": {
       "get": {
         "operationId": "live_api_v1_health_live_get",
@@ -2923,6 +3637,496 @@
           }
         },
         "summary": "Suggestions"
+      }
+    },
+    "/api/v1/translation-batches": {
+      "post": {
+        "operationId": "create_translation_batch_api_v1_translation_batches_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TranslationBatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationBatch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Create Translation Batch"
+      }
+    },
+    "/api/v1/translation-batches/{batch_id}": {
+      "delete": {
+        "operationId": "cancel_translation_batch_api_v1_translation_batches__batch_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationBatch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Cancel Translation Batch"
+      },
+      "get": {
+        "operationId": "translation_batch_api_v1_translation_batches__batch_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationBatch"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Translation Batch"
+      }
+    },
+    "/api/v1/translations/{job_id}": {
+      "delete": {
+        "operationId": "cancel_translation_api_v1_translations__job_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Cancel Translation"
+      },
+      "get": {
+        "operationId": "translation_job_api_v1_translations__job_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "job_id",
+            "required": true,
+            "schema": {
+              "title": "Job Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranslationJob"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "summary": "Translation Job"
       }
     }
   }

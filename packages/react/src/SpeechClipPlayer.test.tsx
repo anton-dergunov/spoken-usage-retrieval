@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HighlightedSourceText,
   ProgressiveSourceText,
+  ProgressiveTargetText,
   SpeechClipPlayer,
 } from "./SpeechClipPlayer.js";
 import { fixtureResult as clip } from "./fixtures.js";
@@ -153,4 +154,47 @@ it("uses Unicode character offsets for highlights", () => {
   expect(container.querySelector("mark")).toHaveTextContent("casas");
   rerender(<ProgressiveSourceText text={text} match={match} timing={timing} currentTime={1.5} />);
   expect(container.textContent).toBe(text);
+});
+
+it("highlights target ranges aligned to the source group active now", () => {
+  const groups = [
+    { group_id: 1, source_ranges: [{ start: 0, end: 10 }], target_ranges: [{ start: 4, end: 7 }] },
+    { group_id: 2, source_ranges: [{ start: 11, end: 23 }], target_ranges: [{ start: 0, end: 3 }] },
+  ];
+  const { container } = render(<ProgressiveTargetText
+    text="dos uno"
+    groups={groups}
+    timing={clip.segments}
+    currentTime={79}
+  />);
+  expect(container.querySelector(".sur-player__target-fragment--active")).toHaveTextContent("dos");
+});
+
+it("requests and renders a configured target language", async () => {
+  const onTranslationRequest = vi.fn();
+  const { container, rerender } = render(<SpeechClipPlayer
+    clip={clip}
+    youtubeApiLoader={loader}
+    targetLanguage="ru"
+    translationStatus="not_requested"
+    onTranslationRequest={onTranslationRequest}
+  />);
+  await waitFor(() => expect(onTranslationRequest).toHaveBeenCalledWith("ru"));
+  rerender(<SpeechClipPlayer
+    clip={clip}
+    youtubeApiLoader={loader}
+    targetLanguage="ru"
+    targetText="Авторские субтитры"
+    translationStatus="complete"
+    translationProvenance="authored_track"
+    alignmentGroups={[{
+      group_id: 1,
+      source_ranges: [{ start: 0, end: 5 }],
+      target_ranges: [{ start: 0, end: 9 }],
+    }]}
+  />);
+  const translation = container.querySelector(".sur-player__translation");
+  expect(translation).toHaveAttribute("aria-live", "polite");
+  expect(translation).toHaveAttribute("data-provenance", "authored_track");
+  expect(container.querySelector(".sur-player__target-fragment")).not.toBeInTheDocument();
 });

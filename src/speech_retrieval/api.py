@@ -38,11 +38,16 @@ from .contracts import (
     ErrorResponse,
     SearchResponse,
     SuggestionsResponse,
+    TranslationBatch,
+    TranslationBatchRequest,
+    TranslationJob,
+    TranslationRequest,
 )
 from .search import Corpus, IncompatibleIndexError, SearchError
 from .settings import Settings
+from .translations import TranslationProvider, TranslationService
 
-logger = logging.getLogger("uvicorn.access")
+logger = logging.getLogger("speech_retrieval.api")
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
     status: {"model": ErrorResponse} for status in (400, 401, 404, 409, 413, 422, 503)
@@ -83,7 +88,9 @@ def _is_loopback(host: str) -> bool:
         return False
 
 
-def create_app(settings: Settings) -> FastAPI:
+def create_app(
+    settings: Settings, *, translation_provider: TranslationProvider | None = None
+) -> FastAPI:
     if (
         settings.enable_channel_mutations
         and not settings.operator_token
@@ -95,9 +102,13 @@ def create_app(settings: Settings) -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.corpus = Corpus(settings)
         app.state.channels = ChannelRepository(settings.catalogue_dir)
+        app.state.translations = TranslationService.configured(
+            settings, app.state.corpus, translation_provider
+        )
         try:
             yield
         finally:
+            await app.state.translations.aclose()
             app.state.corpus.close()
 
     app = FastAPI(
@@ -114,7 +125,7 @@ def create_app(settings: Settings) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(settings.cors_origins),
-        allow_methods=["GET", "POST", "PATCH"],
+        allow_methods=["GET", "POST", "PATCH", "DELETE"],
         allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
         expose_headers=["X-Request-ID"],
     )
@@ -196,6 +207,9 @@ def create_app(settings: Settings) -> FastAPI:
     def channels(request: Request) -> ChannelRepository:
         return request.app.state.channels
 
+    def translations(request: Request) -> TranslationService:
+        return request.app.state.translations
+
     def management(
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
     ) -> None:
@@ -265,6 +279,85 @@ def create_app(settings: Settings) -> FastAPI:
             raise ServiceError(404, "segment_not_found", "Segment was not found") from error
         except Exception as error:
             raise translate_domain_error(error) from error
+
+    @app.post(
+        "/api/v1/clips/{segment_id}/translations",
+        response_model=TranslationJob,
+        status_code=202,
+    )
+    async def request_translation(
+        segment_id: str,
+        body: TranslationRequest,
+        service: TranslationService = Depends(translations),
+    ) -> TranslationJob:
+        try:
+            return await service.request(segment_id, body.target_language)
+        except KeyError as error:
+            raise ServiceError(404, "segment_not_found", "Segment was not found") from error
+        except Exception as error:
+            raise translate_domain_error(error) from error
+
+    @app.get("/api/v1/translations/{job_id}", response_model=TranslationJob)
+    def translation_job(
+        job_id: str, service: TranslationService = Depends(translations)
+    ) -> TranslationJob:
+        try:
+            return service.job(job_id)
+        except KeyError as error:
+            raise ServiceError(
+                404, "translation_job_not_found", "Translation job was not found"
+            ) from error
+
+    @app.delete("/api/v1/translations/{job_id}", response_model=TranslationJob)
+    async def cancel_translation(
+        job_id: str, service: TranslationService = Depends(translations)
+    ) -> TranslationJob:
+        try:
+            return await service.cancel(job_id)
+        except KeyError as error:
+            raise ServiceError(
+                404, "translation_job_not_found", "Translation job was not found"
+            ) from error
+
+    @app.post(
+        "/api/v1/translation-batches",
+        response_model=TranslationBatch,
+        status_code=202,
+    )
+    async def create_translation_batch(
+        body: TranslationBatchRequest,
+        service: TranslationService = Depends(translations),
+    ) -> TranslationBatch:
+        try:
+            return await service.create_batch(body.segment_ids, body.target_language)
+        except KeyError as error:
+            raise ServiceError(
+                404, "segment_not_found", f"Segment was not found: {error.args[0]}"
+            ) from error
+        except Exception as error:
+            raise translate_domain_error(error) from error
+
+    @app.get("/api/v1/translation-batches/{batch_id}", response_model=TranslationBatch)
+    def translation_batch(
+        batch_id: str, service: TranslationService = Depends(translations)
+    ) -> TranslationBatch:
+        try:
+            return service.batch(batch_id)
+        except KeyError as error:
+            raise ServiceError(
+                404, "translation_batch_not_found", "Translation batch was not found"
+            ) from error
+
+    @app.delete("/api/v1/translation-batches/{batch_id}", response_model=TranslationBatch)
+    async def cancel_translation_batch(
+        batch_id: str, service: TranslationService = Depends(translations)
+    ) -> TranslationBatch:
+        try:
+            return await service.cancel_batch(batch_id)
+        except KeyError as error:
+            raise ServiceError(
+                404, "translation_batch_not_found", "Translation batch was not found"
+            ) from error
 
     @app.get("/api/v1/channels", response_model=list[ChannelRecord])
     def list_channels(
@@ -338,17 +431,23 @@ def create_app(settings: Settings) -> FastAPI:
         return set_channel_enabled(language, channel_id, False, repository)
 
     @app.get("/api/v1/statistics", response_model=CorpusStatistics)
-    def statistics(value: Corpus = Depends(corpus)) -> CorpusStatistics:
+    def statistics(
+        value: Corpus = Depends(corpus), service: TranslationService = Depends(translations)
+    ) -> CorpusStatistics:
         try:
-            return value.statistics()
+            return value.statistics().model_copy(
+                update={"translation_cache": service.status().cache}
+            )
         except Exception as error:
             raise translate_domain_error(error) from error
 
     @app.get("/api/v1/status", response_model=CorpusStatus)
-    def status(value: Corpus = Depends(corpus)) -> CorpusStatus:
+    def status(
+        value: Corpus = Depends(corpus), service: TranslationService = Depends(translations)
+    ) -> CorpusStatus:
         try:
             value.check_ready()
-            return value.status()
+            return value.status().model_copy(update={"translation": service.status()})
         except Exception as error:
             try:
                 catalogues = load_catalogue_directory(settings.catalogue_dir)
@@ -374,6 +473,7 @@ def create_app(settings: Settings) -> FastAPI:
                 occurrences=0,
                 caption_kinds={},
                 channel_mutations_enabled=settings.enable_channel_mutations,
+                translation=service.status(),
             )
 
     @app.get("/api/v1/health/live")

@@ -53,6 +53,9 @@ export interface VideoSource {
   caption_kind: "manual" | "automatic" | string;
   caption_language: string;
   track_id: string;
+  caption_track_kind?: "authored" | "automatic" | null;
+  caption_provider_track_id?: string | null;
+  caption_is_source?: boolean;
 }
 
 export interface SearchResult {
@@ -101,13 +104,88 @@ export interface SpeechClip {
 }
 
 export interface AlignmentGroup {
-  source_start?: number;
-  source_end?: number;
-  target_start?: number;
-  target_end?: number;
-  start?: number;
-  end?: number;
-  [key: string]: unknown;
+  group_id: number;
+  source_ranges: CharacterRange[];
+  target_ranges: CharacterRange[];
+}
+
+export interface CharacterRange { start: number; end: number }
+
+export type TranslationState =
+  | "not_requested" | "queued" | "running" | "complete" | "failed"
+  | "cancelled" | "interrupted" | "unavailable";
+
+export interface TranslationResult {
+  source_language: string;
+  target_language: string;
+  source_text_hash: string;
+  target_text: string;
+  alignment_groups: AlignmentGroup[];
+  provenance: "llm" | "authored_track";
+  provider: string;
+  model: string | null;
+  prompt_version: string;
+  schema_version: number;
+  authored_track_language: string | null;
+  authored_track_id: string | null;
+  warnings: string[];
+  latency_ms: number | null;
+  usage: Record<string, number> | null;
+  provider_metadata: Record<string, string> | null;
+}
+
+export interface TranslationJob {
+  job_id: string;
+  segment_id: string;
+  target_language: string;
+  status: TranslationState;
+  cache_hit: boolean;
+  result: TranslationResult | null;
+  error: { code: string; message: string; retryable: boolean } | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TranslationBatch {
+  batch_id: string;
+  target_language: string;
+  total: number;
+  counts: TranslationBatchCounts;
+  jobs: Array<{ segment_id: string; job_id: string; status: TranslationState; cache_hit: boolean }>;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TranslationBatchCounts {
+  total: number;
+  cached: number;
+  queued: number;
+  running: number;
+  complete: number;
+  failed: number;
+  cancelled: number;
+  interrupted: number;
+  unavailable: number;
+}
+
+export interface TranslationCacheStatistics {
+  completed_entries: number;
+  failed_entries: number;
+  invalid_entries: number;
+  hits: number;
+  misses: number;
+  active_jobs: number;
+  database_bytes: number;
+  concurrency: number;
+}
+
+export interface TranslationServiceStatus {
+  provider_available: boolean;
+  provider: string | null;
+  model: string | null;
+  target_languages: string[];
+  default_target_language: string | null;
+  cache: TranslationCacheStatistics;
 }
 
 export type SpeechClipPlayerClip = SpeechClip | SearchResult;
@@ -188,6 +266,7 @@ export interface CorpusStatus {
   occurrences: number;
   caption_kinds: Record<string, number>;
   channel_mutations_enabled: boolean;
+  translation: TranslationServiceStatus;
 }
 
 export interface ChannelRecord {
@@ -254,6 +333,7 @@ export interface CorpusStatistics {
     item: string | null;
     message: string;
   }>;
+  translation_cache: TranslationCacheStatistics;
 }
 
 export interface ApiErrorBody {

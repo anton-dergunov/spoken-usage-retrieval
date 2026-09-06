@@ -12,6 +12,8 @@ import type {
   SpeechClip,
   Suggestion,
   SuggestionsResponse,
+  TranslationBatch,
+  TranslationJob,
   ReadyHealth,
 } from "./types.js";
 
@@ -37,6 +39,14 @@ export interface SuggestionOptions extends RequestOptions {
   limit?: number;
 }
 
+export interface TranslationRequestOptions extends RequestOptions {
+  targetLanguage: string;
+}
+
+export interface TranslationBatchOptions extends TranslationRequestOptions {
+  segmentIds: string[];
+}
+
 export class SpeechRetrievalApiError extends Error {
   readonly status: number;
   readonly code: string;
@@ -57,6 +67,12 @@ export interface SpeechRetrievalClient {
   search(options: SearchOptions): Promise<SearchResponse>;
   suggestions(options: SuggestionOptions): Promise<Suggestion[]>;
   clip(segmentId: string, options?: RequestOptions): Promise<SpeechClip>;
+  requestTranslation(segmentId: string, options: TranslationRequestOptions): Promise<TranslationJob>;
+  translation(jobId: string, options?: RequestOptions): Promise<TranslationJob>;
+  cancelTranslation(jobId: string, options?: RequestOptions): Promise<TranslationJob>;
+  createTranslationBatch(options: TranslationBatchOptions): Promise<TranslationBatch>;
+  translationBatch(batchId: string, options?: RequestOptions): Promise<TranslationBatch>;
+  cancelTranslationBatch(batchId: string, options?: RequestOptions): Promise<TranslationBatch>;
   status(options?: RequestOptions): Promise<CorpusStatus>;
   statistics(options?: RequestOptions): Promise<CorpusStatistics>;
   live(options?: RequestOptions): Promise<LiveHealth>;
@@ -120,6 +136,32 @@ export function createSpeechRetrievalClient(options: SpeechRetrievalClientOption
     },
     clip(segmentId, requestOptions) {
       return request<SpeechClip>(`/clips/${part(segmentId)}`, { signal: requestOptions?.signal });
+    },
+    requestTranslation(segmentId, { targetLanguage, signal }) {
+      return request<TranslationJob>(`/clips/${part(segmentId)}/translations`, {
+        method: "POST", body: JSON.stringify({ target_language: targetLanguage }), signal,
+      });
+    },
+    translation(jobId, requestOptions) {
+      return request<TranslationJob>(`/translations/${part(jobId)}`, { signal: requestOptions?.signal });
+    },
+    cancelTranslation(jobId, requestOptions) {
+      return request<TranslationJob>(`/translations/${part(jobId)}`, {
+        method: "DELETE", signal: requestOptions?.signal,
+      });
+    },
+    createTranslationBatch({ segmentIds, targetLanguage, signal }) {
+      return request<TranslationBatch>("/translation-batches", {
+        method: "POST", body: JSON.stringify({ segment_ids: segmentIds, target_language: targetLanguage }), signal,
+      });
+    },
+    translationBatch(batchId, requestOptions) {
+      return request<TranslationBatch>(`/translation-batches/${part(batchId)}`, { signal: requestOptions?.signal });
+    },
+    cancelTranslationBatch(batchId, requestOptions) {
+      return request<TranslationBatch>(`/translation-batches/${part(batchId)}`, {
+        method: "DELETE", signal: requestOptions?.signal,
+      });
     },
     status(requestOptions) {
       return request<CorpusStatus>("/status", { signal: requestOptions?.signal });

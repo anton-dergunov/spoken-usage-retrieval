@@ -13,6 +13,7 @@ import type {
   MatchSpan,
   SpeechClipPlayerClip,
   TimedText,
+  TranslationState,
 } from "./types.js";
 import {
   loadYouTubeApi,
@@ -53,6 +54,10 @@ export interface SpeechClipPlayerProps {
   showReplayControl?: boolean;
   onReplay?: () => void;
   targetText?: string | null;
+  targetLanguage?: string | null;
+  translationStatus?: TranslationState;
+  translationError?: string | null;
+  translationProvenance?: "llm" | "authored_track" | null;
   alignmentGroups?: AlignmentGroup[] | null;
   onTranslationRequest?: (targetLanguage: string) => void;
   onTranslationCancel?: () => void;
@@ -153,6 +158,41 @@ export function ProgressiveSourceText({
   </span>;
 }
 
+export function ProgressiveTargetText({
+  text,
+  groups,
+  timing,
+  currentTime,
+}: {
+  text: string;
+  groups: AlignmentGroup[];
+  timing: TimedText[];
+  currentTime: number;
+}) {
+  const characters = Array.from(text);
+  const activeSource = timing.filter((item) => currentTime >= item.start && currentTime < item.end);
+  const activeRanges = groups.flatMap((group) => {
+    const active = group.source_ranges.some((range) => activeSource.some(
+      (timed) => range.start < timed.char_end && range.end > timed.char_start,
+    ));
+    return active ? group.target_ranges : [];
+  });
+  const boundaries = new Set([0, characters.length]);
+  for (const range of activeRanges) {
+    boundaries.add(Math.max(0, Math.min(characters.length, range.start)));
+    boundaries.add(Math.max(0, Math.min(characters.length, range.end)));
+  }
+  const points = [...boundaries].sort((left, right) => left - right);
+  return <span aria-label={text}>{points.slice(0, -1).map((start, index) => {
+    const end = points[index + 1];
+    const active = activeRanges.some((range) => start >= range.start && end <= range.end);
+    return <span
+      className={active ? "sur-player__target-fragment sur-player__target-fragment--active" : "sur-player__target-fragment"}
+      key={`${start}:${end}`}
+    >{characters.slice(start, end).join("")}</span>;
+  })}</span>;
+}
+
 function statusMessage(status: SpeechClipPlayerStatus): string {
   switch (status) {
     case "connecting": return "Connecting to media player";
@@ -182,6 +222,14 @@ export function SpeechClipPlayer({
   onReplay,
   accessibleName,
   youtubeApiLoader = loadYouTubeApi,
+  targetText,
+  targetLanguage,
+  translationStatus = "not_requested",
+  translationError,
+  translationProvenance,
+  alignmentGroups,
+  onTranslationRequest,
+  onTranslationCancel,
 }: SpeechClipPlayerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<YouTubePlayer | null>(null);
@@ -213,6 +261,11 @@ export function SpeechClipPlayer({
   useEffect(() => {
     if (playerError) onErrorRef.current?.(playerError);
   }, [playerError]);
+  useEffect(() => {
+    if (targetLanguage && !targetText && translationStatus === "not_requested") {
+      onTranslationRequest?.(targetLanguage);
+    }
+  }, [onTranslationRequest, targetLanguage, targetText, translationStatus]);
 
   const disableYouTubeCaptions = useCallback((playerInstance: YouTubePlayer) => {
     try {
@@ -552,6 +605,22 @@ export function SpeechClipPlayer({
       <p className="sur-player__source-text">
         <ProgressiveSourceText text={text} match={match} timing={timing} currentTime={current} />
       </p>
+      {targetLanguage && (targetText || translationStatus !== "not_requested") && <div
+        className="sur-player__translation"
+        lang={targetLanguage}
+        aria-live="polite"
+        data-provenance={translationProvenance || undefined}
+      >
+        {targetText ? <p className="sur-player__target-text">
+          {translationProvenance !== "authored_track" && alignmentGroups?.length
+            ? <ProgressiveTargetText text={targetText} groups={alignmentGroups} timing={timing} currentTime={current} />
+            : targetText}
+        </p> : (translationStatus === "queued" || translationStatus === "running") ? <p className="sur-player__translation-status">
+          Translating… {onTranslationCancel && <button type="button" onClick={onTranslationCancel}>Cancel</button>}
+        </p> : <p className="sur-player__translation-status">
+          {translationError || (translationStatus === "unavailable" ? "Translation is unavailable." : "Translation could not be loaded.")}
+        </p>}
+      </div>}
       <div className="sur-player__source-line">
         <span>{clip.video.channel}</span>
         {!blind && "rank" in clip && <span className="sur-player__evaluation-meta">Rank {clip.rank} · Score {clip.score.toFixed(3)}</span>}

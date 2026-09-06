@@ -133,7 +133,19 @@ def _metadata_rows(raw_root: Path) -> list[tuple[Path, Path, dict[str, Any]]]:
     rows: list[tuple[Path, Path, dict[str, Any]]] = []
     if not raw_root.exists():
         return rows
-    for metadata_path in sorted(raw_root.glob("*/*/*/metadata.json")):
+    metadata_paths: list[Path] = []
+    for video_dir in sorted(path for path in raw_root.glob("*/*") if path.is_dir()):
+        manifest_path = video_dir / "manifest.json"
+        if manifest_path.exists():
+            try:
+                manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+                canonical = manifest["canonical_source_track_id"]
+            except (OSError, json.JSONDecodeError, KeyError, TypeError) as error:
+                raise ValueError(f"invalid caption manifest: {manifest_path}") from error
+            metadata_paths.append(video_dir / str(canonical) / "metadata.json")
+        else:
+            metadata_paths.extend(sorted(video_dir.glob("*/metadata.json")))
+    for metadata_path in metadata_paths:
         captions_path = metadata_path.with_name("subtitles.raw.json3")
         if not captions_path.exists():
             raise ValueError(f"cached transcript has no captions: {metadata_path.parent}")

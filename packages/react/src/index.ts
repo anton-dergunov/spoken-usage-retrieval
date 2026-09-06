@@ -2,6 +2,7 @@ export {
   SpeechClipPlayer,
   HighlightedSourceText,
   ProgressiveSourceText,
+  ProgressiveTargetText,
   formatClock,
   type SpeechClipPlayerError,
   type SpeechClipPlayerProps,
@@ -15,6 +16,8 @@ export {
   type SpeechRetrievalClient,
   type SpeechRetrievalClientOptions,
   type SuggestionOptions,
+  type TranslationBatchOptions,
+  type TranslationRequestOptions,
 } from "./client.js";
 export type * from "./types.js";
 export type { YouTubeApiLoader, YouTubeNamespace, YouTubePlayer } from "./youtube.js";

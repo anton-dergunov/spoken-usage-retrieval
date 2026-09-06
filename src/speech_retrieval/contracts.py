@@ -89,6 +89,9 @@ class VideoInfo(ContractModel):
     track_id: str
     caption_kind: str
     caption_language: str
+    caption_track_kind: Literal["authored", "automatic"] | None = None
+    caption_provider_track_id: str | None = None
+    caption_is_source: bool = True
 
 
 class SearchResult(ContractModel):
@@ -182,6 +185,124 @@ class Clip(ContractModel):
     )
 
 
+TranslationState = Literal[
+    "not_requested",
+    "queued",
+    "running",
+    "complete",
+    "failed",
+    "cancelled",
+    "interrupted",
+    "unavailable",
+]
+
+
+class CharacterRange(ContractModel):
+    start: int = Field(ge=0)
+    end: int = Field(ge=0)
+
+
+class SemanticAlignmentGroup(ContractModel):
+    group_id: int = Field(ge=1)
+    source_ranges: list[CharacterRange]
+    target_ranges: list[CharacterRange]
+
+
+class TranslationResult(ContractModel):
+    source_language: str
+    target_language: str
+    source_text_hash: str
+    target_text: str
+    alignment_groups: list[SemanticAlignmentGroup]
+    provenance: Literal["llm", "authored_track"]
+    provider: str
+    model: str | None
+    prompt_version: str
+    schema_version: int
+    authored_track_language: str | None = None
+    authored_track_id: str | None = None
+    warnings: list[str] = Field(default_factory=list)
+    latency_ms: float | None = None
+    usage: dict[str, int] | None = None
+    provider_metadata: dict[str, str] | None = None
+
+
+class TranslationErrorInfo(ContractModel):
+    code: str
+    message: str
+    retryable: bool = False
+
+
+class TranslationRequest(ContractModel):
+    target_language: str
+
+
+class TranslationJob(ContractModel):
+    job_id: str
+    segment_id: str
+    target_language: str
+    status: TranslationState
+    cache_hit: bool = False
+    result: TranslationResult | None = None
+    error: TranslationErrorInfo | None = None
+    created_at: str
+    updated_at: str
+
+
+class TranslationBatchRequest(ContractModel):
+    segment_ids: list[str] = Field(min_length=1, max_length=50)
+    target_language: str
+
+
+class TranslationBatchItem(ContractModel):
+    segment_id: str
+    job_id: str
+    status: TranslationState
+    cache_hit: bool
+
+
+class TranslationBatchCounts(ContractModel):
+    total: int = 0
+    cached: int = 0
+    queued: int = 0
+    running: int = 0
+    complete: int = 0
+    failed: int = 0
+    cancelled: int = 0
+    interrupted: int = 0
+    unavailable: int = 0
+
+
+class TranslationBatch(ContractModel):
+    batch_id: str
+    target_language: str
+    total: int
+    counts: TranslationBatchCounts
+    jobs: list[TranslationBatchItem]
+    created_at: str
+    updated_at: str
+
+
+class TranslationCacheStatistics(ContractModel):
+    completed_entries: int = 0
+    failed_entries: int = 0
+    invalid_entries: int = 0
+    hits: int = 0
+    misses: int = 0
+    active_jobs: int = 0
+    database_bytes: int = 0
+    concurrency: int = 0
+
+
+class TranslationServiceStatus(ContractModel):
+    provider_available: bool = False
+    provider: str | None = None
+    model: str | None = None
+    target_languages: list[str] = Field(default_factory=list)
+    default_target_language: str | None = None
+    cache: TranslationCacheStatistics = Field(default_factory=TranslationCacheStatistics)
+
+
 class LanguageStatus(ContractModel):
     source_language: str
     configured: bool
@@ -216,6 +337,7 @@ class CorpusStatus(ContractModel):
     occurrences: int
     caption_kinds: dict[str, int]
     channel_mutations_enabled: bool = False
+    translation: TranslationServiceStatus = Field(default_factory=TranslationServiceStatus)
 
 
 class ChannelRecord(ContractModel):
@@ -309,6 +431,9 @@ class CorpusStatistics(ContractModel):
     last_successful_update: str | None
     current_activity: Activity | None
     recent_failures: list[FailureRecord]
+    translation_cache: TranslationCacheStatistics = Field(
+        default_factory=TranslationCacheStatistics
+    )
 
 
 class LanguageUpdate(ContractModel):

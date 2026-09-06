@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
+from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from .acquisition import acquire
@@ -24,6 +25,7 @@ from .indexing import build_index
 from .search import Corpus
 from .service import Indexer, activity_is_alive, read_update_state
 from .settings import Settings
+from .translations import TranslationStore
 
 
 def _payload(value: Any) -> Any:
@@ -276,6 +278,49 @@ def _doctor(args: argparse.Namespace) -> int:
     return 0 if report.healthy else 1
 
 
+def _translation_cache_status(args: argparse.Namespace) -> int:
+    settings = _settings(args)
+    store = TranslationStore(settings.data_dir / "derived" / "translations.sqlite3")
+    _emit(store.statistics(settings.translation_concurrency), True)
+    return 0
+
+
+def _translation_cache_list(args: argparse.Namespace) -> int:
+    settings = _settings(args)
+    store = TranslationStore(settings.data_dir / "derived" / "translations.sqlite3")
+    _emit(
+        store.entries(
+            target_language=args.target_language,
+            provider=args.provider,
+            model=args.model,
+            older_than_days=args.older_than_days,
+            limit=args.limit,
+        ),
+        True,
+    )
+    return 0
+
+
+def _translation_cache_prune(args: argparse.Namespace) -> int:
+    if not args.all and not any(
+        value is not None
+        for value in (args.target_language, args.provider, args.model, args.older_than_days)
+    ):
+        raise ValueError("choose at least one cache filter or pass --all")
+    if args.older_than_days is not None and args.older_than_days < 0:
+        raise ValueError("older-than-days must not be negative")
+    settings = _settings(args)
+    store = TranslationStore(settings.data_dir / "derived" / "translations.sqlite3")
+    removed = store.prune(
+        target_language=args.target_language,
+        provider=args.provider,
+        model=args.model,
+        older_than_days=args.older_than_days,
+    )
+    _emit({"removed": removed}, True)
+    return 0
+
+
 def _smoke(args: argparse.Namespace) -> int:
     _emit(run_smoke(), args.json)
     return 0
@@ -386,6 +431,31 @@ def _parser() -> argparse.ArgumentParser:
     model_list.add_argument("--json", action="store_true")
     model_list.set_defaults(handler=_models_list)
 
+    cache = commands.add_parser("translation-cache", help="Inspect or prune translation cache.")
+    cache_commands = cache.add_subparsers(dest="translation_cache_command", required=True)
+    cache_status = cache_commands.add_parser("status")
+    _common(cache_status)
+    cache_status.add_argument("--json", action="store_true")
+    cache_status.set_defaults(handler=_translation_cache_status)
+    cache_list = cache_commands.add_parser("list")
+    _common(cache_list)
+    cache_list.add_argument("--target-language")
+    cache_list.add_argument("--provider")
+    cache_list.add_argument("--model")
+    cache_list.add_argument("--older-than-days", type=int)
+    cache_list.add_argument("--limit", type=int, default=100)
+    cache_list.add_argument("--json", action="store_true")
+    cache_list.set_defaults(handler=_translation_cache_list)
+    cache_prune = cache_commands.add_parser("prune")
+    _common(cache_prune)
+    cache_prune.add_argument("--target-language")
+    cache_prune.add_argument("--provider")
+    cache_prune.add_argument("--model")
+    cache_prune.add_argument("--older-than-days", type=int)
+    cache_prune.add_argument("--all", action="store_true")
+    cache_prune.add_argument("--json", action="store_true")
+    cache_prune.set_defaults(handler=_translation_cache_prune)
+
     doctor = commands.add_parser("doctor", help="Run offline configuration checks.")
     _common(doctor)
     doctor.add_argument("--web-dist", type=Path)
@@ -404,6 +474,7 @@ def _parser() -> argparse.ArgumentParser:
 
 
 def main(argv: Sequence[str] | None = None) -> int:
+    load_dotenv(dotenv_path=Path(".env"), override=False)
     arguments = list(argv) if argv is not None else sys.argv[1:]
     args = _parser().parse_args(arguments)
     try:

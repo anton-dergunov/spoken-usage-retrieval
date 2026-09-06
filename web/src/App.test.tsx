@@ -70,6 +70,91 @@ it("offers corpus suggestions and loads diverse results", async () => {
   expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("language=es"))).toBe(true);
 });
 
+it("requests the runtime-configured target language when a clip opens", async () => {
+  const translatedStatus = {
+    ...statusResponse,
+    translation: {
+      provider_available: true,
+      provider: "gemini",
+      model: "gemini-3.1-flash-lite",
+      target_languages: ["en", "ru"],
+      default_target_language: "en",
+      cache: { completed_entries: 0, invalid_entries: 0, hits: 0, misses: 0, active_jobs: 0, database_bytes: 0, concurrency: 4 },
+    },
+  };
+  const job = {
+    job_id: "job-one", segment_id: "segment-one", target_language: "en", status: "complete",
+    cache_hit: false, error: null, created_at: "now", updated_at: "now",
+    result: {
+      source_language: "es", target_language: "en", source_text_hash: "hash",
+      target_text: "The truth is a good idea.", alignment_groups: [], provenance: "llm",
+      provider: "gemini", model: "gemini-3.1-flash-lite", prompt_version: "v1", schema_version: 1,
+      authored_track_language: null, authored_track_id: null, warnings: [], latency_ms: 10, usage: null,
+    },
+  };
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("status") ? translatedStatus
+      : url.includes("suggestions") ? suggestionResponse
+      : url.includes("translations") ? job
+      : searchResponse;
+    return Promise.resolve(new Response(JSON.stringify(body), { status: url.includes("translations") ? 202 : 200 }));
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  expect(await screen.findByText("The truth is a good idea.")).toBeInTheDocument();
+  expect(screen.getByLabelText("Translation")).toHaveValue("en");
+  expect(vi.mocked(fetch).mock.calls.some(([input]) => String(input).includes("/translations"))).toBe(true);
+});
+
+it("cancels obsolete translation polling and suppresses a stale language result", async () => {
+  const translatedStatus = {
+    ...statusResponse,
+    translation: {
+      provider_available: true,
+      provider: "gemini",
+      model: "gemini-3.1-flash-lite",
+      target_languages: ["en", "ru"],
+      default_target_language: "en",
+      cache: { completed_entries: 0, failed_entries: 0, invalid_entries: 0, hits: 0, misses: 0, active_jobs: 0, database_bytes: 0, concurrency: 4 },
+    },
+  };
+  let englishSignal: AbortSignal | undefined;
+  let finishEnglish: ((response: Response) => void) | undefined;
+  const completedJob = (targetLanguage: string, targetText: string) => ({
+    job_id: `job-${targetLanguage}`, segment_id: "segment-one", target_language: targetLanguage,
+    status: "complete", cache_hit: false, error: null, created_at: "now", updated_at: "now",
+    result: {
+      source_language: "es", target_language: targetLanguage, source_text_hash: "hash",
+      target_text: targetText, alignment_groups: [], provenance: "llm", provider: "gemini",
+      model: "gemini-3.1-flash-lite", prompt_version: "v3", schema_version: 1,
+      authored_track_language: null, authored_track_id: null, warnings: [], latency_ms: 10,
+      usage: null, provider_metadata: null,
+    },
+  });
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("status")) return Promise.resolve(new Response(JSON.stringify(translatedStatus), { status: 200 }));
+    if (url.includes("suggestions")) return Promise.resolve(new Response(JSON.stringify(suggestionResponse), { status: 200 }));
+    if (!url.includes("translations")) return Promise.resolve(new Response(JSON.stringify(searchResponse), { status: 200 }));
+    const targetLanguage = JSON.parse(String(init?.body)).target_language;
+    if (targetLanguage === "en") {
+      englishSignal = init?.signal ?? undefined;
+      return new Promise<Response>((resolve) => { finishEnglish = resolve; });
+    }
+    return Promise.resolve(new Response(JSON.stringify(completedJob("ru", "Правда — хорошая идея.")), { status: 202 }));
+  }));
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  await waitFor(() => expect(englishSignal).toBeDefined());
+  fireEvent.change(screen.getByLabelText("Translation"), { target: { value: "ru" } });
+  expect(englishSignal?.aborted).toBe(true);
+  expect(await screen.findByText("Правда — хорошая идея.")).toBeInTheDocument();
+  finishEnglish?.(new Response(JSON.stringify(completedJob("en", "Stale English result")), { status: 202 }));
+  await waitFor(() => expect(screen.queryByText("Stale English result")).not.toBeInTheDocument());
+});
+
 it("requires a language choice when several enabled corpora are indexed", async () => {
   const multilingualStatus = {
     ...statusResponse,

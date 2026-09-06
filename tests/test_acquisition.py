@@ -2,7 +2,12 @@ import json
 from pathlib import Path
 from typing import Any
 
-from speech_retrieval.acquisition import CaptionTrack, acquire, select_caption_track
+from speech_retrieval.acquisition import (
+    CaptionTrack,
+    acquire,
+    authored_tracks,
+    select_caption_track,
+)
 
 
 def catalogue(channels):
@@ -24,6 +29,7 @@ def test_caption_selection_is_language_aware_and_manual_first():
     assert select_caption_track(
         {"subtitles": {}, "automatic_captions": {"es": [{}], "es-orig": [{}]}}, "es"
     ) == CaptionTrack("automatic", "es-orig")
+    assert [track.language for track in authored_tracks(info)] == ["en", "es", "es-MX"]
 
 
 def test_acquisition_is_round_robin_limited_resumable_and_enabled_only(tmp_path):
@@ -117,7 +123,116 @@ def test_acquisition_is_round_robin_limited_resumable_and_enabled_only(tmp_path)
     assert all(item["track_id"].startswith("trk_") for item in report["videos"])
     assert all("disabled.example" not in url for url in discovery_calls)
 
+    first_video_dir = data_dir / "raw" / "corpora" / "es" / report["videos"][0]["video_key"]
+    source_payload = next(first_video_dir.glob("*/subtitles.raw.json3"))
+    original_bytes = source_payload.read_bytes()
+    (first_video_dir / "manifest.json").unlink()
     rerun = acquire(config_path=config_path, data_dir=data_dir, limit=2, runner=runner)
     assert all(item["status"] == "cached" for item in rerun["videos"])
-    assert info_calls == ["video-one", "video-two"]
+    assert info_calls == ["video-one", "video-two", "video-one"]
+    assert source_payload.read_bytes() == original_bytes
+    recreated = json.loads((first_video_dir / "manifest.json").read_text())
+    assert recreated["canonical_source_track_id"] == report["videos"][0]["track_id"]
+    assert recreated["source_selection"] == "authored_source"
     assert (data_dir / "reports" / "acquisition-es.json").exists()
+
+
+def test_acquisition_preserves_authored_secondary_tracks_and_excludes_generated(tmp_path):
+    config_path = tmp_path / "es.json"
+    config_path.write_text(
+        json.dumps(
+            catalogue(
+                [
+                    {
+                        "id": "one",
+                        "name": "One",
+                        "url": "https://one.example/videos",
+                        "enabled": True,
+                    }
+                ]
+            )
+        )
+    )
+    downloaded_languages = []
+    fail_english = True
+
+    def runner(arguments):
+        if "--flat-playlist" in arguments:
+            return json.dumps(
+                {
+                    "entries": [
+                        {
+                            "id": "video-one",
+                            "url": "https://youtube.test/video-one",
+                            "title": "One",
+                            "duration": 120,
+                        }
+                    ]
+                }
+            )
+        if "--dump-single-json" in arguments:
+            return json.dumps(
+                {
+                    "id": "video-one",
+                    "webpage_url": "https://youtube.test/video-one",
+                    "title": "One",
+                    "channel": "One",
+                    "duration": 120,
+                    "subtitles": {
+                        "es": [{"name": "Spanish"}],
+                        "en": [{"name": "English"}],
+                        "fr": [{"name": "French"}],
+                    },
+                    "automatic_captions": {"es-orig": [{}], "ru": [{}]},
+                }
+            )
+        language = arguments[arguments.index("--sub-langs") + 1]
+        downloaded_languages.append(language)
+        if language == "en" and fail_english:
+            raise RuntimeError("temporary English subtitle failure")
+        output = Path(arguments[arguments.index("-o") + 1].replace("%(ext)s", f"{language}.json3"))
+        output.write_text(
+            json.dumps(
+                {
+                    "events": [
+                        {
+                            "tStartMs": 0,
+                            "dDurationMs": 1000,
+                            "segs": [{"utf8": "A complete sentence."}],
+                        }
+                    ]
+                }
+            )
+        )
+        return ""
+
+    data_dir = tmp_path / "data"
+    report = acquire(config_path=config_path, data_dir=data_dir, limit=1, runner=runner)
+    assert downloaded_languages == ["es", "en", "fr"]
+    assert report["authored_secondary_downloaded"] == 1
+    assert report["authored_secondary_failed"] == 1
+    assert report["successful"] == 1
+    assert report["complete"] is True
+    video_dir = next((data_dir / "raw" / "corpora" / "es").iterdir())
+    manifest = json.loads((video_dir / "manifest.json").read_text())
+    assert manifest["complete"] is False
+    assert manifest["source_selection"] == "authored_source"
+    assert manifest["provenance"] == {"provider": "youtube", "acquisition": "yt-dlp"}
+    assert [track["kind"] for track in manifest["tracks"]] == [
+        "authored",
+        "authored",
+        "authored",
+    ]
+    assert [track["language"] for track in manifest["tracks"]] == ["es", "en", "fr"]
+    assert [track["status"] for track in manifest["tracks"]] == [
+        "downloaded",
+        "failed",
+        "downloaded",
+    ]
+    fail_english = False
+    rerun = acquire(config_path=config_path, data_dir=data_dir, limit=1, runner=runner)
+    assert downloaded_languages == ["es", "en", "fr", "en"]
+    assert rerun["authored_secondary_cached"] == 1
+    assert rerun["authored_secondary_downloaded"] == 1
+    assert rerun["authored_secondary_failed"] == 0
+    assert json.loads((video_dir / "manifest.json").read_text())["complete"] is True

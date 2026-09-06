@@ -105,12 +105,17 @@ data/
 │   ├── metadata.json            # immutable acquired input and provenance
 │   └── subtitles.raw.json3      # unchanged source-caption strings
 ├── index/corpus.sqlite3         # derived, rebuildable
+├── derived/translations.sqlite3 # persistent, lazily generated translation artifacts
 ├── derived/corpora/<language>/  # language-partitioned derived debug dumps
 └── reports/                     # what a local run actually did
 ```
 
 Generated corpus data is deliberately untracked. The reports under `data/reports/` are what make a
 local run inspectable and are the source of truth for the current corpus.
+
+Translations are derived but deliberately live outside the rebuildable corpus index. Reindexing
+never deletes them; versioned source/model/prompt/schema cache keys make stale results unreachable,
+and operators prune them explicitly when desired.
 
 The cache and database carry explicit schema versions. Pre-version prototype data is deliberately
 rebuilt rather than supported through compatibility readers. Acquired captions and media retain
@@ -205,7 +210,8 @@ countries, contexts, grammatical forms, or speech styles.
 Translation is a derived, per-clip feature, never part of the source corpus and never part of an
 index key. The target language is chosen at query time. Translations are cached independently and
 generated lazily only for clips someone actually opens, so a missing provider degrades to
-source-language playback rather than to failure.
+source-language playback rather than to failure. Hosts may explicitly warm a bounded list of stable
+segment IDs through the same cache and scheduler; reindexing never removes completed translations.
 
 ### Optional audio
 

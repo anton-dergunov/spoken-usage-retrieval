@@ -21,10 +21,15 @@ def test_settings_load_environment_and_are_frozen(monkeypatch, tmp_path):
     monkeypatch.setenv("SPEECH_RETRIEVAL_DATA_DIR", str(tmp_path / "corpus"))
     monkeypatch.setenv("SPEECH_RETRIEVAL_ENABLE_CHANNEL_MUTATIONS", "true")
     monkeypatch.setenv("SPEECH_RETRIEVAL_CORS_ORIGINS", "https://one.test,https://two.test")
+    monkeypatch.setenv("GEMINI_API_KEY", "private-test-key")
+    monkeypatch.setenv("SPEECH_RETRIEVAL_TRANSLATION_TARGET_LANGUAGES", "en,ru,pt-BR")
     settings = Settings.from_env()
     assert settings.data_dir == tmp_path / "corpus"
     assert settings.enable_channel_mutations is True
     assert settings.cors_origins == ("https://one.test", "https://two.test")
+    assert settings.translation_target_languages == ("en", "ru", "pt-BR")
+    assert settings.gemini_api_key == "private-test-key"
+    assert "private-test-key" not in repr(settings)
     with pytest.raises(FrozenInstanceError):
         settings.port = 9000  # type: ignore[misc]
 

@@ -28,9 +28,10 @@ sessions need only the checks relevant to what they changed.
 Two rules shape the order, and both were learned by getting the order wrong first.
 
 **Integrate before improving.** Plan 07 puts the service into real use inside Acervo with
-source-language playback only — no translation, no audio, no models. Everything after it is an
-additive upgrade to a system already carrying real usage, which is a far better position from which
-to judge what quality work is worth doing.
+source-language playback only — no audio or acoustic models. Host-independent Plan 08 was completed
+early without Acervo; the remaining integration-sensitive upgrades stay additive to a system already
+carrying real usage, which is a far better position from which to judge what quality work is worth
+doing.
 
 **Start human labeling as early as possible.** Plan 11 depends only on the packaged player and a
 running service, because a person judges a clip by watching it, not by reading a waveform. Collecting
@@ -86,7 +87,7 @@ owns Docker, systemd, or other process supervision.
 
 | Plan | Status | Depends on | Outcome |
 | --- | --- | --- | --- |
-| [08 · Target-language text](08-target-language-text.md) | Planned | 07 | Authored translation tracks plus optional one-call literal LLM translation with alignment groups. |
+| [08 · Target-language text](08-target-language-text.md) | Complete | 02, 05, 06 | Authored translation tracks plus optional one-call literal LLM translation, cache warming, and alignment groups. |
 | [09 · Audio cache and caption-reliability benchmark](09-audio-and-caption-reliability.md) | Planned | 07 | Optional audio, an evidence-based caption-trust policy, and validated acoustic signals. |
 | [10 · Forced alignment](10-forced-alignment.md) | Planned | 09 | Confidence-bearing source-text timing with safe cue-level fallback. |
 
@@ -98,8 +99,8 @@ owns Docker, systemd, or other process supervision.
 | [12 · Ranking features and diversification](12-ranking-features-and-diversification.md) | Planned | 03, 11 | Reproducible features, logistic ranking, explanations, and diversity metrics. |
 | [13 · Learned multilingual reranker](13-learned-multilingual-reranker.md) | Planned | 11, 12 | A zero-shot and fine-tuned neural comparison with a promotion gate and model card. |
 
-Stages 3 and 4 are parallel tracks after Plan 07; only the dependencies inside each stage are real.
-Plan 11's labeling should begin as soon as Plan 07 lands. Plan 12 ships with text and metadata
+The remaining work in Stages 3 and 4 forms parallel tracks after Plan 07; Plan 08 is the deliberate
+host-independent exception. Plan 11's labeling should begin as soon as Plan 07 lands. Plan 12 ships with text and metadata
 features alone — Plan 09's acoustic features and Plan 10's alignment coverage are optional later
 inputs, used only where Plan 09's sample review found them trustworthy. The human-only held-out set
 remains the headline evaluation even when judge or distant labels are used for training.

@@ -520,6 +520,11 @@ class Corpus:
                         "track_id": row["track_id"],
                         "caption_kind": row["caption_kind"],
                         "caption_language": row["caption_language"],
+                        "caption_track_kind": (
+                            "authored" if row["caption_kind"] == "manual" else "automatic"
+                        ),
+                        "caption_provider_track_id": row["caption_language"],
+                        "caption_is_source": True,
                     },
                 }
             )
@@ -764,6 +769,11 @@ class Corpus:
                     "track_id": row["track_id"],
                     "caption_kind": row["caption_kind"],
                     "caption_language": row["caption_language"],
+                    "caption_track_kind": (
+                        "authored" if row["caption_kind"] == "manual" else "automatic"
+                    ),
+                    "caption_provider_track_id": row["caption_language"],
+                    "caption_is_source": True,
                 },
             }
         )

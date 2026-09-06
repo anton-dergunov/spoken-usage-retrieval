@@ -27,9 +27,10 @@ audio is downloaded.
 - accent-tolerant surface and morphological retrieval of words and contiguous 1–5-word phrases,
   with related word forms enabled by default and exact matches ranked first;
 - deterministic ranking, cross-video diversification, and a JSON API;
-- a React viewer that plays only the relevant excerpt and renders progressive subtitles itself.
+- a React viewer that plays only the relevant excerpt, renders progressive subtitles, and lazily
+  adds an optional aligned translation in a caller-selected language.
 
-Not yet: curated catalogues beyond Spanish, translation, forced alignment,
+Not yet: curated catalogues beyond Spanish, forced alignment,
 and any learned ranking. Those are the [roadmap](docs/plans/README.md).
 
 ## Quick start
@@ -50,6 +51,11 @@ uv run speech-retrieval update --once --limit 10
 npm --prefix web run build
 uv run speech-retrieval serve --port 8000 --web-dist web/dist
 ```
+
+The CLI reads a local, ignored `.env` without overriding exported environment variables. To enable
+translation, copy `.env.example`, set `GEMINI_API_KEY`, and optionally change the model or advertised
+demo languages. With no key, the player uses a directly available authored target-language caption
+track when one was acquired, otherwise it remains source-only.
 
 `update --once` is the only quick-start command that contacts YouTube. Its limit counts usable cached
 transcripts per enabled language, not attempted videos, and repeat runs reuse valid cache entries.
@@ -92,7 +98,7 @@ app = create_app(settings)
 ```
 
 The foreground CLI provides `serve`, `update --once`, `search`, `channels`, `status`, `reindex`,
-`models`, and `doctor`. Every non-server command supports `--json`. Defaults can be supplied with
+`models`, `translation-cache`, and `doctor`. Every non-server command supports `--json`. Defaults can be supplied with
 `SPEECH_RETRIEVAL_*` environment variables and overridden by command flags.
 
 The public HTTP contract is versioned under `/api/v1`; its checked-in OpenAPI document is
@@ -163,6 +169,27 @@ longer available to the server, every search returns HTTP 503 rather than silent
 query differently. Restore the recorded analyzer or rebuild explicitly with a lighter choice.
 Schema 3 uses token-position lookup; older indexes must be rebuilt from versioned caption caches.
 Raw acquisition files remain unchanged.
+
+### Lazy translation and cache warming
+
+Opening a clip in the demo requests one literal, learner-facing translation and semantic alignment.
+Successful translations are stored in `data/derived/translations.sqlite3`, independently of the
+search index, and are reused across requests and reindexing. The API accepts any valid BCP-47 target;
+the configured language list only controls the demo selector.
+
+`POST /api/v1/clips/{segment_id}/translations` starts one job. A host can warm up to 50 explicitly
+selected clips with `POST /api/v1/translation-batches`; status and cancellation routes are in the
+checked-in OpenAPI document. Inspect or deliberately prune derived entries with:
+
+```bash
+uv run speech-retrieval translation-cache status
+uv run speech-retrieval translation-cache list --target-language ru
+uv run speech-retrieval translation-cache prune --target-language ru
+uv run speech-retrieval translation-cache prune --older-than-days 30
+```
+
+Cache warming uses the same coalescing scheduler as interactive requests and never translates the
+whole corpus implicitly.
 
 The index stores each surface or lemma token once with its position inside a segment. Phrase lookup
 finds the first token and verifies successive positions in the same stream, deriving the occurrence

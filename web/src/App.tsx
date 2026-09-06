@@ -9,6 +9,7 @@ import {
   type SearchResponse,
   type SearchResult,
   type Suggestion,
+  type TranslationJob,
 } from "@spoken-usage-retrieval/react";
 
 const client = createSpeechRetrievalClient({ baseUrl: "/api/v1" });
@@ -70,6 +71,9 @@ export default function App() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
   const [status, setStatus] = useState<CorpusStatus | null>(null);
+  const [targetLanguage, setTargetLanguage] = useState("");
+  const [translationJob, setTranslationJob] = useState<TranslationJob | null>(null);
+  const [translationLoading, setTranslationLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const theme = themeOverride ?? systemColorScheme;
@@ -92,6 +96,12 @@ export default function App() {
       .then((corpusStatus) => {
         setStatus(corpusStatus);
         const requested = new URLSearchParams(window.location.search).get("language");
+        const requestedTarget = new URLSearchParams(window.location.search).get("target");
+        const targets = corpusStatus.translation?.target_languages ?? [];
+        const defaultTarget = requestedTarget && targets.includes(requestedTarget)
+          ? requestedTarget
+          : corpusStatus.translation?.default_target_language;
+        if (defaultTarget) setTargetLanguage(defaultTarget);
         if (requested && corpusStatus.indexed_languages.includes(requested)) {
           setLanguage(requested);
           return;
@@ -118,6 +128,13 @@ export default function App() {
       });
     return () => controller.abort();
   }, [language]);
+
+  useEffect(() => {
+    if (!status?.translation || targetLanguage !== language) return;
+    setTargetLanguage(
+      status.translation.target_languages.find((item) => item !== language) ?? "",
+    );
+  }, [language, status, targetLanguage]);
 
   useEffect(() => {
     const trimmed = query.trim();
@@ -160,6 +177,45 @@ export default function App() {
   const results = response?.results ?? [];
   const selected = results.find((item) => item.occurrence_id === selectedId) ?? results[0] ?? null;
 
+  useEffect(() => {
+    setTranslationJob(null);
+    setTranslationLoading(false);
+    if (!selected || !targetLanguage || targetLanguage === selected.source_language) return;
+    const controller = new AbortController();
+    let currentJobId: string | null = null;
+    let disposed = false;
+    setTranslationLoading(true);
+    const run = async () => {
+      try {
+        let job = await client.requestTranslation(selected.segment_id, {
+          targetLanguage,
+          signal: controller.signal,
+        });
+        currentJobId = job.job_id;
+        if (!disposed) setTranslationJob(job);
+        while (!disposed && (job.status === "queued" || job.status === "running")) {
+          await new Promise((resolve) => window.setTimeout(resolve, 300));
+          if (disposed) break;
+          job = await client.translation(job.job_id, { signal: controller.signal });
+          if (!disposed) setTranslationJob(job);
+        }
+      } catch (reason) {
+        if (!disposed && reason instanceof Error && reason.name !== "AbortError") {
+          setTranslationJob(null);
+          setError(reason.message);
+        }
+      } finally {
+        if (!disposed) setTranslationLoading(false);
+      }
+    };
+    void run();
+    return () => {
+      disposed = true;
+      controller.abort();
+      if (currentJobId) void client.cancelTranslation(currentJobId).catch(() => undefined);
+    };
+  }, [selected?.segment_id, selected?.source_language, targetLanguage]);
+
   return <div className="app-shell">
     <header className="topbar">
       <a className="brand" href="/" aria-label="Oído home">
@@ -199,6 +255,15 @@ export default function App() {
             <option value="lemma">Dictionary-form matching</option>
           </select>
         </label>
+        {status?.translation && <label className="language-picker">
+          <span>Translation</span>
+          <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value)}>
+            <option value="">Source only</option>
+            {status.translation.target_languages.filter((item) => item !== language).map((item) =>
+              <option key={item} value={item}>{languageName(item)} ({item})</option>
+            )}
+          </select>
+        </label>}
         <form className="search-box" onSubmit={(event) => event.preventDefault()} role="search">
           <SearchIcon />
           <input autoFocus value={query} onChange={(event) => setQuery(event.target.value)}
@@ -235,7 +300,20 @@ export default function App() {
         </section>
 
         {selected && <aside className="viewer-panel">
-          <SpeechClipPlayer key={selected.occurrence_id} clip={selected} blind />
+          <SpeechClipPlayer
+            key={selected.occurrence_id}
+            clip={selected}
+            blind
+            targetLanguage={targetLanguage || null}
+            targetText={translationJob?.result?.target_text}
+            alignmentGroups={translationJob?.result?.alignment_groups}
+            translationProvenance={translationJob?.result?.provenance}
+            translationStatus={translationJob?.status ?? (translationLoading ? "queued" : "not_requested")}
+            translationError={translationJob?.error?.message}
+            onTranslationCancel={translationJob && ["queued", "running"].includes(translationJob.status)
+              ? () => { void client.cancelTranslation(translationJob.job_id).then(setTranslationJob); }
+              : undefined}
+          />
         </aside>}
       </div>}
     </main>

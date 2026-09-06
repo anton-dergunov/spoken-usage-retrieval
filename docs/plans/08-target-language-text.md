@@ -1,8 +1,8 @@
 # Plan 08: Target-language text
 
-**Status:** Planned
+**Status:** Complete
 
-**Depends on:** Plan 07
+**Depends on:** Plans 02, 05, and 06. Plan 07 is not required.
 
 ## Outcome
 
@@ -136,3 +136,20 @@ track is the no-provider fallback for the translation path.
 - Streaming tokens, a provider marketplace, automatic prompt optimization, or a durable distributed
   translation queue.
 - Supporting arbitrary video providers before one is actually added.
+
+## Implementation and verification record
+
+- Added YouTube track manifests, canonical-source selection, independently resumable authored
+  secondary acquisition, and authored target-track fallback without indexing secondary text.
+- Added a provider-neutral asynchronous translation service, direct Gemini structured-output
+  adapter, Unicode semantic-range validation, persistent translation cache, coalesced jobs,
+  cancellation, and bounded explicit cache-warming batches.
+- Added typed Python, OpenAPI, and TypeScript contracts plus cache inspection/pruning commands and
+  secret-safe runtime configuration.
+- Added target-language states and current-semantic-group highlighting to the reusable player and
+  integrated runtime-configured English/Russian selection into the standalone demo.
+- Verified a real 10-video update with 10 canonical source tracks, 13 independently acquired
+  authored secondary tracks, and no secondary failures; the local data remains ignored.
+- Exercised 200 prompt-development calls plus a strict 20-call English/Russian confirmation set;
+  final validation accepted 18/20 and rejected both one-sided-group responses after one call. A
+  separate live HTTP request completed and its repeat was a persistent-cache hit.

@@ -30,6 +30,8 @@ class AcquisitionError(RuntimeError):
 class CaptionTrack:
     kind: str
     language: str
+    display_name: str | None = None
+    is_translatable: bool = False
 
 
 Runner = Callable[[Sequence[str]], str]
@@ -82,11 +84,43 @@ def select_caption_track(info: dict[str, Any], source_language: str) -> CaptionT
     source_language = canonical_language(source_language)
     manual_keys = _matching_track_keys(info.get("subtitles") or {}, source_language)
     if manual_keys:
-        return CaptionTrack("manual", manual_keys[0])
+        entry = (info.get("subtitles") or {}).get(manual_keys[0]) or [{}]
+        metadata = entry[0] if isinstance(entry, list) and entry else {}
+        return CaptionTrack(
+            "manual",
+            manual_keys[0],
+            metadata.get("name") if isinstance(metadata, dict) else None,
+            bool(metadata.get("is_translatable")) if isinstance(metadata, dict) else False,
+        )
     automatic_keys = _matching_track_keys(info.get("automatic_captions") or {}, source_language)
     if automatic_keys:
-        return CaptionTrack("automatic", automatic_keys[0])
+        entry = (info.get("automatic_captions") or {}).get(automatic_keys[0]) or [{}]
+        metadata = entry[0] if isinstance(entry, list) and entry else {}
+        return CaptionTrack(
+            "automatic",
+            automatic_keys[0],
+            metadata.get("name") if isinstance(metadata, dict) else None,
+            bool(metadata.get("is_translatable")) if isinstance(metadata, dict) else False,
+        )
     return None
+
+
+def authored_tracks(info: dict[str, Any]) -> list[CaptionTrack]:
+    result: list[CaptionTrack] = []
+    for language, entries in sorted((info.get("subtitles") or {}).items()):
+        normalized = _provider_language(language)
+        if normalized is None:
+            continue
+        metadata = entries[0] if isinstance(entries, list) and entries else {}
+        result.append(
+            CaptionTrack(
+                "manual",
+                language,
+                metadata.get("name") if isinstance(metadata, dict) else None,
+                bool(metadata.get("is_translatable")) if isinstance(metadata, dict) else False,
+            )
+        )
+    return result
 
 
 def _valid_cache(track_dir: Path, *, source_language: str, expected_video_key: str) -> bool:
@@ -121,6 +155,57 @@ def _cached_transcript(
     return None
 
 
+def _cached_manifest(
+    video_dir: Path, *, source_language: str, expected_video_key: str
+) -> dict[str, Any] | None:
+    try:
+        manifest = json.loads((video_dir / "manifest.json").read_text(encoding="utf-8"))
+        if (
+            manifest.get("manifest_schema_version") != 1
+            or manifest.get("source_language") != source_language
+            or manifest.get("video_key") != expected_video_key
+            or not manifest.get("canonical_source_track_id")
+            or not manifest.get("complete")
+        ):
+            return None
+        tracks = manifest.get("tracks", [])
+        source_tracks = [track for track in tracks if track.get("is_source")]
+        if (
+            len(source_tracks) != 1
+            or source_tracks[0].get("track_id") != manifest["canonical_source_track_id"]
+        ):
+            return None
+        for track in tracks:
+            if track.get("status") not in {"downloaded", "cached"}:
+                return None
+            if not _valid_cache(
+                video_dir / str(track["track_id"]),
+                source_language=source_language,
+                expected_video_key=expected_video_key,
+            ):
+                return None
+        source_kind = source_tracks[0].get("kind")
+        changed = False
+        if "source_selection" not in manifest:
+            manifest["source_selection"] = (
+                "authored_source" if source_kind == "authored" else "automatic_source"
+            )
+            changed = True
+        if "provenance" not in manifest:
+            manifest["provenance"] = {
+                "provider": "youtube",
+                "acquisition": "yt-dlp",
+            }
+            changed = True
+        if changed:
+            _write_json(video_dir / "manifest.json", manifest)
+        cached = dict(manifest)
+        cached["tracks"] = [{**track, "status": "cached"} for track in manifest.get("tracks", [])]
+        return cached
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temporary = path.with_suffix(path.suffix + ".tmp")
@@ -146,37 +231,28 @@ def discover_channel(channel: Channel, scan_limit: int, runner: Runner) -> list[
     return candidates
 
 
-def _download_one(
+def _download_track(
+    *,
+    track: CaptionTrack,
+    is_source: bool,
+    info: dict[str, Any],
     candidate: dict[str, Any],
     channel: Channel,
     catalogue: Catalogue,
+    video_dir: Path,
+    stable_video_key: str,
     raw_root: Path,
     runner: Runner,
-) -> dict[str, Any]:
-    provider = "youtube"
-    provider_video_id = candidate["id"]
-    stable_video_key = video_key(provider, catalogue.language, provider_video_id)
-    video_dir = raw_root / stable_video_key
-    cached = _cached_transcript(
-        video_dir,
-        source_language=catalogue.language,
-        expected_video_key=stable_video_key,
-    )
-    if cached is not None:
-        return {"video_id": provider_video_id, "status": "cached", "metadata": cached}
-
-    info = _json_output(["--skip-download", candidate["url"]], runner)
-    if info.get("is_live") or info.get("live_status") in {"is_live", "is_upcoming"}:
-        raise AcquisitionError("video is live or upcoming")
-    duration = info.get("duration")
-    if duration is not None and float(duration) < 60:
-        raise AcquisitionError("video is shorter than 60 seconds")
-    track = select_caption_track(info, catalogue.language)
-    if not track:
-        raise AcquisitionError(f"no captions matching source language {catalogue.language}")
-
+) -> tuple[str, dict[str, Any]]:
     stable_track_id = track_id(stable_video_key, track.kind, track.language)
     target = video_dir / stable_track_id
+    if _valid_cache(
+        target,
+        source_language=catalogue.language,
+        expected_video_key=stable_video_key,
+    ):
+        metadata = json.loads((target / "metadata.json").read_text(encoding="utf-8"))
+        return "cached", metadata
     raw_root.mkdir(parents=True, exist_ok=True)
     temporary_dir = Path(tempfile.mkdtemp(prefix=f".{stable_track_id}-", dir=raw_root))
     try:
@@ -214,16 +290,20 @@ def _download_one(
             "catalogue_schema_version": catalogue.schema_version,
             "catalogue_id": catalogue.language,
             "source_language": catalogue.language,
-            "provider": provider,
+            "provider": "youtube",
             "video_key": stable_video_key,
-            "video_id": provider_video_id,
+            "video_id": candidate["id"],
             "track_id": stable_track_id,
+            "provider_track_id": track.language,
+            "display_name": track.display_name,
+            "is_source": is_source,
+            "is_translatable": track.is_translatable,
             "url": info.get("webpage_url") or candidate["url"],
             "title": info.get("title") or candidate["title"],
             "channel_id": info.get("channel_id"),
             "channel": info.get("channel") or channel.name,
             "channel_config_id": channel.id,
-            "duration": duration,
+            "duration": info.get("duration"),
             "upload_date": info.get("upload_date"),
             "thumbnail": info.get("thumbnail"),
             "varieties": list(channel.varieties or ()),
@@ -240,10 +320,190 @@ def _download_one(
         if target.exists():
             shutil.rmtree(target)
         temporary_dir.replace(target)
-        return {"video_id": provider_video_id, "status": "downloaded", "metadata": metadata}
+        return "downloaded", metadata
     except Exception:
         shutil.rmtree(temporary_dir, ignore_errors=True)
         raise
+
+
+def _download_one(
+    candidate: dict[str, Any],
+    channel: Channel,
+    catalogue: Catalogue,
+    raw_root: Path,
+    runner: Runner,
+) -> dict[str, Any]:
+    provider = "youtube"
+    provider_video_id = candidate["id"]
+    stable_video_key = video_key(provider, catalogue.language, provider_video_id)
+    video_dir = raw_root / stable_video_key
+    manifest = _cached_manifest(
+        video_dir, source_language=catalogue.language, expected_video_key=stable_video_key
+    )
+    if manifest is not None:
+        source = next(track for track in manifest["tracks"] if track.get("is_source"))
+        metadata = json.loads(
+            (video_dir / source["track_id"] / "metadata.json").read_text(encoding="utf-8")
+        )
+        return {
+            "video_id": provider_video_id,
+            "status": "cached",
+            "metadata": metadata,
+            "manifest": manifest,
+        }
+    legacy_cached = _cached_transcript(
+        video_dir,
+        source_language=catalogue.language,
+        expected_video_key=stable_video_key,
+    )
+    try:
+        info = _json_output(["--skip-download", candidate["url"]], runner)
+    except Exception as error:
+        if legacy_cached is None:
+            raise
+        legacy_manifest = {
+            "manifest_schema_version": 1,
+            "provider": provider,
+            "video_key": stable_video_key,
+            "video_id": provider_video_id,
+            "source_language": catalogue.language,
+            "canonical_source_track_id": legacy_cached["track_id"],
+            "source_selection": (
+                "authored_source"
+                if legacy_cached["caption_kind"] == "manual"
+                else "automatic_source"
+            ),
+            "provenance": {"provider": "youtube", "acquisition": "yt-dlp"},
+            "tracks": [
+                {
+                    "track_id": legacy_cached["track_id"],
+                    "provider_track_id": legacy_cached["caption_language"],
+                    "language": _provider_language(legacy_cached["caption_language"])
+                    or legacy_cached["caption_language"],
+                    "display_name": None,
+                    "kind": "authored"
+                    if legacy_cached["caption_kind"] == "manual"
+                    else "automatic",
+                    "is_source": True,
+                    "is_translatable": False,
+                    "status": "cached",
+                    "content_sha256": legacy_cached["content_sha256"],
+                }
+            ],
+            "complete": False,
+            "enumeration_error": str(error),
+            "enumerated_at": datetime.now(UTC).isoformat(),
+        }
+        _write_json(video_dir / "manifest.json", legacy_manifest)
+        return {
+            "video_id": provider_video_id,
+            "status": "cached",
+            "metadata": legacy_cached,
+            "manifest": legacy_manifest,
+            "secondary_failures": [{"track_id": "enumeration", "error": str(error)}],
+        }
+    if info.get("is_live") or info.get("live_status") in {"is_live", "is_upcoming"}:
+        raise AcquisitionError("video is live or upcoming")
+    duration = info.get("duration")
+    if duration is not None and float(duration) < 60:
+        raise AcquisitionError("video is shorter than 60 seconds")
+    track = select_caption_track(info, catalogue.language)
+    if not track:
+        raise AcquisitionError(f"no captions matching source language {catalogue.language}")
+
+    source_status, metadata = _download_track(
+        track=track,
+        is_source=True,
+        info=info,
+        candidate=candidate,
+        channel=channel,
+        catalogue=catalogue,
+        video_dir=video_dir,
+        stable_video_key=stable_video_key,
+        raw_root=raw_root,
+        runner=runner,
+    )
+    source_track_id = metadata["track_id"]
+    records: list[dict[str, Any]] = [
+        {
+            "track_id": source_track_id,
+            "provider_track_id": track.language,
+            "language": _provider_language(track.language) or track.language,
+            "display_name": track.display_name,
+            "kind": "authored" if track.kind == "manual" else "automatic",
+            "is_source": True,
+            "is_translatable": track.is_translatable,
+            "status": source_status,
+            "content_sha256": metadata["content_sha256"],
+        }
+    ]
+    failures: list[dict[str, str]] = []
+    for secondary in authored_tracks(info):
+        secondary_id = track_id(stable_video_key, secondary.kind, secondary.language)
+        if secondary_id == source_track_id:
+            continue
+        try:
+            secondary_status, secondary_metadata = _download_track(
+                track=secondary,
+                is_source=False,
+                info=info,
+                candidate=candidate,
+                channel=channel,
+                catalogue=catalogue,
+                video_dir=video_dir,
+                stable_video_key=stable_video_key,
+                raw_root=raw_root,
+                runner=runner,
+            )
+            records.append(
+                {
+                    "track_id": secondary_id,
+                    "provider_track_id": secondary.language,
+                    "language": _provider_language(secondary.language) or secondary.language,
+                    "display_name": secondary.display_name,
+                    "kind": "authored",
+                    "is_source": False,
+                    "is_translatable": secondary.is_translatable,
+                    "status": secondary_status,
+                    "content_sha256": secondary_metadata["content_sha256"],
+                }
+            )
+        except Exception as error:
+            records.append(
+                {
+                    "track_id": secondary_id,
+                    "provider_track_id": secondary.language,
+                    "language": _provider_language(secondary.language) or secondary.language,
+                    "display_name": secondary.display_name,
+                    "kind": "authored",
+                    "is_source": False,
+                    "is_translatable": secondary.is_translatable,
+                    "status": "failed",
+                    "error": str(error),
+                }
+            )
+            failures.append({"track_id": secondary_id, "error": str(error)})
+    manifest = {
+        "manifest_schema_version": 1,
+        "provider": provider,
+        "video_key": stable_video_key,
+        "video_id": provider_video_id,
+        "source_language": catalogue.language,
+        "canonical_source_track_id": source_track_id,
+        "source_selection": "authored_source" if track.kind == "manual" else "automatic_source",
+        "provenance": {"provider": "youtube", "acquisition": "yt-dlp"},
+        "tracks": records,
+        "complete": not failures,
+        "enumerated_at": datetime.now(UTC).isoformat(),
+    }
+    _write_json(video_dir / "manifest.json", manifest)
+    return {
+        "video_id": provider_video_id,
+        "status": source_status,
+        "metadata": metadata,
+        "manifest": manifest,
+        "secondary_failures": failures,
+    }
 
 
 def acquire(
@@ -274,6 +534,9 @@ def acquire(
         "channels": [channel.id for channel in channels],
         "videos": [],
         "failures": [],
+        "authored_secondary_downloaded": 0,
+        "authored_secondary_cached": 0,
+        "authored_secondary_failed": 0,
     }
     queues: list[list[dict[str, Any]]] = []
     for channel in channels:
@@ -311,6 +574,19 @@ def acquire(
             try:
                 result = _download_one(candidate, channel, catalogue, raw_root, runner)
                 metadata = result["metadata"]
+                manifest = result.get("manifest") or {}
+                secondary_tracks = [
+                    track for track in manifest.get("tracks", []) if not track.get("is_source")
+                ]
+                report["authored_secondary_downloaded"] += sum(
+                    track.get("status") == "downloaded" for track in secondary_tracks
+                )
+                report["authored_secondary_cached"] += sum(
+                    track.get("status") == "cached" for track in secondary_tracks
+                )
+                report["authored_secondary_failed"] += sum(
+                    track.get("status") == "failed" for track in secondary_tracks
+                )
                 report["videos"].append(
                     {
                         "video_key": metadata["video_key"],
@@ -322,6 +598,13 @@ def acquire(
                         "caption_kind": metadata["caption_kind"],
                         "caption_language": metadata["caption_language"],
                         "title": metadata["title"],
+                        "source_selection": (
+                            "authored_source"
+                            if metadata["caption_kind"] == "manual"
+                            else "automatic_source"
+                        ),
+                        "authored_secondary_tracks": len(secondary_tracks),
+                        "authored_secondary_failures": result.get("secondary_failures", []),
                     }
                 )
             except Exception as error:

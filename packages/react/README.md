@@ -55,8 +55,13 @@ keys seek by one second when the player itself is focused. Buttons and the range
 native keyboard behavior. Status changes are announced through a polite live region, errors use an
 alert, and package motion is effectively disabled when the user requests reduced motion.
 
-`targetText`, `alignmentGroups`, `onTranslationRequest`, and `onTranslationCancel` are reserved
-extension points. Version 0.1 deliberately renders source text only.
+`targetLanguage`, `translationStatus`, `targetText`, `translationProvenance`, `alignmentGroups`,
+`onTranslationRequest`, and `onTranslationCancel` render the optional translation lifecycle. Target
+ranges aligned to the currently active source cue are highlighted; finer source timing can be
+supplied later without changing or regenerating semantic groups.
+
+The typed client exposes single-clip translation jobs and bounded translation batches. Hosts remain
+responsible for polling and for choosing the one active target language.
 
 ## Client
 
