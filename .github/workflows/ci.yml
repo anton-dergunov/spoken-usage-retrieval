@@ -32,11 +32,15 @@ jobs:
         with:
           node-version: "22"
           cache: npm
-          cache-dependency-path: web/package-lock.json
+          cache-dependency-path: |
+            packages/react/package-lock.json
+            web/package-lock.json
 
       - name: Install locked dependencies
         run: |
           uv sync --locked --extra dev
+          npm ci --prefix packages/react
+          npm --prefix packages/react run build
           npm ci --prefix web
 
       - name: Check Python
@@ -47,8 +51,10 @@ jobs:
           uv run pytest
           uv run speech-retrieval smoke
 
-      - name: Check web application
+      - name: Check React package and web application
         run: |
+          npm --prefix packages/react test
+          npm --prefix packages/react run verify:pack
           npm --prefix web test
           npm --prefix web run build
 

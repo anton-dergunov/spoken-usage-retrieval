@@ -5,6 +5,7 @@ import "@fontsource/ibm-plex-sans/400.css";
 import "@fontsource/ibm-plex-sans/600.css";
 import "@fontsource/literata/400.css";
 import "@fontsource/literata/600.css";
+import "@spoken-usage-retrieval/react/styles.css";
 import "./styles.css";
 import App from "./App";
 

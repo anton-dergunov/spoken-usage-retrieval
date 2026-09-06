@@ -6,7 +6,6 @@ export interface YouTubePlayer {
   loadVideoById(options: { videoId: string; startSeconds: number; endSeconds?: number }): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
-  cueVideoById(options: { videoId: string; startSeconds: number; endSeconds: number }): void;
   mute(): void;
   unMute(): void;
   setOption?(module: string, option: string, value: unknown): void;
@@ -25,14 +24,13 @@ export interface YouTubeNamespace {
         onError(event: { data: number }): void;
         onApiChange?(): void;
       };
-    }
+    },
   ) => YouTubePlayer;
   PlayerState: {
     ENDED: number;
     PLAYING: number;
     PAUSED: number;
     BUFFERING: number;
-    CUED: number;
   };
 }
 
@@ -64,5 +62,8 @@ export function loadYouTubeApi(): Promise<YouTubeNamespace> {
       document.head.appendChild(script);
     }
   });
+  loading.catch(() => { loading = null; });
   return loading;
 }
+
+export type YouTubeApiLoader = () => Promise<YouTubeNamespace>;

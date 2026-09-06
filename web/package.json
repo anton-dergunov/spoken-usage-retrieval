@@ -9,6 +9,7 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@spoken-usage-retrieval/react": "file:../packages/react",
     "@fontsource/ibm-plex-mono": "latest",
     "@fontsource/ibm-plex-sans": "latest",
     "@fontsource/literata": "latest",

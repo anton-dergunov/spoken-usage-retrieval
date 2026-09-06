@@ -1,6 +1,6 @@
 # Plan 06: Reusable React player
 
-**Status:** Planned
+**Status:** Complete
 
 **Depends on:** Plan 05
 
@@ -79,3 +79,22 @@ alignment arrive as additive states in Plans 08 and 10.
 - Implementing translation states or alignment rendering; the props exist, the behavior arrives with
   Plans 08 and 10.
 - Publishing to npm in this session.
+
+## Implementation and verification record
+
+- Added the independently buildable and locally packable `@spoken-usage-retrieval/react` package
+  with explicit root, client, types, and stylesheet exports and React/React DOM peer dependencies.
+- Extracted bounded YouTube playback, cleanup, custom transport controls, direct-source fallback,
+  retryable errors, cue/character-group source progression, status announcements, reduced-motion
+  behavior, controlled playback callbacks, blind evaluation mode, and replay/keyboard controls.
+- Added public source-only clip/search/service types and reserved target text, alignment, and
+  translation callback props without rendering future translation states prematurely.
+- Added a caller-configured typed client for all Plan 05 browser-facing routes; bearer operator
+  credentials are isolated to channel mutation methods.
+- Updated the demo to consume only package exports and package CSS while retaining host ownership of
+  result selection, source-language selection, page layout, and visual theme variables.
+- Documented minimal data-only use, host-dialog composition, keyboard/accessibility behavior, CSS
+  variables, local packing, peer dependency behavior, and the typed client.
+- Verification: package type build and 13 component/client/style tests; production demo build and 7
+  UI tests; `npm pack` installation, CSS import, type-check, production build, and single-React check
+  in a fresh minimal consumer.

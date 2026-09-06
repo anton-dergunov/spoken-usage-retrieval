@@ -1,7 +1,17 @@
 import { useEffect, useState } from "react";
-import { getStatus, getSuggestions, searchCorpus } from "./api";
-import ClipPlayer, { HighlightedSentence, formatClock } from "./ClipPlayer";
-import type { CorpusStatus, MatchMode, SearchResponse, SearchResult, Suggestion } from "./types";
+import {
+  SpeechClipPlayer,
+  createSpeechRetrievalClient,
+  formatClock,
+  HighlightedSourceText,
+  type CorpusStatus,
+  type MatchMode,
+  type SearchResponse,
+  type SearchResult,
+  type Suggestion,
+} from "@spoken-usage-retrieval/react";
+
+const client = createSpeechRetrievalClient({ baseUrl: "/api/v1" });
 
 function SearchIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 20-4.7-4.7a7.5 7.5 0 1 0-1 1L20 21l1-1ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z" /></svg>;
@@ -39,7 +49,7 @@ function ResultCard({ result, selected, onSelect }: {
   return <button className={`result-card${selected ? " selected" : ""}`} onClick={onSelect} aria-pressed={selected}>
     <span className="result-number" aria-hidden="true">{selected ? "▶" : "○"}</span>
     <span className="result-body">
-      <span className="result-sentence"><HighlightedSentence result={result} /></span>
+      <span className="result-sentence"><HighlightedSourceText text={result.sentence} match={result.match} /></span>
       <span className="result-meta">
         <span className="match-type">{result.match_type === "lemma" ? "Related form" : "Exact form"}</span>
         <span>{result.video.channel}</span>
@@ -78,7 +88,7 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    getStatus()
+    client.status()
       .then((corpusStatus) => {
         setStatus(corpusStatus);
         const requested = new URLSearchParams(window.location.search).get("language");
@@ -101,7 +111,7 @@ export default function App() {
     setError("");
     if (!language) return;
     const controller = new AbortController();
-    getSuggestions(language, controller.signal)
+    client.suggestions({ language, signal: controller.signal })
       .then(setSuggestions)
       .catch((reason: Error) => {
         if (reason.name !== "AbortError") setError(reason.message);
@@ -124,7 +134,7 @@ export default function App() {
     const timer = window.setTimeout(() => {
       setLoading(true);
       setError("");
-      searchCorpus(trimmed, language, controller.signal, matchMode)
+      client.search({ query: trimmed, language, signal: controller.signal, matchMode })
         .then((next) => {
           if (controller.signal.aborted) return;
           setResponse(next);
@@ -225,7 +235,7 @@ export default function App() {
         </section>
 
         {selected && <aside className="viewer-panel">
-          <ClipPlayer key={selected.occurrence_id} result={selected} />
+          <SpeechClipPlayer key={selected.occurrence_id} clip={selected} blind />
         </aside>}
       </div>}
     </main>

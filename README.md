@@ -39,6 +39,8 @@ access for the acquisition step.
 
 ```bash
 uv sync --locked
+npm ci --prefix packages/react
+npm --prefix packages/react run build
 npm ci --prefix web
 
 # Cache captions from every enabled catalogue and rebuild data/index/corpus.sqlite3.
@@ -56,6 +58,22 @@ available as compatibility wrappers, but the installed CLI exposes only the stab
 
 `serve` is API-only unless `--web-dist` is supplied. For frontend development, run it without a web
 build and then run `npm --prefix web run dev`; Vite proxies `/api` to port 8000.
+
+### React player and client
+
+The demo consumes the same locally packable [`@spoken-usage-retrieval/react`](packages/react/README.md)
+package intended for host applications and the evaluation tool. It exports `SpeechClipPlayer`, the
+typed `/api/v1` client, service contract types, and an isolated stylesheet. The host keeps ownership
+of dialogs, navigation, routing, and persistence.
+
+Install and verify the package separately before working on the demo:
+
+```bash
+npm ci --prefix packages/react
+npm --prefix packages/react test
+npm --prefix packages/react run build
+npm ci --prefix web
+```
 
 ### Library, CLI, and service
 
@@ -164,6 +182,9 @@ uv run ruff format --check .
 uv run mypy
 uv run pytest
 uv run speech-retrieval smoke
+npm --prefix packages/react test
+npm --prefix packages/react run build
+npm --prefix packages/react run verify:pack
 npm --prefix web run test
 npm --prefix web run build
 ```
