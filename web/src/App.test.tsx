@@ -8,7 +8,8 @@ const suggestionResponse = {
 };
 const statusResponse = {
   ready: true, package_version: "0.1.0", database_schema_version: 1,
-  built_at: "2026-09-04T00:00:00Z", max_ngram: 5, analyzer_id: "unicode-regex-v1",
+  built_at: "2026-09-04T00:00:00Z", max_ngram: 5, analyzer_selection: "auto",
+  analyzer_id: "unicode-regex-v1",
   configured_languages: ["es"], enabled_languages: ["es"], indexed_languages: ["es"],
   languages: [{ source_language: "es", configured: true, enabled: true, indexed: true,
     configured_channels: 24, enabled_channels: 4, videos: 10, segments: 321, occurrences: 4000,

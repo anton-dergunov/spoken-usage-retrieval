@@ -100,11 +100,29 @@ Stanza on a language normally handled by simplemma, use `build-index --analyzer 
 `--analyzer unicode` creates an exact-only baseline; `--analyzer simplemma` explicitly selects the
 normal dictionary analyzer. Indexing and search never download models.
 
+Analyzer selection belongs to index creation and applies to every language in that build:
+
+```bash
+uv run speech-retrieval build-index --analyzer unicode
+uv run speech-retrieval build-index --analyzer simplemma
+uv run speech-retrieval build-index --analyzer stanza --models-dir data/models/stanza
+```
+
+`auto` remains the default and resolves each language to simplemma, then a locally installed Stanza
+model, then Unicode. The build report and `/api/status` expose `analyzer_selection` plus the resolved
+analyzer and compatibility identity for every indexed language. Python and HTTP search requests do
+not select another analyzer: they read that language's recorded provenance from the index and reuse
+the same implementation automatically. Search responses expose the resolved `query_analyzer`.
+
 Without usable morphology, `auto` returns surface matches and `morphology_available: false` with
 an explanation. Explicit `lemma` raises `UnsupportedAnalysisError`; HTTP returns 400 with
 `detail.code: "unsupported_analysis"` and `detail.message`. Incompatible schema or analysis versions
-return a rebuild requirement (HTTP 503). Schema 2 indexes must be rebuilt from versioned caption
-caches; raw acquisition files remain unchanged.
+return a rebuild requirement (HTTP 503). This exact-only fallback applies when indexing selected and
+recorded Unicode. If an existing index records Simplemma or Stanza but that package or model is no
+longer available to the server, every search returns HTTP 503 rather than silently analyzing the
+query differently. Restore the recorded analyzer or rebuild explicitly with a lighter choice.
+Schema 2 indexes must be rebuilt from versioned caption caches; raw acquisition files remain
+unchanged.
 
 Simplemma supplies neither POS nor morphological features, so those fields are nullable. It can
 miss inflections or choose an unintended lemma; related forms are candidates, not proof of the same

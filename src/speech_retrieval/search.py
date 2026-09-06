@@ -11,7 +11,6 @@ from typing import Any
 from .analysis import (
     AnalyzedToken,
     IncompatibleAnalyzerError,
-    UnicodeAnalyzer,
     UnsupportedAnalysisError,
     recorded_analyzer,
 )
@@ -99,8 +98,12 @@ class Corpus:
             try:
                 analyzer = recorded_analyzer(provenance, self.models_dir)
             except UnsupportedAnalysisError as error:
-                analyzer = UnicodeAnalyzer(source_language, str(error))
-                reason = str(error)
+                analyzer_name = provenance.get("name", "recorded analyzer")
+                raise IncompatibleIndexError(
+                    f"Index for {source_language} was built with {analyzer_name}, but that "
+                    f"analyzer is unavailable: {error}. Restore the recorded analyzer or rebuild "
+                    "with --analyzer unicode, simplemma, or stanza."
+                ) from error
             except IncompatibleAnalyzerError as error:
                 raise IncompatibleIndexError(str(error)) from error
             morphology_available = analyzer.morphology_available
@@ -496,6 +499,7 @@ class Corpus:
             "database_schema_version": int(meta["schema_version"]),
             "built_at": meta.get("built_at"),
             "max_ngram": int(meta.get("max_ngram", 0)),
+            "analyzer_selection": meta.get("analyzer_selection"),
             "analyzer_id": meta.get("analyzer_id"),
             "configured_languages": sorted(configured),
             "enabled_languages": enabled_languages,

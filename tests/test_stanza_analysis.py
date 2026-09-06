@@ -6,6 +6,7 @@ from types import ModuleType, SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
+from fastapi.testclient import TestClient
 from test_morphology import add_text
 
 from speech_retrieval import analysis
@@ -15,8 +16,9 @@ from speech_retrieval.analysis import (
     clear_analyzer_cache,
     get_analyzer,
 )
+from speech_retrieval.api import create_app
 from speech_retrieval.indexing import build_index
-from speech_retrieval.search import Corpus
+from speech_retrieval.search import Corpus, IncompatibleIndexError
 
 
 @pytest.fixture
@@ -122,22 +124,56 @@ def test_non_whitespace_phrase_offsets_surface_preservation_and_reuse(
     assert "mwt" not in pipeline.call_args.kwargs["processors"]
 
 
-def test_missing_stanza_models_never_download_and_exact_remains_usable(tmp_path, fake_stanza):
+@pytest.mark.parametrize(
+    ("selection", "expected_name", "morphology_available"),
+    [
+        ("unicode", "unicode", False),
+        ("simplemma", "simplemma", True),
+        ("stanza", "stanza", True),
+    ],
+)
+def test_explicit_index_analyzer_is_recorded_and_reused_by_python_and_http_queries(
+    tmp_path, fake_stanza, selection, expected_name, morphology_available
+):
+    model_dir, _, _, _ = fake_stanza
+    add_text(tmp_path, "casas.")
+    report = build_index(data_dir=tmp_path, analyzer=selection, models_dir=model_dir)
+    corpus = Corpus(tmp_path, models_dir=model_dir)
+
+    assert report["analyzer_selection"] == selection
+    assert report["languages"]["es"]["analyzer"]["name"] == expected_name
+    status = corpus.status()
+    assert status["analyzer_selection"] == selection
+    assert status["languages"][0]["analyzer"]["name"] == expected_name
+
+    result = corpus.search("casas", source_language="es", match_mode="exact")
+    assert result["total_occurrences"] == 1
+    assert result["query_analyzer"]["name"] == expected_name
+    assert result["results"][0]["analyzer"]["name"] == expected_name
+    assert result["morphology_available"] is morphology_available
+
+    with TestClient(create_app(data_dir=tmp_path, web_dist=None, models_dir=model_dir)) as client:
+        response = client.get(
+            "/api/search",
+            params={"q": "casas", "language": "es", "match_mode": "exact"},
+        )
+    assert response.status_code == 200
+    assert response.json()["query_analyzer"]["name"] == expected_name
+
+
+def test_missing_recorded_stanza_models_never_download_and_returns_503(tmp_path, fake_stanza):
     model_dir, pipeline, package, _ = fake_stanza
     add_text(tmp_path, "東京大学。", language="ja")
     build_index(data_dir=tmp_path, models_dir=model_dir)
     clear_analyzer_cache()
     pipeline.side_effect = FileNotFoundError("model not found")
     corpus = Corpus(tmp_path, models_dir=model_dir)
-    result = corpus.search("東京大学", source_language="ja")
-    assert result["total_occurrences"] == 1
-    assert result["morphology_available"] is False
-    assert (
-        corpus.search("東京大学", source_language="ja", match_mode="exact")["total_occurrences"]
-        == 1
-    )
-    with pytest.raises(UnsupportedAnalysisError):
-        corpus.search("東京大学", source_language="ja", match_mode="lemma")
+    with pytest.raises(IncompatibleIndexError, match="built with stanza.*unavailable"):
+        corpus.search("東京大学", source_language="ja")
+    with TestClient(create_app(data_dir=tmp_path, web_dist=None, models_dir=model_dir)) as client:
+        response = client.get("/api/search", params={"q": "東京大学", "language": "ja"})
+    assert response.status_code == 503
+    assert "Restore the recorded analyzer" in response.json()["detail"]
     package.download.assert_not_called()
 
 

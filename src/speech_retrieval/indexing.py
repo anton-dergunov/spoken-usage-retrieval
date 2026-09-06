@@ -369,6 +369,7 @@ def build_index(
                 ("package_version", __version__),
                 ("built_at", built_at),
                 ("max_ngram", str(max_ngram)),
+                ("analyzer_selection", analyzer),
                 (
                     "analyzer_id",
                     next(iter(analyzer_ids.values())) if len(analyzer_ids) == 1 else "mixed",
@@ -510,6 +511,7 @@ def build_index(
         "database_schema_version": DATABASE_SCHEMA_VERSION,
         "built_at": built_at,
         "package_version": __version__,
+        "analyzer_selection": analyzer,
         "analyzer_id": next(iter(analyzer_ids.values())) if len(analyzer_ids) == 1 else "mixed",
         "analyzers": {language: item.provenance.as_dict() for language, item in analyzers.items()},
         "max_ngram": max_ngram,

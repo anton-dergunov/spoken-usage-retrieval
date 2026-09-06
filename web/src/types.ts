@@ -112,6 +112,7 @@ export interface CorpusStatus {
   database_schema_version: number;
   built_at: string;
   max_ngram: number;
+  analyzer_selection: "auto" | "unicode" | "simplemma" | "stanza" | null;
   analyzer_id: string;
   configured_languages: string[];
   enabled_languages: string[];

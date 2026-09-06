@@ -150,7 +150,11 @@ A small `TextAnalyzer` protocol isolates the toolkit. Simplemma is the no-model 
 an optional, locally provisioned CPU pipeline with tokenization, applicable multi-word expansion,
 POS, and lemmatization. Each segment is analyzed once. Provenance records the package/model version
 and settings in the index and derived cache. Query analysis uses the recorded analyzer, not whatever
-new toolkit happens to have been installed since indexing. Changing its identity requires a rebuild.
+new toolkit happens to have been installed since indexing. The index-build selection and resolved
+per-language analyzers are exposed in the build report and status API. Query endpoints deliberately
+have no analyzer override. Changing an analyzer identity requires a rebuild; if the recorded package
+or model is unavailable, search fails with an actionable compatibility error instead of substituting
+Unicode and changing token or lemma keys.
 
 Query candidates combine the analyzer's lemma, observed surface-to-lemma mappings, and the query
 form itself when it is an attested corpus lemma. This last route matters when the dictionary form is

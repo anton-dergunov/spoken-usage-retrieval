@@ -92,6 +92,12 @@ corpus.search(
   supports the language; `lemma` returns a typed unsupported-analysis error in that case.
 - Results name the analyzer that produced them so a mixed-analyzer corpus stays interpretable.
 - HTTP uses the same `language` and `match_mode` vocabulary and error semantics.
+- Analyzer choice is an index-build setting (`auto`, `unicode`, `simplemma`, or `stanza`), recorded
+  in build/status output. Queries derive the analyzer from per-language index provenance and expose
+  the resolved query analyzer; they do not accept an independent analyzer override.
+- An index that intentionally records Unicode retains exact-only fallback behavior. If an index
+  records Simplemma or Stanza and that analyzer later becomes unavailable, search returns an
+  actionable compatibility error and HTTP 503 instead of silently substituting another analyzer.
 - Existing source text and highlight offsets remain canonical; lemmas never replace displayed text.
 
 ## Acceptance tests and verification
