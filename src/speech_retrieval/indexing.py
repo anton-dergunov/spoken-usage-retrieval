@@ -19,7 +19,7 @@ from .identity import (
     DATABASE_SCHEMA_VERSION,
     REPORT_SCHEMA_VERSION,
 )
-from .text import accent_key, tokens_with_spans
+from .text import tokens_with_spans
 
 SCHEMA = """
 PRAGMA foreign_keys = ON;
@@ -75,42 +75,32 @@ CREATE TABLE segments (
     analyzed_token_count INTEGER NOT NULL
 );
 CREATE INDEX segments_language ON segments(source_language, video_key, segment_id);
-CREATE TABLE occurrences (
-    occurrence_id TEXT PRIMARY KEY,
+CREATE TABLE token_streams (
+    stream_id TEXT PRIMARY KEY,
     source_language TEXT NOT NULL,
-    normalized TEXT NOT NULL,
-    accent_key TEXT NOT NULL,
-    n INTEGER NOT NULL,
     segment_id TEXT NOT NULL REFERENCES segments(segment_id),
-    token_start INTEGER NOT NULL,
-    token_end INTEGER NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('exact', 'lemma')),
+    token_count INTEGER NOT NULL
+) WITHOUT ROWID;
+CREATE INDEX token_streams_segment ON token_streams(source_language, segment_id, kind);
+CREATE TABLE stream_tokens (
+    stream_id TEXT NOT NULL REFERENCES token_streams(stream_id),
+    source_language TEXT NOT NULL,
+    kind TEXT NOT NULL CHECK(kind IN ('exact', 'lemma')),
+    position INTEGER NOT NULL,
+    normalized TEXT NOT NULL,
     char_start INTEGER NOT NULL,
     char_end INTEGER NOT NULL,
-    surface TEXT NOT NULL,
-    token_count INTEGER NOT NULL
-);
-CREATE INDEX occurrences_lookup ON occurrences(source_language, normalized, n);
-CREATE INDEX occurrences_segment ON occurrences(source_language, segment_id);
+    PRIMARY KEY(stream_id, position)
+) WITHOUT ROWID;
+CREATE INDEX stream_token_seed
+    ON stream_tokens(source_language, kind, normalized, stream_id, position);
 CREATE TABLE analyzers (
     source_language TEXT PRIMARY KEY,
     provenance_json TEXT NOT NULL,
     morphology_available INTEGER NOT NULL,
     unavailable_reason TEXT
 );
-CREATE TABLE occurrence_keys (
-    key_id INTEGER PRIMARY KEY,
-    source_language TEXT NOT NULL,
-    occurrence_id TEXT NOT NULL REFERENCES occurrences(occurrence_id),
-    kind TEXT NOT NULL CHECK(kind IN ('exact', 'lemma')),
-    normalized TEXT NOT NULL,
-    n INTEGER NOT NULL,
-    lemmas_json TEXT,
-    first_lemma TEXT,
-    suggestion_eligible INTEGER NOT NULL DEFAULT 0,
-    UNIQUE(occurrence_id, kind, normalized, n)
-);
-CREATE INDEX keys_surface ON occurrence_keys(source_language, kind, normalized, n);
-CREATE INDEX keys_lemma ON occurrence_keys(source_language, kind, n, first_lemma);
 CREATE TABLE form_lexicon (
     source_language TEXT NOT NULL,
     normalized TEXT NOT NULL,
@@ -132,6 +122,10 @@ CREATE TABLE ngram_stats (
 );
 CREATE INDEX ngram_stats_popular
     ON ngram_stats(source_language, n, video_count DESC, total_count DESC);
+CREATE TABLE language_stats (
+    source_language TEXT PRIMARY KEY,
+    occurrence_count INTEGER NOT NULL
+);
 """
 
 
@@ -213,80 +207,51 @@ def _insert_video(connection: sqlite3.Connection, metadata: dict[str, Any]) -> N
     )
 
 
-def _insert_occurrences(
+def _insert_token_streams(
     connection: sqlite3.Connection,
     segment_id: str,
+    video_key: str,
     language: str,
     text: str,
     analysis: Analysis,
     max_ngram: int,
 ) -> int:
-    # One physical occurrence can have several surface/lemma keys (including MWT spans).
-    spans: dict[tuple[int, int], str] = {}
+    spans: set[tuple[int, int]] = set()
 
-    def insert_key(
-        selected,
-        start: int,
+    def insert_stream(
+        name: str,
         kind: str,
-        normalized: str,
-        lemmas=None,
-        *,
-        suggestion=False,
-        token_count=None,
-    ):
-        bounds = (selected[0].start, selected[-1].end)
-        occurrence_id = spans.get(bounds)
-        if occurrence_id is None:
-            occurrence_id = f"{segment_id}:{bounds[0]}:{bounds[1]}"
-            spans[bounds] = occurrence_id
-            surface = text[bounds[0] : bounds[1]]
-            connection.execute(
-                "INSERT INTO occurrences VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    occurrence_id,
-                    language,
-                    normalized,
-                    accent_key(surface),
-                    len(selected),
-                    segment_id,
-                    start,
-                    start + len(selected),
-                    *bounds,
-                    surface,
-                    token_count if token_count is not None else len(analysis.tokens),
-                ),
-            )
+        rows: list[tuple[int, str, int, int]],
+        token_count: int,
+    ) -> None:
+        if not rows:
+            return
+        stream_id = f"{segment_id}:{name}"
         connection.execute(
-            """INSERT INTO occurrence_keys(
-                source_language, occurrence_id, kind, normalized, n, lemmas_json, first_lemma,
-                suggestion_eligible
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(occurrence_id, kind, normalized, n) DO UPDATE
-            SET suggestion_eligible = MAX(suggestion_eligible, excluded.suggestion_eligible)""",
-            (
-                language,
-                occurrence_id,
-                kind,
-                normalized,
-                len(selected),
-                json.dumps(lemmas, ensure_ascii=False) if lemmas else None,
-                lemmas[0] if lemmas else None,
-                suggestion,
-            ),
+            "INSERT INTO token_streams VALUES (?, ?, ?, ?, ?)",
+            (stream_id, language, segment_id, kind, token_count),
         )
+        connection.executemany(
+            "INSERT INTO stream_tokens VALUES (?, ?, ?, ?, ?, ?, ?)",
+            [
+                (stream_id, language, kind, position, normalized, start, end)
+                for position, normalized, start, end in rows
+            ],
+        )
+        for first_index, first in enumerate(rows):
+            for last_index in range(first_index, min(len(rows), first_index + max_ngram)):
+                last = rows[last_index]
+                if last[0] != first[0] + last_index - first_index:
+                    break
+                spans.add((first[2], last[3]))
 
     # Retain the entire original regex inventory, independently of toolkit tokenization.
     legacy = tokens_with_spans(text)
-    for start in range(len(legacy)):
-        for size in range(1, min(max_ngram, len(legacy) - start) + 1):
-            selected = legacy[start : start + size]
-            insert_key(
-                selected,
-                start,
-                "exact",
-                " ".join(token.normalized for token in selected),
-                token_count=len(legacy),
-            )
+    unicode_rows = [
+        (position, token.normalized, token.start, token.end)
+        for position, token in enumerate(legacy)
+    ]
+    insert_stream("unicode", "exact", unicode_rows, len(legacy))
 
     # Surface words use source-token boundaries, not synthetic MWT word strings.
     surfaces: list[AnalyzedToken] = []
@@ -299,25 +264,39 @@ def _insert_occurrences(
                 ON CONFLICT DO UPDATE SET frequency = frequency + 1""",
                 (language, token.normalized, token.lemma, token.upos),
             )
+    surface_rows = [
+        (position, token.normalized, token.start, token.end)
+        for position, token in enumerate(surfaces)
+    ]
+    if surface_rows != unicode_rows:
+        insert_stream("analyzed-surface", "exact", surface_rows, len(surfaces))
+    else:
+        for first_index, first in enumerate(surface_rows):
+            for last_index in range(first_index, min(len(surface_rows), first_index + max_ngram)):
+                last = surface_rows[last_index]
+                spans.add((first[2], last[3]))
+
     for start in range(len(surfaces)):
-        for size in range(1, min(max_ngram, len(surfaces) - start) + 1):
-            selected_surface = surfaces[start : start + size]
-            insert_key(
-                selected_surface,
-                start,
-                "exact",
-                " ".join(t.normalized for t in selected_surface),
-                suggestion=True,
-                token_count=len(surfaces),
+        for size in range(1, min(3, max_ngram, len(surfaces) - start) + 1):
+            selected = surfaces[start : start + size]
+            bounds = (selected[0].start, selected[-1].end)
+            connection.execute(
+                "INSERT INTO suggestion_observations VALUES (?, ?, ?, ?, ?)",
+                (
+                    language,
+                    " ".join(token.normalized for token in selected),
+                    size,
+                    text[bounds[0] : bounds[1]],
+                    video_key,
+                ),
             )
-    for start in range(len(analysis.tokens)):
-        for size in range(1, min(max_ngram, len(analysis.tokens) - start) + 1):
-            selected_words = analysis.tokens[start : start + size]
-            if all(token.lemma for token in selected_words):
-                lemmas = [token.lemma for token in selected_words]
-                insert_key(
-                    selected_words, start, "lemma", " ".join(str(lemma) for lemma in lemmas), lemmas
-                )
+
+    lemma_rows = [
+        (position, str(token.lemma), token.start, token.end)
+        for position, token in enumerate(analysis.tokens)
+        if token.lemma
+    ]
+    insert_stream("lemma", "lemma", lemma_rows, len(analysis.tokens))
     return len(spans)
 
 
@@ -362,6 +341,15 @@ def build_index(
     try:
         connection = sqlite3.connect(temporary_db)
         connection.executescript(SCHEMA)
+        connection.execute(
+            """CREATE TEMP TABLE suggestion_observations (
+                source_language TEXT NOT NULL,
+                normalized TEXT NOT NULL,
+                n INTEGER NOT NULL,
+                surface TEXT NOT NULL,
+                video_key TEXT NOT NULL
+            )"""
+        )
         connection.executemany(
             "INSERT INTO meta(key, value) VALUES (?, ?)",
             [
@@ -453,8 +441,14 @@ def build_index(
                 boundary_counts[segment.boundary_reason] += 1
                 language_counts[language]["segments"] += 1
                 segment_count += 1
-                count = _insert_occurrences(
-                    connection, segment.id, language, segment.text, analysis, max_ngram
+                count = _insert_token_streams(
+                    connection,
+                    segment.id,
+                    segment.video_key,
+                    language,
+                    segment.text,
+                    analysis,
+                    max_ngram,
                 )
                 occurrence_count += count
                 language_counts[language]["occurrences"] += count
@@ -463,13 +457,18 @@ def build_index(
             INSERT INTO ngram_stats(
                 source_language, normalized, n, surface, total_count, video_count
             )
-            SELECT k.source_language, k.normalized, k.n, MIN(o.surface), COUNT(*),
-                   COUNT(DISTINCT s.video_key)
-            FROM occurrence_keys k JOIN occurrences o USING(occurrence_id)
-            JOIN segments s ON s.segment_id = o.segment_id
-            WHERE k.kind = 'exact' AND k.suggestion_eligible = 1
-            GROUP BY k.source_language, k.normalized, k.n
+            SELECT source_language, normalized, n, MIN(surface), COUNT(*),
+                   COUNT(DISTINCT video_key)
+            FROM suggestion_observations
+            GROUP BY source_language, normalized, n
             """
+        )
+        connection.executemany(
+            "INSERT INTO language_stats VALUES (?, ?)",
+            [
+                (language, counts["occurrences"])
+                for language, counts in sorted(language_counts.items())
+            ],
         )
         connection.commit()
         connection.execute("PRAGMA optimize")

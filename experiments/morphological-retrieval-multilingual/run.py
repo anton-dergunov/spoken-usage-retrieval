@@ -550,6 +550,8 @@ def render_report(results: dict[str, Any]) -> str:
             "",
             "Physical occurrences, the form lexicon, token rows, and secondary indexes are separated by SQLite `dbstat` in each result. Because exact and lemma keys share pages in the production-shaped key table, `logical_breakdown` separately records their row counts and payload bytes. Compact timing is reported only after occurrence IDs, match routes, counts, and character spans match the dual-key reference.",
             "",
+            "Parity enumerates every contiguous one-to-five-token key in the analyzed data. The reported latency ratio uses the deterministic morphology query manifest, which is dominated by individual word forms rather than dedicated five-word phrase probes.",
+            "",
             "## Retrieval and anomalous mappings",
             "",
             "The query manifest is selected by stable SHA-256 order with seed `20260905`. It includes up to 20 lemmas with at least two observed test forms and five test occurrences, plus up to 10 forms that have multiple train/dev analyses. Results include exact count, deduplicated auto expansion, candidate-lemma recall, intended-lemma precision, and ambiguous-union precision.",
@@ -641,7 +643,7 @@ def render_report(results: dict[str, Any]) -> str:
     lines.extend(
         [
             "",
-            "The analyzer recommendation maximizes strict lemma accuracy multiplied by end-to-end lemma coverage. Runtime and downstream LLM filtering remain deployment considerations; this experiment does not change production defaults.",
+            "The analyzer recommendation maximizes strict lemma accuracy multiplied by end-to-end lemma coverage. Runtime and downstream LLM filtering remain deployment considerations. The experiment itself does not change production defaults; promotion belongs to a separate implementation plan.",
             "",
             index_decision,
             "",

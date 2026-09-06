@@ -195,7 +195,7 @@ def test_api_contract_requires_and_preserves_language(tmp_path):
     assert status["videos"] == 2
     assert status["max_ngram"] == 5
     assert status["analyzer_selection"] == "auto"
-    assert status["database_schema_version"] == 2
+    assert status["database_schema_version"] == 3
 
 
 def test_pre_version_index_requires_a_rebuild(tmp_path):

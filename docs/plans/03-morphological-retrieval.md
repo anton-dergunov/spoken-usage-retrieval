@@ -127,7 +127,8 @@ corpus.search(
 
 - Implemented schema 2 with separate surface/lemma lookup keys, canonical source spans, analyzed
   tokens, nullable linguistic annotations, a frequency-bearing form lexicon, and per-language
-  provenance. Raw acquisition cache schema remains unchanged.
+  provenance. [Plan 04a](04a-production-morphology-promotion.md) later replaces those materialized
+  keys with schema 3 token streams. Raw acquisition cache schema remains unchanged.
 - `auto` is the default in Python, HTTP, and the viewer. Exact results precede lemma-only results
   through sentence selection and video diversification. The viewer exposes all three modes and
   distinguishes related forms; highlights use Unicode code-point offsets.

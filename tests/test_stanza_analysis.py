@@ -53,6 +53,11 @@ def fake_stanza(tmp_path, monkeypatch):
                 SimpleNamespace(text="el", lemma="el", upos="DET", feats="Gender=Masc|Number=Sing"),
             ]
             tokens.append(SimpleNamespace(start_char=0, end_char=2, words=words))
+        elif text in {"a", "el"}:
+            word = SimpleNamespace(
+                text=text, lemma=text, upos="NOUN", feats=None, start_char=0, end_char=len(text)
+            )
+            tokens.append(SimpleNamespace(start_char=0, end_char=len(text), words=[word]))
         else:
             # Character segmentation intentionally differs from the regex tokenizer.
             for i, char in enumerate(text):
@@ -101,6 +106,20 @@ def test_stanza_expansion_uses_shared_parent_offsets_and_nullable_features(fake_
     assert config["pos_batch_size"] == config["lemma_batch_size"] == 256
 
 
+def test_shared_span_results_report_the_matching_expanded_lemma(tmp_path, fake_stanza):
+    model_dir, _, _, _ = fake_stanza
+    add_text(tmp_path, "al")
+    build_index(data_dir=tmp_path, analyzer="stanza", models_dir=model_dir)
+    corpus = Corpus(tmp_path, models_dir=model_dir)
+
+    for lemma in ("a", "el"):
+        result = corpus.search(lemma, source_language="es", match_mode="lemma")
+        assert result["total_occurrences"] == 1
+        assert result["results"][0]["matched_surface"] == "al"
+        assert result["results"][0]["matched_lemma"] == lemma
+        assert result["results"][0]["occurrence_id"].endswith(":0:2")
+
+
 @pytest.mark.parametrize(
     "language,text", [("ja", "東京大学"), ("ko", "한국학교"), ("zh", "北京大学")]
 )
@@ -127,6 +146,7 @@ def test_non_whitespace_phrase_offsets_surface_preservation_and_reuse(
 @pytest.mark.parametrize(
     ("selection", "expected_name", "morphology_available"),
     [
+        ("auto", "stanza", True),
         ("unicode", "unicode", False),
         ("simplemma", "simplemma", True),
         ("stanza", "stanza", True),

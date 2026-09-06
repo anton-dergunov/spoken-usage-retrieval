@@ -48,4 +48,8 @@ Mark this plan complete only when all ten languages have traceable Unicode and S
 
 ## Result
 
-The September 5–6, 2026 run completed all 27 applicable analyzer/language rows and recorded three explicit simplemma `N/A` rows. Stanza had the strongest coverage-adjusted strict lemma score for every target language. All partial-index and token-position parity checks passed. Across the matrix, token positions reduced SQLite storage from 873.0 MB to 130.1 MB (85.1%) while increasing median warm lookup from 0.111 ms to 0.149 ms. The report recommends a separate migration plan; production behavior remains unchanged.
+The September 5–6, 2026 run completed all 27 applicable analyzer/language rows and recorded three explicit simplemma `N/A` rows. Stanza had the strongest coverage-adjusted strict lemma score for every target language. All partial-index and token-position parity checks passed. Across the matrix, token positions reduced SQLite storage from 873.0 MB to 130.1 MB (85.1%) while increasing median warm lookup from 0.111 ms to 0.149 ms. At experiment completion, the report recommended a separate migration plan and left production behavior unchanged.
+
+The user reviewed and accepted both recommendations on September 6, 2026. Their production
+promotion is tracked separately in [Plan 04a](04a-production-morphology-promotion.md), preserving
+this document as the experiment and decision record.

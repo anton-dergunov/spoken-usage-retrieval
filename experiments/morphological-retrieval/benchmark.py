@@ -18,11 +18,41 @@ import time
 from pathlib import Path
 
 from speech_retrieval.analysis import clear_analyzer_cache, get_analyzer
-from speech_retrieval.identity import CACHE_SCHEMA_VERSION, track_id, video_key
+from speech_retrieval.identity import (
+    CACHE_SCHEMA_VERSION,
+    DATABASE_SCHEMA_VERSION,
+    track_id,
+    video_key,
+)
 from speech_retrieval.indexing import build_index
 from speech_retrieval.search import Corpus
+from speech_retrieval.text import tokens_with_spans
 
 QUERIES = ("casa", "casas", "estar", "estoy", "estaba", "la verdad", "bonitas", "que")
+
+
+def measure_query(corpus: Corpus, query: str, mode: str, repeats: int) -> dict:
+    response = corpus.search(query, source_language="es", match_mode=mode)
+    elapsed = []
+    for _ in range(repeats):
+        start = time.perf_counter()
+        corpus.search(query, source_language="es", match_mode=mode)
+        elapsed.append((time.perf_counter() - start) * 1000)
+    elapsed.sort()
+    return {
+        "median_ms": round(statistics.median(elapsed), 3),
+        "p95_ms": round(elapsed[max(0, int(len(elapsed) * 0.95) - 1)], 3),
+        "occurrences": response["total_occurrences"],
+    }
+
+
+def prefix_terms(root: Path) -> list[str]:
+    segments = root / "derived" / "corpora" / "es" / "segments.jsonl"
+    for line in segments.read_text().splitlines():
+        tokens = tokens_with_spans(json.loads(line)["text"])
+        if len(tokens) >= 5:
+            return [token.text for token in tokens[:5]]
+    raise ValueError("No five-token segment in benchmark corpus")
 
 
 def prepare_seed(source: Path, target: Path) -> dict:
@@ -63,6 +93,7 @@ def benchmark(data_dir: Path, repeats: int) -> dict:
     report: dict = {
         "platform": platform.platform(),
         "python": platform.python_version(),
+        "database_schema_version": DATABASE_SCHEMA_VERSION,
         "query_repeats": repeats,
         "analyzers": {},
     }
@@ -82,17 +113,15 @@ def benchmark(data_dir: Path, repeats: int) -> dict:
             queries = {}
             for mode in ("exact", "auto"):
                 for query in QUERIES:
-                    response = corpus.search(query, source_language="es", match_mode=mode)
-                    elapsed = []
-                    for _ in range(repeats):
-                        start = time.perf_counter()
-                        corpus.search(query, source_language="es", match_mode=mode)
-                        elapsed.append((time.perf_counter() - start) * 1000)
-                    queries[f"{mode}:{query}"] = {
-                        "median_ms": round(statistics.median(elapsed), 3),
-                        "p95_ms": round(sorted(elapsed)[max(0, int(len(elapsed) * 0.95) - 1)], 3),
-                        "occurrences": response["total_occurrences"],
-                    }
+                    queries[f"{mode}:{query}"] = measure_query(corpus, query, mode, repeats)
+            terms = prefix_terms(root)
+            ngram_timings = {}
+            modes = ("exact", "lemma") if analyzer.morphology_available else ("exact",)
+            for mode in modes:
+                for size in range(1, 6):
+                    ngram_timings[f"{mode}:{size}"] = measure_query(
+                        corpus, " ".join(terms[:size]), mode, repeats
+                    )
             report["analyzers"][selection] = {
                 "provenance": analyzer.provenance.as_dict(),
                 "initialization_ms": round(initialization_ms, 3),
@@ -101,6 +130,7 @@ def benchmark(data_dir: Path, repeats: int) -> dict:
                 "segments": built["segment_count"],
                 "occurrences": built["occurrence_count"],
                 "queries": queries,
+                "ngram_prefix_timings": ngram_timings,
             }
     return report
 
@@ -109,7 +139,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
     parser.add_argument("--repeats", type=int, default=20)
+    parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.repeats < 1:
         parser.error("--repeats must be positive")
-    print(json.dumps(benchmark(args.data_dir, args.repeats), ensure_ascii=False, indent=2))
+    result = json.dumps(benchmark(args.data_dir, args.repeats), ensure_ascii=False, indent=2) + "\n"
+    if args.output:
+        args.output.write_text(result)
+    print(result, end="")

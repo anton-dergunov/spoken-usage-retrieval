@@ -66,6 +66,7 @@ finish with a documented negative result; they do not have to justify shipping a
 | [02 · Multilingual corpus model](02-multilingual-corpus-model.md) | Complete | 01 | Language-neutral configuration, cache, index, API, and demo state. |
 | [03 · Morphological retrieval](03-morphological-retrieval.md) | Complete | 02 | Exact and lemma-sequence retrieval through a pluggable analyzer, with no model download required. |
 | [04 · Analyzer comparison experiment](04-analyzer-comparison-experiment.md) | Complete | 03 | Stanza led coverage-adjusted quality in all ten languages; compact token positions saved 85.1% with parity. |
+| [04a · Production morphology promotion](04a-production-morphology-promotion.md) | Complete | 03, 04 | Prefer locally available Stanza and use compact token-position retrieval in production. |
 
 Completing Plan 01 is the first public-GitHub checkpoint; it does not wait for the research roadmap.
 Plan 04 was optional and blocks nothing; its production recommendations require separate plans.

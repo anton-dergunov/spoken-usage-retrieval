@@ -175,7 +175,9 @@ Strict lemma scoring uses Unicode NFC plus case folding and keeps accents. Folde
 
 Physical occurrences, the form lexicon, token rows, and secondary indexes are separated by SQLite `dbstat` in each result. Because exact and lemma keys share pages in the production-shaped key table, `logical_breakdown` separately records their row counts and payload bytes. Compact timing is reported only after occurrence IDs, match routes, counts, and character spans match the dual-key reference.
 
-The token-position layout still stores the token text, lemma, character offsets, and its ordinal position. For a segment containing `I was in the house`, it stores token rows such as `(segment, 0, I, I)`, `(segment, 1, was, be)`, and `(segment, 2, in, in)` once. A query for `be in` finds `be` and verifies that `in` occupies the next position. The current dual-key layout instead materializes `I`, `I was`, `I was in`, `was`, `was in`, and every other contiguous one-to-five-token key for both the surface and lemma routes. Positions are local to an indexed transcript segment; the segment retains its video and timing identity, and first/last character offsets reconstruct the occurrence and highlight.
+The token-position layout still stores the token text, lemma, character offsets, and its ordinal position. For a segment containing `I was in the house`, it stores token rows such as `(segment, 0, I, I)`, `(segment, 1, was, be)`, and `(segment, 2, in, in)` once. A query for `be in` finds `be` and verifies that `in` occupies the next position. The former dual-key production layout instead materialized `I`, `I was`, `I was in`, `was`, `was in`, and every other contiguous one-to-five-token key for both the surface and lemma routes. Positions are local to an indexed transcript segment; the segment retains its video and timing identity, and first/last character offsets reconstruct the occurrence and highlight.
+
+Parity enumerated every contiguous one-to-five-token key in the analyzed data. The reported 1.34× median lookup ratio came from the deterministic morphology query manifest, which consists primarily of individual word forms, so it should be read as unigram-dominated rather than as a dedicated five-word latency benchmark.
 
 ## Retrieval and anomalous mappings
 
@@ -256,7 +258,7 @@ The completed run passed all 54 partial/token compact-layout parity checks. Repo
 | pt | stanza | 0.866703 |
 | hi | stanza | 0.552499 |
 
-The analyzer recommendation maximizes strict lemma accuracy multiplied by end-to-end lemma coverage. It is a quality recommendation, not a claim that Stanza is the cheapest analyzer. Runtime and downstream LLM filtering remain deployment considerations; this experiment does not change production defaults.
+The analyzer recommendation maximizes strict lemma accuracy multiplied by end-to-end lemma coverage. It is a quality recommendation, not a claim that Stanza is the cheapest analyzer. Runtime and downstream LLM filtering remain deployment considerations. The experiment itself did not change production defaults; the accepted follow-up is implemented in Plan 04a.
 
 Stanza's approximately three-second initialization is a cold, per-language, per-process cost. Production caches each analyzer pipeline, so it is not added to every request. A separate 20-repeat warm spot check put single-word query analysis at roughly 3.5–10.8 ms median across these ten models; the sub-millisecond storage timings above measure only SQLite lookup. A service can preload its active language at startup. Loading many language pipelines in one process would add their memory costs, while the table's per-language analysis RSS already reaches 1049 MB for Spanish and the complete Spanish worker reached 1561.9 MB.
 
@@ -265,6 +267,9 @@ Using simplemma for queries against a Stanza-built index is not recommended with
 The token-position prototype preserves semantics and saves 85.1% across completed rows at 1.34× median query time. This is material enough for a separate production migration plan.
 
 Wiktionary-derived candidates remain deferred. Any analyzer or schema change will use a separate implementation plan.
+
+The user accepted the analyzer and token-position recommendations on September 6, 2026. Their
+production implementation is tracked in [Plan 04a](../../docs/plans/04a-production-morphology-promotion.md).
 
 ## Limitations
 

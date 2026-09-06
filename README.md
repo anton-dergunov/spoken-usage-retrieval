@@ -108,8 +108,8 @@ uv run speech-retrieval build-index --analyzer simplemma
 uv run speech-retrieval build-index --analyzer stanza --models-dir data/models/stanza
 ```
 
-`auto` remains the default and resolves each language to simplemma, then a locally installed Stanza
-model, then Unicode. The build report and `/api/status` expose `analyzer_selection` plus the resolved
+`auto` remains the default and resolves each language to a locally installed Stanza model, then
+simplemma, then Unicode. The build report and `/api/status` expose `analyzer_selection` plus the resolved
 analyzer and compatibility identity for every indexed language. Python and HTTP search requests do
 not select another analyzer: they read that language's recorded provenance from the index and reuse
 the same implementation automatically. Search responses expose the resolved `query_analyzer`.
@@ -121,8 +121,13 @@ return a rebuild requirement (HTTP 503). This exact-only fallback applies when i
 recorded Unicode. If an existing index records Simplemma or Stanza but that package or model is no
 longer available to the server, every search returns HTTP 503 rather than silently analyzing the
 query differently. Restore the recorded analyzer or rebuild explicitly with a lighter choice.
-Schema 2 indexes must be rebuilt from versioned caption caches; raw acquisition files remain
-unchanged.
+Schema 3 uses token-position lookup; older indexes must be rebuilt from versioned caption caches.
+Raw acquisition files remain unchanged.
+
+The index stores each surface or lemma token once with its position inside a segment. Phrase lookup
+finds the first token and verifies successive positions in the same stream, deriving the occurrence
+and highlight from the first and last character offsets. It supports the same one-to-five-token
+exact, lemma, and automatic searches without storing every phrase as a separate key.
 
 Simplemma supplies neither POS nor morphological features, so those fields are nullable. It can
 miss inflections or choose an unintended lemma; related forms are candidates, not proof of the same

@@ -310,27 +310,25 @@ def _cached_analyzer(
         raise ValueError(f"Unknown analyzer: {selection}")
     if selection == "unicode":
         return UnicodeAnalyzer(language)
-    if selection in ("auto", "simplemma"):
+    if selection == "auto":
+        try:
+            return get_analyzer(language, "stanza", models_dir)
+        except UnsupportedAnalysisError as stanza_error:
+            from simplemma.strategies.dictionaries.dictionary_factory import SUPPORTED_LANGUAGES
+
+            if language.split("-")[0] in SUPPORTED_LANGUAGES:
+                return get_analyzer(language, "simplemma", models_dir)
+            return UnicodeAnalyzer(language, str(stanza_error))
+    if selection == "simplemma":
         from simplemma.strategies.dictionaries.dictionary_factory import SUPPORTED_LANGUAGES
 
         if language.split("-")[0] in SUPPORTED_LANGUAGES:
-            return (
-                get_analyzer(language, "simplemma", models_dir)
-                if selection == "auto"
-                else SimplemmaAnalyzer(language)
-            )
-        if selection == "simplemma":
-            return UnsupportedAnalysisError(f"simplemma does not support {language}")
+            return SimplemmaAnalyzer(language)
+        return UnsupportedAnalysisError(f"simplemma does not support {language}")
     try:
-        return (
-            get_analyzer(language, "stanza", models_dir)
-            if selection == "auto"
-            else StanzaAnalyzer(language, Path(models_dir))
-        )
+        return StanzaAnalyzer(language, Path(models_dir))
     except UnsupportedAnalysisError as error:
-        if selection == "stanza":
-            return error
-        return UnicodeAnalyzer(language, str(error))
+        return error
 
 
 def recorded_analyzer(record: dict[str, Any], models_dir: Path) -> TextAnalyzer:

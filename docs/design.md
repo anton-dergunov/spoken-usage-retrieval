@@ -87,9 +87,10 @@ A multilingual subtitle-only architecture, verified end to end with the initial 
 
 The indexed unit is a **segment**: one reconstructed utterance with its timing, its per-word timed
 sub-segments where the caption source provides them, character offsets back into the original text,
-a stable content-derived ID, and the provenance of the track it came from. Occurrences of every
-1–5-gram inside a segment are stored separately with their token and character spans, so a match can
-be highlighted in the original text without re-tokenizing at query time.
+a stable content-derived ID, and the provenance of the track it came from. Surface and lemma tokens
+are stored once with their positions and character spans. A query seeds lookup with its first token
+and verifies adjacent positions, so a match can be highlighted in the original text without
+materializing every possible 1–5-gram.
 
 Metadata travels with the segment rather than being inferred later: source language, stable
 video/track identity, channel identity, regional varieties, speech style, caption kind and track
@@ -135,10 +136,12 @@ The baseline deliberately stops at the first two.
 
 ### Retrieval
 
-Surface retrieval retains the Unicode-regex n-gram inventory, case and diacritic folding,
-an accent-exactness ranking bonus, and offsets into the original text. Analyzer word segmentation
-adds surface keys where it supplies boundaries the regex cannot find. Suggestions use these
-analyzed word boundaries and small language-specific stopword resources; search never filters
+Surface retrieval retains the Unicode-regex token inventory, case and diacritic folding, an
+accent-exactness ranking bonus, and offsets into the original text. Analyzer word segmentation adds
+a surface stream only where it supplies different boundaries. Schema 3 stores tokens once and finds
+phrases by seeding on their first token and verifying adjacent positions in the same stream; it does
+not materialize every one-to-five-token key. Suggestions use analyzed word boundaries, compact
+aggregate statistics, and small language-specific stopword resources; search never filters
 stopwords.
 
 `auto` is the default: union surface and contiguous lemma matches, deduplicate physical source
@@ -146,9 +149,10 @@ spans, select the strongest occurrence in each sentence, and diversify exact exa
 lemma-only examples. `exact` and `lemma` remain explicit comparison modes. Occurrence counts are
 reported for each route and their union before sentence selection and limits.
 
-A small `TextAnalyzer` protocol isolates the toolkit. Simplemma is the no-model default; Stanza is
-an optional, locally provisioned CPU pipeline with tokenization, applicable multi-word expansion,
-POS, and lemmatization. Each segment is analyzed once. Provenance records the package/model version
+A small `TextAnalyzer` protocol isolates the toolkit. Automatic selection prefers an optional,
+locally provisioned Stanza CPU pipeline with tokenization, applicable multi-word expansion, POS,
+and lemmatization. It falls back to simplemma and then exact-only Unicode analysis. Each segment is
+analyzed once. Provenance records the package/model version
 and settings in the index and derived cache. Query analysis uses the recorded analyzer, not whatever
 new toolkit happens to have been installed since indexing. The index-build selection and resolved
 per-language analyzers are exposed in the build report and status API. Query endpoints deliberately
@@ -227,10 +231,14 @@ From the first complete run, on 4 September 2026, over four Spanish channels:
 - all ten requested videos acquired with no failed candidate; round-robin selection produced three
   Easy Spanish, three Spanish After Hours, two Luisito Comunica, and two LUZU TV videos;
 - three manually authored tracks and seven original-language automatic tracks;
-- 3,264 searchable utterances and 102,898 stored 1–5-gram occurrences;
+- 3,264 searchable utterances and 102,898 possible 1–5-gram source spans;
 - 2,950 punctuation boundaries, 238 pause boundaries, 75 forced boundaries, one end-of-track
   boundary;
 - about 30 MB of generated data, of which the SQLite index is about 27 MB.
+
+Those figures describe the original schema 1 baseline. The later schema 3 benchmark used the same
+caption checksum and reduced the Unicode index from 58.07 MiB to 14.96 MiB and the Simplemma index
+from 81.46 MiB to 19.10 MiB by storing token positions instead of materialized phrase keys.
 
 About 90% of segments ended at caption punctuation and only about 2.3% needed the hard limit. That
 is a positive result for these sources, but it measures **caption punctuation availability**, not
@@ -254,8 +262,8 @@ horizontal overflow.
 - Lemma matching can miss inflections or group unintended senses. The no-model analyzer has no
   context, POS, or features. Neither route retrieves discontinuous expressions, paraphrases, or
   spelling corrections. See the [morphology benchmark](../experiments/morphological-retrieval/README.md).
-- The n-gram index is stored in full and rebuilt in full, which is fine at ten videos and will not be
-  fine at a thousand.
+- Token streams keep the index compact, but corpus updates still rebuild the full disposable index.
+  Incremental replacement remains Plan 14 work.
 - A video can disable embedding or disappear after indexing, so the viewer always exposes a
   timestamped link back to the source.
 

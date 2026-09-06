@@ -116,6 +116,31 @@ def test_contiguous_ordered_phrases_and_five_word_limit(tmp_path):
         corpus.search("uno dos tres cuatro cinco seis", source_language="es")
 
 
+def test_token_position_search_matches_each_supported_ngram_length(tmp_path):
+    terms = ["uno", "dos", "tres", "cuatro", "cinco"]
+    add_text(tmp_path, " ".join(terms) + ".")
+    build_index(data_dir=tmp_path, max_ngram=5)
+    corpus = Corpus(tmp_path)
+    for size in range(1, 6):
+        query = " ".join(terms[:size])
+        result = corpus.search(query, source_language="es", match_mode="exact")
+        assert result["total_occurrences"] == 1
+        assert result["results"][0]["matched_surface"] == query
+
+
+def test_token_position_search_honors_built_ngram_limit(tmp_path):
+    add_text(tmp_path, "uno dos tres.")
+    build_index(data_dir=tmp_path, max_ngram=2)
+    corpus = Corpus(tmp_path)
+    assert (
+        corpus.search("uno dos", source_language="es", match_mode="exact")["total_occurrences"] == 1
+    )
+    assert (
+        corpus.search("uno dos tres", source_language="es", match_mode="exact")["total_occurrences"]
+        == 0
+    )
+
+
 def test_ambiguity_reports_all_observed_lemmas_and_token_frequencies(tmp_path, monkeypatch):
     class ContextAnalyzer(SimplemmaAnalyzer):
         def analyze(self, text):
@@ -241,6 +266,28 @@ def test_versions_determinism_and_existing_analyzer_selection(tmp_path, monkeypa
     build_index(data_dir=tmp_path, analyzer="unicode")
     assert corpus.search("casa", source_language="es")["morphology_available"] is False
     assert corpus.search("casas", source_language="es")["total_occurrences"] == 1
+
+
+def test_schema_uses_token_positions_without_materialized_ngram_occurrences(tmp_path):
+    add_text(tmp_path, "Las casas son bonitas.")
+    report = build_index(data_dir=tmp_path)
+    with sqlite3.connect(tmp_path / "index/corpus.sqlite3") as connection:
+        tables = {
+            row[0]
+            for row in connection.execute("SELECT name FROM sqlite_master WHERE type = 'table'")
+        }
+        stream_count = connection.execute("SELECT COUNT(*) FROM token_streams").fetchone()[0]
+        token_count = connection.execute("SELECT COUNT(*) FROM stream_tokens").fetchone()[0]
+        recorded_occurrences = connection.execute(
+            "SELECT occurrence_count FROM language_stats WHERE source_language = 'es'"
+        ).fetchone()[0]
+
+    assert {"token_streams", "stream_tokens", "language_stats"} <= tables
+    assert "occurrences" not in tables
+    assert "occurrence_keys" not in tables
+    assert stream_count > 0
+    assert token_count > 0
+    assert recorded_occurrences == report["languages"]["es"]["occurrences"]
 
 
 def test_analyzer_initialized_once_and_segments_analyzed_once(tmp_path, monkeypatch):

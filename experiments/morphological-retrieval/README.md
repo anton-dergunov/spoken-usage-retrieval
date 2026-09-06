@@ -1,6 +1,6 @@
-# Morphological retrieval benchmark
+# Morphological retrieval and production token-position benchmark
 
-Measured on 2026-09-05 with Python 3.14.7 on macOS-26.5.1-arm64-arm-64bit-Mach-O. This is a local prototype
+Re-measured on 2026-09-06 with Python 3.14.7 on macOS-26.5.1-arm64-arm-64bit-Mach-O. This is a local prototype
 measurement, not an analyzer accuracy evaluation. [Machine-readable results](results.json) include
 analyzer identity, settings, input checksum, and every measured query.
 
@@ -9,35 +9,48 @@ analyzer identity, settings, input checksum, and every measured query.
 The ten cached Spanish transcripts were copied into a temporary versioned corpus. Their original
 captions and metadata and the existing local index were not changed. Both analyzers indexed the
 same 3,264 reconstructed segments and 102,898 physical surface occurrences,
-with maximum n-gram length five. Database schema 2 includes analysis and surface-key metadata in
-both baselines; these sizes should not be compared directly with the old schema 1 index.
+with maximum n-gram length five. Database schema 3 stores surface and lemma tokens once with their
+segment positions. It derives occurrences from adjacent positions instead of materializing every
+one-to-five-token lookup key.
 
 Initialization measures the first analyzer lookup and one short analysis, including simplemma's
 first dictionary load. Build time is then measured with the analyzer initialized. Each of eight
 queries has one warm-up followed by 20 measured requests in each of exact and auto
 modes; the reported p95 is the observed 95th-percentile sample. Query timings include SQLite reads,
 analysis, candidate matching, all occurrence counts, ranking, and result construction (limit 20).
-The frequent-word case intentionally exercises the larger candidate set. No Stanza models were
-installed or downloaded for this experiment.
+The frequent-word case intentionally exercises the larger candidate set. A separate prefix probe
+measures exact and lemma queries at each length from one through five tokens. It records only length,
+timing, and occurrence count, not source text. No Stanza model was loaded or downloaded by this
+benchmark.
 
 ## Results
 
 | Measurement | Unicode only | simplemma 1.2.0 |
 | --- | ---: | ---: |
-| Initialization, ms | 0.188 | 283.953 |
-| Index build, seconds | 5.295 | 6.596 |
-| SQLite size, MiB | 58.07 | 81.46 |
+| Initialization, ms | 0.288 | 276.325 |
+| Index build, seconds | 2.255 | 2.604 |
+| SQLite size, MiB | 14.96 | 19.10 |
 
 | Auto query | Surface occurrences | Expanded occurrences | Unicode median / p95, ms | simplemma median / p95, ms |
 | --- | ---: | ---: | ---: | ---: |
-| `casa` | 14 | 15 | 1.196 / 1.302 | 1.877 / 1.905 |
-| `estar` | 24 | 499 | 1.832 / 2.128 | 27.538 / 29.695 |
-| `la verdad` | 42 | 42 | 2.678 / 3.111 | 8.414 / 8.534 |
-| `que` | 1215 | 1215 | 73.186 / 78.630 | 80.173 / 95.806 |
+| `casa` | 14 | 15 | 1.407 / 1.551 | 2.118 / 2.298 |
+| `estar` | 24 | 499 | 1.933 / 2.073 | 28.025 / 33.065 |
+| `la verdad` | 42 | 42 | 4.273 / 4.450 | 10.322 / 12.689 |
+| `que` | 1215 | 1215 | 72.033 / 83.004 | 82.108 / 94.342 |
 
-The additional keys increase disk use and indexing time. Query cost also grows with the number of
-retrieved occurrences: `estar` gains many more forms. No timing threshold is asserted in tests;
-this measured seed is the baseline for subsequent optimization and Plan 04's accuracy comparison.
+| Prefix length | Simplemma exact median / p95, ms | Simplemma lemma median / p95, ms |
+| ---: | ---: | ---: |
+| 1 | 1.203 / 1.653 | 1.829 / 2.800 |
+| 2 | 1.252 / 2.183 | 1.967 / 4.569 |
+| 3 | 1.187 / 1.944 | 1.164 / 1.374 |
+| 4 | 1.257 / 1.654 | 1.199 / 1.382 |
+| 5 | 1.588 / 2.827 | 1.249 / 1.409 |
+
+Against the previously recorded schema 2 result for the identical caption checksum, schema 3 reduced the
+Simplemma database from 81.46 MiB to 19.10 MiB (76.6%) and the Unicode database from 58.07 MiB to
+14.96 MiB (74.2%). Prefix latency stayed essentially flat through five positions in this sample.
+Query cost still grows with the number of returned occurrences: `estar` expands to roughly 500
+matches and `que` has 1,215 matches.
 
 ## Interpretation and limits
 

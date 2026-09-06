@@ -75,6 +75,65 @@ class Corpus:
         if indexed is None:
             raise SearchError(f"Source language is not indexed: {source_language}")
 
+    @staticmethod
+    def _sequence_matches(
+        connection: sqlite3.Connection,
+        source_language: str,
+        kind: str,
+        candidate_sets: list[list[str]],
+        max_ngram: int,
+    ) -> list[sqlite3.Row]:
+        if not candidate_sets or not all(candidate_sets) or len(candidate_sets) > max_ngram:
+            return []
+        candidates_json = json.dumps(candidate_sets)
+        return connection.execute(
+            """
+            SELECT streams.segment_id, first.stream_id, first.position AS token_start,
+                   first.char_start, last.char_end, streams.token_count,
+                   (
+                       SELECT group_concat(ordered.normalized, ' ')
+                       FROM (
+                           SELECT matched.normalized
+                           FROM stream_tokens matched
+                           WHERE matched.stream_id = first.stream_id
+                             AND matched.position BETWEEN first.position
+                                 AND first.position + ? - 1
+                           ORDER BY matched.position
+                       ) ordered
+                   ) AS matched_normalized
+            FROM stream_tokens first
+            JOIN token_streams streams ON streams.stream_id = first.stream_id
+            JOIN stream_tokens last
+              ON last.stream_id = first.stream_id
+             AND last.position = first.position + ? - 1
+            WHERE first.source_language = ? AND first.kind = ?
+              AND first.normalized IN (SELECT value FROM json_each(?))
+              AND NOT EXISTS (
+                  SELECT 1 FROM json_each(?) candidate_position
+                  WHERE NOT EXISTS (
+                      SELECT 1
+                      FROM stream_tokens candidate_token
+                      JOIN json_each(candidate_position.value) allowed
+                        ON allowed.value = candidate_token.normalized
+                      WHERE candidate_token.stream_id = first.stream_id
+                        AND candidate_token.position = first.position
+                            + CAST(candidate_position.key AS INTEGER)
+                  )
+              )
+            ORDER BY streams.segment_id,
+                     CASE WHEN first.stream_id LIKE '%:unicode' THEN 0 ELSE 1 END,
+                     first.position, first.stream_id
+            """,
+            (
+                len(candidate_sets),
+                len(candidate_sets),
+                source_language,
+                kind,
+                json.dumps(candidate_sets[0]),
+                candidates_json,
+            ),
+        ).fetchall()
+
     def search(
         self, query: str, *, source_language: str, match_mode: str = "auto", limit: int = 20
     ) -> dict[str, Any]:
@@ -90,6 +149,9 @@ class Corpus:
         query_accent_key = accent_key(query)
         with closing(self._connect()) as connection:
             self._require_indexed(connection, source_language)
+            max_ngram = int(
+                connection.execute("SELECT value FROM meta WHERE key = 'max_ngram'").fetchone()[0]
+            )
             metadata = connection.execute(
                 "SELECT * FROM analyzers WHERE source_language = ?", (source_language,)
             ).fetchone()
@@ -186,44 +248,55 @@ class Corpus:
             if surfaces and len(surfaces) <= 5:
                 surface_keys.add((" ".join(token.normalized for token in surfaces), len(surfaces)))
             matches: dict[str, dict[str, Any]] = {}
+
+            def add_matches(rows: list[sqlite3.Row], kind: str, size: int) -> None:
+                for row in rows:
+                    occurrence_id = f"{row['segment_id']}:{row['char_start']}:{row['char_end']}"
+                    priority = (
+                        0 if row["stream_id"].endswith(":unicode") else 1 if kind == "exact" else 2
+                    )
+                    match = matches.get(occurrence_id)
+                    if match is None:
+                        match = {
+                            "exact": False,
+                            "lemma": False,
+                            "matched_lemma": None,
+                            "segment_id": row["segment_id"],
+                            "char_start": row["char_start"],
+                            "char_end": row["char_end"],
+                            "token_start": row["token_start"],
+                            "n": size,
+                            "token_count": row["token_count"],
+                            "stream_priority": priority,
+                        }
+                        matches[occurrence_id] = match
+                    elif priority < match["stream_priority"]:
+                        match.update(
+                            token_start=row["token_start"],
+                            n=size,
+                            token_count=row["token_count"],
+                            stream_priority=priority,
+                        )
+                    match[kind] = True
+                    if kind == "lemma" and match["matched_lemma"] is None:
+                        match["matched_lemma"] = row["matched_normalized"]
+
             for key, size in sorted(surface_keys):
-                for row in connection.execute(
-                    """SELECT occurrence_id FROM occurrence_keys
-                    WHERE source_language = ? AND kind = 'exact' AND normalized = ? AND n = ?""",
-                    (source_language, key, size),
-                ):
-                    matches[row["occurrence_id"]] = {
-                        "exact": True,
-                        "lemma": False,
-                        "matched_lemma": None,
-                    }
+                rows = self._sequence_matches(
+                    connection,
+                    source_language,
+                    "exact",
+                    [[part] for part in key.split(" ")],
+                    max_ngram,
+                )
+                add_matches(rows, "exact", size)
             if morphology_available and candidate_sets and all(candidate_sets):
                 # Index the first position, then check remaining candidate sets in SQL.
                 # JSON arrays avoid SQLite's variable limit and Cartesian expansion.
-                for row in connection.execute(
-                    """SELECT occurrence_id, normalized FROM occurrence_keys k
-                    WHERE source_language = ? AND kind = 'lemma' AND n = ?
-                    AND first_lemma IN (SELECT value FROM json_each(?))
-                    AND NOT EXISTS (
-                        SELECT 1 FROM json_each(k.lemmas_json) term
-                        WHERE term.value NOT IN (
-                            SELECT value FROM json_each(json_extract(?, '$[' || term.key || ']'))
-                        )
-                    ) ORDER BY occurrence_id, normalized""",
-                    (
-                        source_language,
-                        len(candidate_sets),
-                        json.dumps(candidate_sets[0]),
-                        json.dumps(candidate_sets),
-                    ),
-                ):
-                    match = matches.setdefault(
-                        row["occurrence_id"],
-                        {"exact": False, "lemma": False, "matched_lemma": None},
-                    )
-                    match["lemma"] = True
-                    if match["matched_lemma"] is None:
-                        match["matched_lemma"] = row["normalized"]
+                lemma_rows = self._sequence_matches(
+                    connection, source_language, "lemma", candidate_sets, max_ngram
+                )
+                add_matches(lemma_rows, "lemma", len(candidate_sets))
             totals = {
                 "exact": sum(m["exact"] for m in matches.values()),
                 "lemma": sum(m["lemma"] for m in matches.values()),
@@ -232,58 +305,59 @@ class Corpus:
             selected_ids = [
                 key for key, value in matches.items() if match_mode == "auto" or value[match_mode]
             ]
+            segment_ids = sorted({matches[item]["segment_id"] for item in selected_ids})
             rows = connection.execute(
                 """
                 SELECT
-                    o.occurrence_id, o.accent_key, o.n, o.token_start, o.char_start, o.char_end,
-                    o.token_count AS occurrence_token_count,
-                    o.surface, s.segment_id, s.text, s.start, s.end, s.clip_start, s.clip_end,
+                    s.segment_id, s.text, s.start, s.end, s.clip_start, s.clip_end,
                     s.segments_json, s.analysis_json, s.boundary_reason, s.boundary_confidence, s.quality_score,
                     s.token_count, s.track_id, v.video_key, v.provider, v.video_id, v.url, v.title,
                     v.channel_id, v.channel, v.varieties_json, v.speech_style_json, v.duration,
                     v.thumbnail, t.caption_kind, t.caption_language
-                FROM occurrences o
-                JOIN segments s ON s.segment_id = o.segment_id
+                FROM segments s
                 JOIN transcripts t ON t.track_id = s.track_id
                 JOIN videos v ON v.video_key = s.video_key
-                WHERE o.occurrence_id IN (SELECT value FROM json_each(?))
+                WHERE s.segment_id IN (SELECT value FROM json_each(?))
                 """,
-                (json.dumps(selected_ids),),
+                (json.dumps(segment_ids),),
             ).fetchall()
 
+        segment_rows = {row["segment_id"]: row for row in rows}
         candidates: list[dict[str, Any]] = []
-        for row in rows:
-            match = matches[row["occurrence_id"]]
+        for occurrence_id in selected_ids:
+            match = matches[occurrence_id]
+            row = segment_rows[match["segment_id"]]
+            surface = row["text"][match["char_start"] : match["char_end"]]
             stored_analysis = json.loads(row["analysis_json"])
             matched_tokens = [
                 token
                 for token in stored_analysis["tokens"]
-                if token["start"] >= row["char_start"] and token["end"] <= row["char_end"]
+                if token["start"] >= match["char_start"] and token["end"] <= match["char_end"]
             ]
             matched_lemma = match["matched_lemma"]
             if matched_lemma is None and matched_tokens and all(t["lemma"] for t in matched_tokens):
                 matched_lemma = " ".join(t["lemma"] for t in matched_tokens)
-            accent_exact = row["accent_key"] == query_accent_key
-            center = (row["token_start"] + row["n"] / 2) / max(row["occurrence_token_count"], 1)
+            accent_exact = accent_key(surface) == query_accent_key
+            center = (match["token_start"] + match["n"] / 2) / max(match["token_count"], 1)
             center_bonus = 0.03 * max(0.0, 1 - abs(0.5 - center) * 2)
             score = min(
                 0.99, 0.9 * row["quality_score"] + (0.04 if accent_exact else 0) + center_bonus
             )
             candidates.append(
                 {
-                    "occurrence_id": row["occurrence_id"],
+                    "occurrence_id": occurrence_id,
                     "segment_id": row["segment_id"],
                     "source_language": source_language,
                     "sentence": row["text"],
                     "match_type": "exact" if match["exact"] else "lemma",
-                    "matched_surface": row["surface"],
+                    "matched_surface": surface,
                     "matched_lemma": matched_lemma,
                     "token_analysis": matched_tokens,
                     "analyzer": stored_analysis["analyzer"],
                     "match": {
-                        "text": row["surface"],
-                        "char_start": row["char_start"],
-                        "char_end": row["char_end"],
+                        "text": surface,
+                        "char_start": match["char_start"],
+                        "char_end": match["char_end"],
                         "accent_exact": accent_exact,
                     },
                     "sentence_start": row["start"],
@@ -437,8 +511,7 @@ class Corpus:
                 UNION ALL
                 SELECT source_language, 'segments', COUNT(*) FROM segments GROUP BY source_language
                 UNION ALL
-                SELECT source_language, 'occurrences', COUNT(*) FROM occurrences
-                GROUP BY source_language
+                SELECT source_language, 'occurrences', occurrence_count FROM language_stats
                 """
             ).fetchall()
             caption_rows = connection.execute(

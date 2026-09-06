@@ -1,6 +1,7 @@
 {
   "platform": "macOS-26.5.1-arm64-arm-64bit-Mach-O",
   "python": "3.14.7",
+  "database_schema_version": 3,
   "query_repeats": 20,
   "analyzers": {
     "unicode": {
@@ -14,91 +15,118 @@
         },
         "identity": "unicode:9fef9c960305cd1e66c3"
       },
-      "initialization_ms": 0.188,
-      "build_seconds": 5.295,
-      "index_bytes": 60891136,
+      "initialization_ms": 0.288,
+      "build_seconds": 2.255,
+      "index_bytes": 15687680,
       "segments": 3264,
       "occurrences": 102898,
       "queries": {
         "exact:casa": {
-          "median_ms": 1.273,
-          "p95_ms": 1.553,
+          "median_ms": 1.37,
+          "p95_ms": 1.557,
           "occurrences": 14
         },
         "exact:casas": {
-          "median_ms": 0.462,
-          "p95_ms": 0.59,
+          "median_ms": 0.575,
+          "p95_ms": 0.656,
           "occurrences": 1
         },
         "exact:estar": {
-          "median_ms": 1.848,
-          "p95_ms": 4.082,
+          "median_ms": 1.924,
+          "p95_ms": 2.111,
           "occurrences": 24
         },
         "exact:estoy": {
-          "median_ms": 2.804,
-          "p95_ms": 3.007,
+          "median_ms": 2.428,
+          "p95_ms": 2.563,
           "occurrences": 37
         },
         "exact:estaba": {
-          "median_ms": 2.516,
-          "p95_ms": 3.082,
+          "median_ms": 2.471,
+          "p95_ms": 2.812,
           "occurrences": 38
         },
         "exact:la verdad": {
-          "median_ms": 2.918,
-          "p95_ms": 5.377,
+          "median_ms": 4.837,
+          "p95_ms": 11.033,
           "occurrences": 42
         },
         "exact:bonitas": {
-          "median_ms": 0.47,
-          "p95_ms": 0.485,
+          "median_ms": 0.604,
+          "p95_ms": 0.941,
           "occurrences": 2
         },
         "exact:que": {
-          "median_ms": 73.727,
-          "p95_ms": 86.777,
+          "median_ms": 73.95,
+          "p95_ms": 79.828,
           "occurrences": 1215
         },
         "auto:casa": {
-          "median_ms": 1.196,
-          "p95_ms": 1.302,
+          "median_ms": 1.407,
+          "p95_ms": 1.551,
           "occurrences": 14
         },
         "auto:casas": {
-          "median_ms": 0.434,
-          "p95_ms": 0.477,
+          "median_ms": 0.538,
+          "p95_ms": 0.641,
           "occurrences": 1
         },
         "auto:estar": {
-          "median_ms": 1.832,
-          "p95_ms": 2.128,
+          "median_ms": 1.933,
+          "p95_ms": 2.073,
           "occurrences": 24
         },
         "auto:estoy": {
-          "median_ms": 2.369,
-          "p95_ms": 2.561,
+          "median_ms": 2.544,
+          "p95_ms": 2.762,
           "occurrences": 37
         },
         "auto:estaba": {
-          "median_ms": 2.379,
-          "p95_ms": 2.607,
+          "median_ms": 2.612,
+          "p95_ms": 2.794,
           "occurrences": 38
         },
         "auto:la verdad": {
-          "median_ms": 2.678,
-          "p95_ms": 3.111,
+          "median_ms": 4.273,
+          "p95_ms": 4.45,
           "occurrences": 42
         },
         "auto:bonitas": {
-          "median_ms": 0.464,
-          "p95_ms": 0.493,
+          "median_ms": 0.565,
+          "p95_ms": 0.869,
           "occurrences": 2
         },
         "auto:que": {
-          "median_ms": 73.186,
-          "p95_ms": 78.63,
+          "median_ms": 72.033,
+          "p95_ms": 83.004,
           "occurrences": 1215
+        }
+      },
+      "ngram_prefix_timings": {
+        "exact:1": {
+          "median_ms": 0.61,
+          "p95_ms": 1.318,
+          "occurrences": 2
+        },
+        "exact:2": {
+          "median_ms": 0.544,
+          "p95_ms": 0.801,
+          "occurrences": 1
+        },
+        "exact:3": {
+          "median_ms": 0.532,
+          "p95_ms": 0.766,
+          "occurrences": 1
+        },
+        "exact:4": {
+          "median_ms": 0.568,
+          "p95_ms": 0.667,
+          "occurrences": 1
+        },
+        "exact:5": {
+          "median_ms": 0.552,
+          "p95_ms": 0.777,
+          "occurrences": 1
         }
       }
     },
@@ -115,91 +143,143 @@
         },
         "identity": "simplemma:3b8b85daf82084ba468b"
       },
-      "initialization_ms": 283.953,
-      "build_seconds": 6.596,
-      "index_bytes": 85413888,
+      "initialization_ms": 276.325,
+      "build_seconds": 2.604,
+      "index_bytes": 20029440,
       "segments": 3264,
       "occurrences": 102898,
       "queries": {
         "exact:casa": {
-          "median_ms": 1.953,
-          "p95_ms": 2.829,
+          "median_ms": 2.137,
+          "p95_ms": 2.389,
           "occurrences": 14
         },
         "exact:casas": {
-          "median_ms": 1.046,
-          "p95_ms": 1.296,
+          "median_ms": 1.195,
+          "p95_ms": 1.315,
           "occurrences": 1
         },
         "exact:estar": {
-          "median_ms": 3.856,
-          "p95_ms": 4.008,
+          "median_ms": 6.445,
+          "p95_ms": 8.122,
           "occurrences": 24
         },
         "exact:estoy": {
-          "median_ms": 4.863,
-          "p95_ms": 5.409,
+          "median_ms": 7.149,
+          "p95_ms": 8.749,
           "occurrences": 37
         },
         "exact:estaba": {
-          "median_ms": 5.214,
-          "p95_ms": 7.368,
+          "median_ms": 6.681,
+          "p95_ms": 7.108,
           "occurrences": 38
         },
         "exact:la verdad": {
-          "median_ms": 9.031,
-          "p95_ms": 10.427,
+          "median_ms": 10.214,
+          "p95_ms": 12.123,
           "occurrences": 42
         },
         "exact:bonitas": {
-          "median_ms": 1.094,
-          "p95_ms": 1.2,
+          "median_ms": 1.225,
+          "p95_ms": 1.374,
           "occurrences": 2
         },
         "exact:que": {
-          "median_ms": 80.458,
-          "p95_ms": 90.076,
+          "median_ms": 83.87,
+          "p95_ms": 92.811,
           "occurrences": 1215
         },
         "auto:casa": {
-          "median_ms": 1.877,
-          "p95_ms": 1.905,
+          "median_ms": 2.118,
+          "p95_ms": 2.298,
           "occurrences": 15
         },
         "auto:casas": {
-          "median_ms": 1.877,
-          "p95_ms": 1.964,
+          "median_ms": 1.991,
+          "p95_ms": 2.188,
           "occurrences": 15
         },
         "auto:estar": {
-          "median_ms": 27.538,
-          "p95_ms": 29.695,
+          "median_ms": 28.025,
+          "p95_ms": 33.065,
           "occurrences": 499
         },
         "auto:estoy": {
-          "median_ms": 27.231,
-          "p95_ms": 36.062,
+          "median_ms": 28.278,
+          "p95_ms": 31.048,
           "occurrences": 499
         },
         "auto:estaba": {
-          "median_ms": 29.119,
-          "p95_ms": 42.912,
+          "median_ms": 28.6,
+          "p95_ms": 31.942,
           "occurrences": 500
         },
         "auto:la verdad": {
-          "median_ms": 8.414,
-          "p95_ms": 8.534,
+          "median_ms": 10.322,
+          "p95_ms": 12.689,
           "occurrences": 42
         },
         "auto:bonitas": {
-          "median_ms": 1.493,
-          "p95_ms": 1.52,
+          "median_ms": 1.684,
+          "p95_ms": 2.035,
           "occurrences": 11
         },
         "auto:que": {
-          "median_ms": 80.173,
-          "p95_ms": 95.806,
+          "median_ms": 82.108,
+          "p95_ms": 94.342,
           "occurrences": 1215
+        }
+      },
+      "ngram_prefix_timings": {
+        "exact:1": {
+          "median_ms": 1.203,
+          "p95_ms": 1.653,
+          "occurrences": 2
+        },
+        "exact:2": {
+          "median_ms": 1.252,
+          "p95_ms": 2.183,
+          "occurrences": 1
+        },
+        "exact:3": {
+          "median_ms": 1.187,
+          "p95_ms": 1.944,
+          "occurrences": 1
+        },
+        "exact:4": {
+          "median_ms": 1.257,
+          "p95_ms": 1.654,
+          "occurrences": 1
+        },
+        "exact:5": {
+          "median_ms": 1.588,
+          "p95_ms": 2.827,
+          "occurrences": 1
+        },
+        "lemma:1": {
+          "median_ms": 1.829,
+          "p95_ms": 2.8,
+          "occurrences": 6
+        },
+        "lemma:2": {
+          "median_ms": 1.967,
+          "p95_ms": 4.569,
+          "occurrences": 4
+        },
+        "lemma:3": {
+          "median_ms": 1.164,
+          "p95_ms": 1.374,
+          "occurrences": 1
+        },
+        "lemma:4": {
+          "median_ms": 1.199,
+          "p95_ms": 1.382,
+          "occurrences": 1
+        },
+        "lemma:5": {
+          "median_ms": 1.249,
+          "p95_ms": 1.409,
+          "occurrences": 1
         }
       }
     }
