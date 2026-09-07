@@ -21,6 +21,28 @@ def track_id(video: str, kind: str, caption_language: str) -> str:
     return _stable_id("trk", video, kind, caption_language)
 
 
+def clip_id(
+    *,
+    source_sha256: str,
+    requested_start_ms: int,
+    requested_end_ms: int,
+    padding_ms: int,
+    effective_start_ms: int,
+    effective_end_ms: int,
+    preparation_version: str,
+) -> str:
+    return _stable_id(
+        "clp",
+        source_sha256,
+        str(requested_start_ms),
+        str(requested_end_ms),
+        str(padding_ms),
+        str(effective_start_ms),
+        str(effective_end_ms),
+        preparation_version,
+    )
+
+
 def segment_id(
     *,
     provider_video_id: str,
