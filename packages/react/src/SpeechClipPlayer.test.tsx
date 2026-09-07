@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HighlightedSourceText,
+  PLAYBACK_RATES,
   ProgressiveSourceText,
   ProgressiveTargetText,
   SpeechClipPlayer,
@@ -12,16 +13,26 @@ import type { YouTubeNamespace, YouTubePlayer } from "./youtube.js";
 class MockPlayer implements YouTubePlayer {
   static latest: MockPlayer;
   static autoPrime = true;
+  static availablePlaybackRates: number[] = [...PLAYBACK_RATES];
   current = clip.clip_start;
+  playbackRate = 1;
   options: ConstructorParameters<YouTubeNamespace["Player"]>[1];
   playVideo = vi.fn(() => this.options.events.onStateChange({ data: 1 }));
   pauseVideo = vi.fn(() => this.options.events.onStateChange({ data: 2 }));
   loadVideoById = vi.fn((options: { videoId: string; startSeconds: number }) => {
     this.current = options.startSeconds + .08;
+    this.playbackRate = 1;
     if (MockPlayer.autoPrime) this.options.events.onStateChange({ data: 1 });
   });
   seekTo = vi.fn((seconds: number) => { this.current = seconds; });
   getCurrentTime = vi.fn(() => this.current);
+  getPlaybackRate = vi.fn(() => this.playbackRate);
+  getAvailablePlaybackRates = vi.fn(() => MockPlayer.availablePlaybackRates);
+  setPlaybackRate = vi.fn((rate: number) => {
+    if (!MockPlayer.availablePlaybackRates.includes(rate) || this.playbackRate === rate) return;
+    this.playbackRate = rate;
+    this.options.events.onPlaybackRateChange?.({ data: rate });
+  });
   mute = vi.fn();
   unMute = vi.fn();
   setOption = vi.fn();
@@ -43,6 +54,7 @@ const loader = vi.fn(() => Promise.resolve(namespace));
 describe("SpeechClipPlayer", () => {
   beforeEach(() => {
     MockPlayer.autoPrime = true;
+    MockPlayer.availablePlaybackRates = [...PLAYBACK_RATES];
     loader.mockClear();
   });
 
@@ -111,6 +123,58 @@ describe("SpeechClipPlayer", () => {
     expect(statuses).toContain("ready");
     expect(statuses).toContain("playing");
     expect(screen.getByRole("status")).toHaveTextContent("Excerpt playing");
+  });
+
+  it("offers quick and complete supported playback-rate controls", async () => {
+    const onPlaybackRateChange = vi.fn();
+    render(<SpeechClipPlayer
+      clip={clip}
+      youtubeApiLoader={loader}
+      defaultPlaybackRate={0.75}
+      onPlaybackRateChange={onPlaybackRateChange}
+    />);
+    await waitFor(() => expect(screen.getByLabelText("Playback speed")).toHaveValue("0.75"));
+    expect(MockPlayer.latest.setPlaybackRate).toHaveBeenCalledWith(0.75);
+    expect(screen.getByRole("button", { name: "Set playback speed to 0.75×" })).toHaveAttribute("aria-pressed", "true");
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(
+      PLAYBACK_RATES.map((rate) => `${rate}×`),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Set playback speed to 1.5×" }));
+    expect(onPlaybackRateChange).toHaveBeenLastCalledWith(1.5);
+    expect(MockPlayer.latest.setPlaybackRate).toHaveBeenLastCalledWith(1.5);
+    expect(screen.getByLabelText("Playback speed")).toHaveValue("1.5");
+
+    fireEvent.change(screen.getByLabelText("Playback speed"), { target: { value: "2" } });
+    expect(onPlaybackRateChange).toHaveBeenLastCalledWith(2);
+    expect(MockPlayer.latest.setPlaybackRate).toHaveBeenLastCalledWith(2);
+  });
+
+  it("uses the closest video-supported rate without replacing the requested preference", async () => {
+    MockPlayer.availablePlaybackRates = [0.5, 1, 1.5];
+    const onPlaybackRateChange = vi.fn();
+    render(<SpeechClipPlayer
+      clip={clip}
+      youtubeApiLoader={loader}
+      playbackRate={0.25}
+      onPlaybackRateChange={onPlaybackRateChange}
+    />);
+    await waitFor(() => expect(screen.getByLabelText("Playback speed")).toHaveValue("0.5"));
+    expect(MockPlayer.latest.setPlaybackRate).toHaveBeenCalledWith(0.5);
+    expect(onPlaybackRateChange).not.toHaveBeenCalled();
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["0.5×", "1×", "1.5×"]);
+    expect(screen.getByRole("button", { name: "Set playback speed to 0.75×" })).toBeDisabled();
+  });
+
+  it("reapplies the preferred rate when YouTube resets a loaded video to normal speed", async () => {
+    render(<SpeechClipPlayer clip={clip} youtubeApiLoader={loader} playbackRate={0.75} />);
+    await waitFor(() => expect(MockPlayer.latest.playbackRate).toBe(0.75));
+    MockPlayer.latest.setPlaybackRate.mockClear();
+
+    act(() => MockPlayer.latest.loadVideoById({ videoId: clip.video.id, startSeconds: clip.clip_start }));
+
+    expect(MockPlayer.latest.setPlaybackRate).toHaveBeenCalledWith(0.75);
+    expect(MockPlayer.latest.playbackRate).toBe(0.75);
   });
 
   it("hides evaluation metadata in blind mode", async () => {
@@ -265,6 +329,27 @@ it("shows neutral retry controls without rendering backend errors", () => {
     onTranslationRetry={onRetry}
   />);
   expect(screen.getByRole("button", { name: "Retry translation links" })).toBeInTheDocument();
+});
+
+it("uses the finalized repeat drawing for transport and translation retry controls", async () => {
+  const paths = [
+    "M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8",
+    "M3 3v5h5",
+  ];
+  const { container } = render(<SpeechClipPlayer
+    clip={clip}
+    youtubeApiLoader={loader}
+    targetLanguage="en"
+    translationStatus="failed"
+    onTranslationRetry={() => undefined}
+  />);
+  await waitFor(() => expect(screen.getByRole("button", { name: "Replay from excerpt start" })).toBeInTheDocument());
+  for (const label of ["Replay from excerpt start", "Retry translation"]) {
+    const icon = screen.getByRole("button", { name: label }).querySelector(".sur-player__repeat-icon");
+    expect(icon).not.toBeNull();
+    expect(Array.from(icon?.querySelectorAll("path") ?? []).map((path) => path.getAttribute("d"))).toEqual(paths);
+  }
+  expect(container).not.toHaveTextContent("↻");
 });
 
 it("requests and renders a configured target language", async () => {

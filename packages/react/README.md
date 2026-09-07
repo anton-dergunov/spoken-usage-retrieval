@@ -55,6 +55,34 @@ keys seek by one second when the player itself is focused. Buttons and the range
 native keyboard behavior. Status changes are announced through a polite live region, errors use an
 alert, and package motion is effectively disabled when the user requests reduced motion.
 
+The transport provides one-tap shortcuts for 0.5×, 0.75×, 1×, and 1.5× plus a selector for
+every rate the current YouTube video supports between 0.25× and 2×. Use `defaultPlaybackRate` for
+uncontrolled playback, or `playbackRate` with `onPlaybackRateChange` when the host needs to preserve
+the preference across player instances:
+
+```tsx
+const storageKey = "my-app.playback-rate.v1";
+const [playbackRate, setPlaybackRate] = useState<PlaybackRate>(() => {
+  const stored = Number(localStorage.getItem(storageKey));
+  return isPlaybackRate(stored) ? stored : 1;
+});
+
+<SpeechClipPlayer
+  clip={clip}
+  playbackRate={playbackRate}
+  onPlaybackRateChange={(rate) => {
+    setPlaybackRate(rate);
+    localStorage.setItem(storageKey, String(rate));
+  }}
+/>;
+```
+
+Import `PlaybackRate` and `isPlaybackRate` from the package root. The component itself does not use
+storage. YouTube resets playback speed when it loads a video, so the player reapplies the requested
+rate once playback begins. If that rate is unavailable for one video, the nearest supported rate is
+used for that video without changing the host's saved preference. Arbitrary intermediate values are
+not exposed because the YouTube iframe API rounds unsupported rates toward 1×.
+
 `targetLanguage`, `translationStatus`, `targetText`, `translationProvenance`, `alignmentStatus`,
 `alignmentGraph`, `alignmentGroups`, `onTranslationRequest`, `onTranslationRetry`, and
 `onTranslationCancel` render the optional translation lifecycle. Graph token IDs distinguish

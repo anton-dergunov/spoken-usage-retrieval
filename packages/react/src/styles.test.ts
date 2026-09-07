@@ -30,4 +30,14 @@ describe("package styles", () => {
     expect(contrast("#657772", "#fbfcfc")).toBeGreaterThanOrEqual(4.5);
     expect(contrast("#69420f", "#efe3ce")).toBeGreaterThanOrEqual(4.5);
   });
+
+  it("keeps retry controls and their repeat icons square", () => {
+    expect(css).toMatch(/\.sur-player__translation-retry\s*\{[^}]*width: 24px;[^}]*height: 24px;[^}]*padding: 0;/s);
+    expect(css).toMatch(/\.sur-player__translation-retry \.sur-player__repeat-icon\s*\{ width: 15px; height: 15px; flex: 0 0 auto; \}/);
+    expect(css).toContain(".sur-player .sur-player__repeat-icon");
+  });
+
+  it("gives the native speed selector a specific compact font and enough width", () => {
+    expect(css).toMatch(/\.sur-player \.sur-player__speed-select\s*\{[^}]*width: 60px;[^}]*font: 9px var\(--sur-player-mono\);/s);
+  });
 });

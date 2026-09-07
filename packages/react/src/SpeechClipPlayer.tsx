@@ -35,6 +35,11 @@ export type SpeechClipPlayerStatus =
   | "ended"
   | "error";
 
+export const PLAYBACK_RATES = [0.25, 0.5, 0.75, 1, 1.25, 1.5, 1.75, 2] as const;
+export type PlaybackRate = (typeof PLAYBACK_RATES)[number];
+
+const PLAYBACK_RATE_PRESETS: readonly PlaybackRate[] = [0.5, 0.75, 1, 1.5];
+
 export interface SpeechClipPlayerError {
   message: string;
   code: "unsupported-provider" | "embed-unavailable" | "player-error" | "connection-error";
@@ -49,6 +54,9 @@ export interface SpeechClipPlayerProps {
   sourceTiming?: TimedText[];
   playing?: boolean;
   onPlayingChange?: (playing: boolean) => void;
+  playbackRate?: PlaybackRate;
+  defaultPlaybackRate?: PlaybackRate;
+  onPlaybackRateChange?: (playbackRate: PlaybackRate) => void;
   onStatusChange?: (status: SpeechClipPlayerStatus) => void;
   onTimeChange?: (absoluteSeconds: number) => void;
   onError?: (error: SpeechClipPlayerError) => void;
@@ -104,8 +112,33 @@ function PlayIcon({ pause = false }: { pause?: boolean }) {
     : <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m8 5 11 7-11 7z" /></svg>;
 }
 
-function ReplayIcon() {
-  return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7v4H3V3h2v2.3A9 9 0 1 1 3.6 15l2-.5A7 7 0 1 0 7 7Z" /></svg>;
+function RepeatIcon() {
+  return <svg className="sur-player__repeat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+    <path d="M3 3v5h5" />
+  </svg>;
+}
+
+export function isPlaybackRate(value: unknown): value is PlaybackRate {
+  return typeof value === "number" && PLAYBACK_RATES.some((rate) => rate === value);
+}
+
+function closestPlaybackRate(requested: PlaybackRate, available: readonly PlaybackRate[]): PlaybackRate {
+  return available.reduce((closest, candidate) => {
+    const distance = Math.abs(candidate - requested);
+    const closestDistance = Math.abs(closest - requested);
+    if (distance < closestDistance) return candidate;
+    if (distance === closestDistance && Math.abs(candidate - 1) < Math.abs(closest - 1)) return candidate;
+    return closest;
+  }, available[0] ?? 1);
+}
+
+function playbackRateLabel(rate: PlaybackRate): string {
+  return `${rate}×`;
+}
+
+function disabledPlayerStatus(status: SpeechClipPlayerStatus): boolean {
+  return status === "connecting" || status === "priming" || status === "starting" || status === "error";
 }
 
 export function HighlightedSourceText({ text, match }: { text: string; match?: MatchSpan }): ReactNode {
@@ -285,6 +318,9 @@ export function SpeechClipPlayer({
   sourceTiming,
   playing,
   onPlayingChange,
+  playbackRate,
+  defaultPlaybackRate = 1,
+  onPlaybackRateChange,
   onStatusChange,
   onTimeChange,
   onError,
@@ -312,9 +348,14 @@ export function SpeechClipPlayer({
   const awaitingInteractionRef = useRef(false);
   const internalPauseRef = useRef<InternalPause>(null);
   const onPlayingChangeRef = useRef(onPlayingChange);
+  const requestedPlaybackRateRef = useRef<PlaybackRate>(playbackRate ?? defaultPlaybackRate);
   const onStatusChangeRef = useRef(onStatusChange);
   const onTimeChangeRef = useRef(onTimeChange);
   const onErrorRef = useRef(onError);
+  const [uncontrolledPlaybackRate, setUncontrolledPlaybackRate] = useState<PlaybackRate>(defaultPlaybackRate);
+  const requestedPlaybackRate = playbackRate ?? uncontrolledPlaybackRate;
+  const [availablePlaybackRates, setAvailablePlaybackRates] = useState<readonly PlaybackRate[]>(PLAYBACK_RATES);
+  const [effectivePlaybackRate, setEffectivePlaybackRate] = useState<PlaybackRate>(requestedPlaybackRate);
   const [status, setStatus] = useState<SpeechClipPlayerStatus>("connecting");
   const [current, setCurrent] = useState(clip.clip_start);
   const [playerError, setPlayerError] = useState<SpeechClipPlayerError | null>(null);
@@ -350,6 +391,7 @@ export function SpeechClipPlayer({
   }, [alignmentGraph, current, pinnedAlignment, timing]);
 
   useEffect(() => { onPlayingChangeRef.current = onPlayingChange; }, [onPlayingChange]);
+  useEffect(() => { requestedPlaybackRateRef.current = requestedPlaybackRate; }, [requestedPlaybackRate]);
   useEffect(() => { onStatusChangeRef.current = onStatusChange; }, [onStatusChange]);
   useEffect(() => { onTimeChangeRef.current = onTimeChange; }, [onTimeChange]);
   useEffect(() => { onErrorRef.current = onError; }, [onError]);
@@ -369,6 +411,30 @@ export function SpeechClipPlayer({
       playerInstance.setOption?.("captions", "track", {});
     } catch {
       // YouTube controls caption preferences; custom source text remains available below.
+    }
+  }, []);
+
+  const applyPlaybackRate = useCallback((playerInstance: YouTubePlayer) => {
+    let available: PlaybackRate[] = [1];
+    try {
+      const reported = playerInstance.getAvailablePlaybackRates();
+      const supported = PLAYBACK_RATES.filter((rate) => reported.includes(rate));
+      if (supported.length > 0) available = supported;
+    } catch {
+      // Some videos expose only normal speed until playback has begun.
+    }
+    setAvailablePlaybackRates((currentRates) =>
+      currentRates.length === available.length && currentRates.every((rate, index) => rate === available[index])
+        ? currentRates
+        : available,
+    );
+    const target = closestPlaybackRate(requestedPlaybackRateRef.current, available);
+    try {
+      if (playerInstance.getPlaybackRate() !== target) playerInstance.setPlaybackRate(target);
+      const confirmed = playerInstance.getPlaybackRate();
+      if (isPlaybackRate(confirmed)) setEffectivePlaybackRate(confirmed);
+    } catch {
+      setEffectivePlaybackRate(1);
     }
   }, []);
 
@@ -392,6 +458,8 @@ export function SpeechClipPlayer({
     setHoveredAlignment(null);
     setPinnedAlignment(null);
     setCurrent(clip.clip_start);
+    setAvailablePlaybackRates(PLAYBACK_RATES);
+    setEffectivePlaybackRate(requestedPlaybackRateRef.current);
     replayRef.current = false;
     primingRef.current = false;
     startingRef.current = false;
@@ -460,6 +528,7 @@ export function SpeechClipPlayer({
           onStateChange: ({ data }) => {
             if (data === YT.PlayerState.ENDED) finishClip(playerInstance);
             else if (data === YT.PlayerState.PLAYING) {
+              if (playerInstance) applyPlaybackRate(playerInstance);
               if (primingRef.current) {
                 primingRef.current = false;
                 if (primeTimer !== undefined) window.clearTimeout(primeTimer);
@@ -506,6 +575,9 @@ export function SpeechClipPlayer({
             });
             setStatus("error");
           },
+          onPlaybackRateChange: ({ data }) => {
+            if (isPlaybackRate(data)) setEffectivePlaybackRate(data);
+          },
           onApiChange: () => {
             if (playerRef.current) disableYouTubeCaptions(playerRef.current);
           },
@@ -542,7 +614,14 @@ export function SpeechClipPlayer({
     loadAttempt,
     sourceUrl,
     youtubeApiLoader,
+    applyPlaybackRate,
   ]);
+
+  useEffect(() => {
+    const playerInstance = playerRef.current;
+    if (!playerInstance || disabledPlayerStatus(status)) return;
+    applyPlaybackRate(playerInstance);
+  }, [applyPlaybackRate, requestedPlaybackRate, status]);
 
   useEffect(() => {
     if (status !== "playing") return;
@@ -624,6 +703,14 @@ export function SpeechClipPlayer({
     if (status === "ended") setStatus("paused");
   }, [clip.clip_end, clip.clip_start, status]);
 
+  const choosePlaybackRate = useCallback((rate: PlaybackRate) => {
+    requestedPlaybackRateRef.current = rate;
+    if (playbackRate === undefined) setUncontrolledPlaybackRate(rate);
+    onPlaybackRateChange?.(rate);
+    const playerInstance = playerRef.current;
+    if (playerInstance) applyPlaybackRate(playerInstance);
+  }, [applyPlaybackRate, onPlaybackRateChange, playbackRate]);
+
   const handleKeys = (event: KeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape" && pinnedAlignment) {
       event.preventDefault();
@@ -691,16 +778,41 @@ export function SpeechClipPlayer({
       </button>
       {showReplayControl && <button type="button" className="sur-player__transport-secondary" onClick={replay}
         disabled={navigationDisabled} aria-label="Replay from excerpt start">
-        <ReplayIcon />
+        <RepeatIcon />
       </button>}
       <div className="sur-player__timeline">
         <input className="sur-player__range" type="range" min="0" max={duration} step="0.1"
           value={relativeCurrent} onChange={(event) => seek(Number(event.target.value))}
           disabled={navigationDisabled} aria-label="Excerpt position"
           style={{ "--sur-player-progress": progress } as CSSProperties} />
+      </div>
+      <div className="sur-player__transport-footer">
         <div className="sur-player__time-row">
           <span>{formatClock(relativeCurrent)} <small>/ {formatClock(duration)}</small></span>
           {status === "buffering" && <span className="sur-player__buffering"><i />Buffering</span>}
+        </div>
+        <div className="sur-player__speed-controls" role="group" aria-label="Playback speed shortcuts">
+          {PLAYBACK_RATE_PRESETS.map((rate) => <button
+            type="button"
+            className="sur-player__speed-preset"
+            key={rate}
+            disabled={disabled || !availablePlaybackRates.includes(rate)}
+            aria-label={`Set playback speed to ${playbackRateLabel(rate)}`}
+            aria-pressed={effectivePlaybackRate === rate}
+            onClick={() => choosePlaybackRate(rate)}
+          >{playbackRateLabel(rate)}</button>)}
+          <select
+            className="sur-player__speed-select"
+            aria-label="Playback speed"
+            disabled={disabled}
+            value={effectivePlaybackRate}
+            onChange={(event) => {
+              const rate = Number(event.target.value);
+              if (isPlaybackRate(rate)) choosePlaybackRate(rate);
+            }}
+          >
+            {availablePlaybackRates.map((rate) => <option key={rate} value={rate}>{playbackRateLabel(rate)}</option>)}
+          </select>
         </div>
       </div>
     </div>
@@ -738,7 +850,7 @@ export function SpeechClipPlayer({
             type="button" className="sur-player__translation-retry"
             onClick={(event) => { event.stopPropagation(); onTranslationRetry(targetLanguage); }}
             aria-label="Retry translation links"
-          >↻</button>}
+          ><RepeatIcon /></button>}
         </p> : (translationStatus === "queued" || translationStatus === "running") ? <p className="sur-player__translation-status">
           Translating… {onTranslationCancel && <button type="button" onClick={onTranslationCancel}>Cancel</button>}
         </p> : <p className="sur-player__translation-status">
@@ -746,7 +858,7 @@ export function SpeechClipPlayer({
           {translationStatus === "failed" && onTranslationRetry && <button
             type="button" className="sur-player__translation-retry"
             onClick={() => onTranslationRetry(targetLanguage)} aria-label="Retry translation"
-          >↻</button>}
+          ><RepeatIcon /></button>}
         </p>}
       </div>}
       <div className="sur-player__source-line">

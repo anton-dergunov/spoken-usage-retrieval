@@ -6,6 +6,9 @@ export interface YouTubePlayer {
   loadVideoById(options: { videoId: string; startSeconds: number; endSeconds?: number }): void;
   seekTo(seconds: number, allowSeekAhead: boolean): void;
   getCurrentTime(): number;
+  getPlaybackRate(): number;
+  getAvailablePlaybackRates(): number[];
+  setPlaybackRate(rate: number): void;
   mute(): void;
   unMute(): void;
   setOption?(module: string, option: string, value: unknown): void;
@@ -21,6 +24,7 @@ export interface YouTubeNamespace {
       events: {
         onReady(event: { target: YouTubePlayer }): void;
         onStateChange(event: YouTubeStateEvent): void;
+        onPlaybackRateChange?(event: { data: number }): void;
         onError(event: { data: number }): void;
         onApiChange?(): void;
       };

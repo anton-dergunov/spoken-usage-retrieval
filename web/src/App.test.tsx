@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import App from "./App";
+import App, { PLAYBACK_RATE_STORAGE_KEY, storedPlaybackRate, storePlaybackRate } from "./App";
 
 const suggestionResponse = {
   source_language: "es",
@@ -52,7 +52,40 @@ const searchResponse = {
   ]
 };
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
+
+it("validates and safely persists the host-owned playback preference", () => {
+  localStorage.setItem(PLAYBACK_RATE_STORAGE_KEY, "0.75");
+  expect(storedPlaybackRate()).toBe(0.75);
+  localStorage.setItem(PLAYBACK_RATE_STORAGE_KEY, "0.9");
+  expect(storedPlaybackRate()).toBe(1);
+
+  const getItem = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked"); });
+  expect(storedPlaybackRate()).toBe(1);
+  getItem.mockRestore();
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => { throw new Error("blocked"); });
+  expect(() => storePlaybackRate(1.5)).not.toThrow();
+});
+
+it("keeps the stored playback preference when another result opens", async () => {
+  localStorage.setItem(PLAYBACK_RATE_STORAGE_KEY, "0.75");
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {
+    const url = String(input);
+    const body = url.includes("suggestions") ? suggestionResponse : url.includes("status") ? statusResponse : searchResponse;
+    return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "Content-Type": "application/json" } }));
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  expect(await screen.findByLabelText("Playback speed")).toHaveValue("0.75");
+
+  fireEvent.click(screen.getByRole("button", { name: /Esa es, la verdad/ }));
+
+  expect(await screen.findByLabelText("Playback speed")).toHaveValue("0.75");
+  expect(localStorage.getItem(PLAYBACK_RATE_STORAGE_KEY)).toBe("0.75");
+});
 
 it("offers corpus suggestions and loads diverse results", async () => {
   vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL) => {

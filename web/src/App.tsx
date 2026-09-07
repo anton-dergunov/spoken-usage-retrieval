@@ -4,8 +4,10 @@ import {
   createSpeechRetrievalClient,
   formatClock,
   HighlightedSourceText,
+  isPlaybackRate,
   type CorpusStatus,
   type MatchMode,
+  type PlaybackRate,
   type SearchResponse,
   type SearchResult,
   type Suggestion,
@@ -13,6 +15,22 @@ import {
 } from "@spoken-usage-retrieval/react";
 
 const client = createSpeechRetrievalClient({ baseUrl: "/api/v1" });
+export const PLAYBACK_RATE_STORAGE_KEY = "spoken-usage-retrieval.playback-rate.v1";
+
+export function storedPlaybackRate(): PlaybackRate {
+  try {
+    const value = Number(window.localStorage.getItem(PLAYBACK_RATE_STORAGE_KEY));
+    return isPlaybackRate(value) ? value : 1;
+  } catch {
+    return 1;
+  }
+}
+
+export function storePlaybackRate(rate: PlaybackRate): void {
+  try { window.localStorage.setItem(PLAYBACK_RATE_STORAGE_KEY, String(rate)); } catch {
+    // Playback remains usable when host storage is unavailable.
+  }
+}
 
 function SearchIcon() {
   return <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m21 20-4.7-4.7a7.5 7.5 0 1 0-1 1L20 21l1-1ZM5 10.5a5.5 5.5 0 1 1 11 0 5.5 5.5 0 0 1-11 0Z" /></svg>;
@@ -67,6 +85,7 @@ export default function App() {
   const [query, setQuery] = useState(() => new URLSearchParams(window.location.search).get("q") ?? "");
   const [language, setLanguage] = useState("");
   const [matchMode, setMatchMode] = useState<MatchMode>("auto");
+  const [playbackRate, setPlaybackRate] = useState<PlaybackRate>(storedPlaybackRate);
   const [response, setResponse] = useState<SearchResponse | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
@@ -313,6 +332,11 @@ export default function App() {
             key={selected.occurrence_id}
             clip={selected}
             blind
+            playbackRate={playbackRate}
+            onPlaybackRateChange={(rate) => {
+              setPlaybackRate(rate);
+              storePlaybackRate(rate);
+            }}
             targetLanguage={targetLanguage || null}
             targetText={translationJob?.result?.target_text}
             alignmentGroups={translationJob?.result?.alignment_groups}
