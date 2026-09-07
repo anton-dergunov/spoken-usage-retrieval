@@ -11,6 +11,7 @@ from speech_retrieval.audio_features import (
     SubjectiveReference,
     caption_agreement,
     merge_intervals,
+    read_prepared_waveform,
     speaking_rate,
     speech_ratio,
     squim_objective,
@@ -253,3 +254,29 @@ def test_a_missing_reference_file_is_also_unavailable_rather_than_invented(clip,
     assert result.status == "unavailable"
     assert result.error is not None
     assert result.error.code == "missing_non_matching_reference"
+
+
+def test_prepared_clips_are_read_without_torchaudio_audio_io(tmp_path):
+    torch = pytest.importorskip("torch")
+    path = write_wave(tmp_path / "mono.wav", seconds=0.5)
+
+    waveform = read_prepared_waveform(path)
+
+    assert isinstance(waveform, torch.Tensor)
+    assert waveform.ndim == 1
+    assert waveform.shape[0] == 8000
+    assert float(waveform.abs().max()) <= 1.0
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "message"),
+    [
+        ({"channels": 2}, "mono signed 16-bit PCM"),
+        ({"sample_rate": 44_100}, "44100 Hz, expected 16000 Hz"),
+    ],
+)
+def test_reading_a_waveform_rejects_anything_outside_the_clip_contract(tmp_path, kwargs, message):
+    path = write_wave(tmp_path / "wrong.wav", seconds=0.2, **kwargs)
+
+    with pytest.raises(ValueError, match=message):
+        read_prepared_waveform(path)

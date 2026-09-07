@@ -22,7 +22,7 @@ from speech_retrieval.audio_scoring import SCORING_NORMALIZERS
 CONFIG_VERSION = 1
 RESULT_SCHEMA_VERSION = 1
 SAMPLING_ALGORITHM = "sha256-hash-order-v1"
-RUBRIC_VERSION = "caption-review-v1"
+RUBRIC_VERSION = "caption-review-v2"
 RECOMMENDATIONS = (
     "use_directly",
     "attach_score",
@@ -47,6 +47,7 @@ REVIEW_TAGS = (
     "boundary_problem",
     "start_cut",
     "end_cut",
+    "neighbouring_speech_in_clip",
     "overlap",
     "noise_or_music",
     "unclear_speech",

@@ -263,7 +263,7 @@
           "type": "integer"
         },
         "rubric_version": {
-          "default": "caption-review-v1",
+          "default": "caption-review-v2",
           "title": "Rubric Version",
           "type": "string"
         },

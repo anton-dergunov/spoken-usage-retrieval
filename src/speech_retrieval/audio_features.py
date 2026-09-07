@@ -10,7 +10,10 @@ Heavy machine-learning imports happen only inside the adapter that needs them.
 
 from __future__ import annotations
 
+import array
+import sys
 import time
+import wave
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -321,11 +324,36 @@ def union_seconds(intervals: Sequence[tuple[float, float]]) -> float:
     return sum(end - start for start, end in merge_intervals(intervals))
 
 
+def read_prepared_waveform(path: Path, *, sample_rate: int = 16_000) -> Any:
+    """Read a prepared clip into a mono float tensor without any torchaudio I/O.
+
+    Clips are published under a validated contract — WAV, signed 16-bit PCM, mono, 16 kHz —
+    so the standard library can read them. TorchAudio moved audio I/O to TorchCodec in 2.9,
+    and depending on that moving surface here would make an optional feature fail for a
+    reason that has nothing to do with the feature.
+    """
+    with wave.open(str(path), "rb") as reader:
+        if reader.getsampwidth() != 2 or reader.getnchannels() != 1:
+            raise ValueError("prepared clips must be mono signed 16-bit PCM")
+        if reader.getframerate() != sample_rate:
+            raise ValueError(
+                f"prepared clip is {reader.getframerate()} Hz, expected {sample_rate} Hz"
+            )
+        frames = reader.readframes(reader.getnframes())
+    samples = array.array("h")
+    samples.frombytes(frames)
+    if sys.byteorder == "big":
+        samples.byteswap()
+    import torch
+
+    return torch.frombuffer(samples, dtype=torch.int16).to(torch.float32) / 32768.0
+
+
 def _silero_detector(path: Path, settings: SileroSettings) -> Sequence[tuple[float, float]]:
-    from silero_vad import get_speech_timestamps, load_silero_vad, read_audio
+    from silero_vad import get_speech_timestamps, load_silero_vad
 
     model = load_silero_vad(onnx=settings.backend == "onnx")
-    waveform = read_audio(str(path), sampling_rate=settings.sampling_rate)
+    waveform = read_prepared_waveform(path, sample_rate=settings.sampling_rate)
     stamps = get_speech_timestamps(
         waveform,
         model,
@@ -446,15 +474,10 @@ class SubjectiveReference:
 
 
 def _squim_objective_estimator(path: Path) -> dict[str, float]:
-    import torchaudio
     from torchaudio.pipelines import SQUIM_OBJECTIVE
 
     model = SQUIM_OBJECTIVE.get_model()
-    waveform, sample_rate = torchaudio.load(str(path))
-    if sample_rate != SQUIM_OBJECTIVE.sample_rate:
-        raise ValueError(
-            f"SQUIM objective expects {SQUIM_OBJECTIVE.sample_rate} Hz, got {sample_rate}"
-        )
+    waveform = read_prepared_waveform(path, sample_rate=SQUIM_OBJECTIVE.sample_rate).unsqueeze(0)
     stoi, pesq, si_sdr = model(waveform)
     return {
         "stoi": float(stoi.item()),
@@ -464,14 +487,12 @@ def _squim_objective_estimator(path: Path) -> dict[str, float]:
 
 
 def _squim_subjective_estimator(path: Path, reference: Path) -> dict[str, float]:
-    import torchaudio
     from torchaudio.pipelines import SQUIM_SUBJECTIVE
 
     model = SQUIM_SUBJECTIVE.get_model()
-    waveform, sample_rate = torchaudio.load(str(path))
-    reference_waveform, reference_rate = torchaudio.load(str(reference))
-    if sample_rate != SQUIM_SUBJECTIVE.sample_rate or reference_rate != sample_rate:
-        raise ValueError("SQUIM subjective requires both inputs at the bundle sample rate")
+    rate = SQUIM_SUBJECTIVE.sample_rate
+    waveform = read_prepared_waveform(path, sample_rate=rate).unsqueeze(0)
+    reference_waveform = read_prepared_waveform(reference, sample_rate=rate).unsqueeze(0)
     mos = model(waveform, reference_waveform)
     return {"mos": float(mos.item())}
 

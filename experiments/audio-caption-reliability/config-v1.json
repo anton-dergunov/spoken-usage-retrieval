@@ -121,7 +121,7 @@
     "subjective_reference": null
   },
   "review": {
-    "rubric_version": "caption-review-v1",
+    "rubric_version": "caption-review-v2",
     "subset": "failed_plus_stratified_bins",
     "disagreement_bins": [
       [

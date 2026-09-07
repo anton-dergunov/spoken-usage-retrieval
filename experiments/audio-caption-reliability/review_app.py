@@ -96,6 +96,11 @@ TAG_ANCHORS: dict[str, str] = {
     ),
     "start_cut": "The audio clip begins after the utterance has already started.",
     "end_cut": "The audio clip ends before the utterance finishes.",
+    "neighbouring_speech_in_clip": (
+        "The clip contains speech from before or after this segment, which the caption is "
+        "right not to transcribe. The reference may have picked it up; that is a windowing "
+        "artefact, not a caption error."
+    ),
     "overlap": "Two or more people speak at the same time inside the clip.",
     "noise_or_music": "Background music or noise competes with the speech.",
     "unclear_speech": (
@@ -124,6 +129,11 @@ GUIDE = """
 <ol>
   <li><strong>Listen first.</strong> Play the clip before you read anything. Replay it as
       often as you need.</li>
+  <li><strong>Judge the caption against its own segment, not against the whole clip.</strong>
+      Clips carry 0.35&nbsp;s of lead-in and 0.65&nbsp;s of trail-out so they are comfortable
+      to listen to, so a clip often contains a word or two from the neighbouring segment. The
+      caption is right to leave those out; tag it
+      <code>neighbouring_speech_in_clip</code> and move on.</li>
   <li><strong>Judge the caption against the audio</strong>, never against the ASR text. The
       ASR is a declared comparison reference, not truth: it can be wrong in the same place
       the caption is, or wrong where the caption is right. The ASR text stays hidden until

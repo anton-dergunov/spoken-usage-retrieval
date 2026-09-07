@@ -782,6 +782,10 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
         "run_id": args.run_id,
         "generated_at": now(),
         "config_sha256": snapshot["config_sha256"],
+        "config_sha256_now": canonical_checksum(config.model_dump(mode="json")),
+        "config_changed_since_sample": (
+            canonical_checksum(config.model_dump(mode="json")) != snapshot["config_sha256"]
+        ),
         "sample_sha256": snapshot["sample_sha256"],
         "configuration": config.model_dump(mode="json"),
         "selection": snapshot["selection"],
