@@ -1,6 +1,10 @@
 # Plan 09: Audio cache and caption-reliability benchmark
 
-**Status:** Planned
+**Status:** In progress — the audio cache, opt-in wiring, scoring, and acoustic features are
+implemented and verified; the benchmark's empirical run is pending an operator authorization
+decision, audio acquisition, an ASR backend, and manual review. See
+[the implementation notes](09-audio-and-caption-reliability-implementation.md) and
+[the experiment](../../experiments/audio-caption-reliability/README.md).
 
 **Depends on:** Plan 07
 

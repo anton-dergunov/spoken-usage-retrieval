@@ -159,6 +159,8 @@ class Indexer:
                 failures=1,
                 languages=[],
                 index=None,
+                with_audio=self.settings.with_audio,
+                audio_complete=not self.settings.with_audio,
             )
         enabled = [catalogue for catalogue in catalogues if catalogue.enabled_channels]
         if not enabled:
@@ -177,6 +179,8 @@ class Indexer:
                 failures=1,
                 languages=[],
                 index=None,
+                with_audio=self.settings.with_audio,
+                audio_complete=not self.settings.with_audio,
             )
 
         for catalogue in enabled:
@@ -187,6 +191,9 @@ class Indexer:
                     "limit": self.settings.acquisition_limit,
                     "scan_limit": self.settings.scan_limit,
                 }
+                if self.settings.with_audio:
+                    arguments["with_audio"] = True
+                    arguments["ffprobe"] = self.settings.ffprobe_path
                 if self.runner is not None:
                     arguments["runner"] = self.runner
                 report = acquire(**arguments)
@@ -203,6 +210,17 @@ class Indexer:
                             message=item.get("error", "Acquisition failed"),
                         )
                     )
+                for item in report.get("audio_failures", []):
+                    failures.append(
+                        FailureRecord(
+                            occurred_at=report.get("completed_at", _now()),
+                            operation="audio",
+                            source_language=catalogue.language,
+                            channel=item.get("channel"),
+                            item=item.get("video_id"),
+                            message=item.get("error") or "Audio acquisition failed",
+                        )
+                    )
                 languages.append(
                     LanguageUpdate(
                         source_language=catalogue.language,
@@ -210,6 +228,13 @@ class Indexer:
                         cached=cached,
                         failures=len(report["failures"]),
                         complete=bool(report["complete"]),
+                        audio_requested=len(report["videos"])
+                        if report.get("audio_requested")
+                        else 0,
+                        audio_downloaded=int(report.get("audio_downloaded", 0)),
+                        audio_cached=int(report.get("audio_cached", 0)),
+                        audio_failed=int(report.get("audio_failed", 0)),
+                        audio_complete=bool(report.get("audio_complete", True)),
                     )
                 )
             except Exception as error:
@@ -228,6 +253,7 @@ class Indexer:
                         cached=0,
                         failures=1,
                         complete=False,
+                        audio_complete=not self.settings.with_audio,
                     )
                 )
 
@@ -244,7 +270,12 @@ class Indexer:
             )
 
         completed_at = _now()
-        successful = index_report is not None and all(item.complete for item in languages)
+        audio_complete = all(item.audio_complete for item in languages)
+        successful = (
+            index_report is not None
+            and all(item.complete for item in languages)
+            and (not self.settings.with_audio or audio_complete)
+        )
         self._finish(
             state,
             failures,
@@ -259,6 +290,12 @@ class Indexer:
             failures=sum(item.failures for item in languages) + (1 if index_report is None else 0),
             languages=languages,
             index=index_report,
+            with_audio=self.settings.with_audio,
+            audio_requested=sum(item.audio_requested for item in languages),
+            audio_downloaded=sum(item.audio_downloaded for item in languages),
+            audio_cached=sum(item.audio_cached for item in languages),
+            audio_failed=sum(item.audio_failed for item in languages),
+            audio_complete=audio_complete,
         )
 
 

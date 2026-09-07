@@ -352,6 +352,49 @@ class TranslationServiceStatus(ContractModel):
     cache: TranslationCacheStatistics = Field(default_factory=TranslationCacheStatistics)
 
 
+class AudioChannelStatus(ContractModel):
+    channel: str | None = None
+    videos: int = 0
+    ready: int = 0
+    missing: int = 0
+    failed: int = 0
+    raw_bytes: int = 0
+    derived_bytes: int = 0
+    derived_clips: int = 0
+
+
+class AudioLanguageStatus(ContractModel):
+    source_language: str
+    videos: int = 0
+    ready: int = 0
+    missing: int = 0
+    failed: int = 0
+    raw_bytes: int = 0
+    derived_bytes: int = 0
+    derived_clips: int = 0
+    channels: list[AudioChannelStatus] = Field(default_factory=list)
+
+
+class AudioCacheStatus(ContractModel):
+    """Optional audio-cache state. Missing audio never makes the corpus unready."""
+
+    enabled: bool = False
+    videos: int = Field(
+        default=0,
+        description="Videos present in the caption cache; the audio readiness denominator.",
+    )
+    ready: int = 0
+    missing: int = 0
+    failed: int = 0
+    raw_bytes: int = 0
+    derived_bytes: int = 0
+    derived_clips: int = 0
+    issues: int = Field(
+        default=0, description="Unrecognized, orphaned, or unreadable audio artifacts."
+    )
+    languages: list[AudioLanguageStatus] = Field(default_factory=list)
+
+
 class LanguageStatus(ContractModel):
     source_language: str
     configured: bool
@@ -387,6 +430,7 @@ class CorpusStatus(ContractModel):
     caption_kinds: dict[str, int]
     channel_mutations_enabled: bool = False
     translation: TranslationServiceStatus = Field(default_factory=TranslationServiceStatus)
+    audio: AudioCacheStatus = Field(default_factory=AudioCacheStatus)
 
 
 class ChannelRecord(ContractModel):
@@ -491,6 +535,11 @@ class LanguageUpdate(ContractModel):
     cached: int
     failures: int
     complete: bool
+    audio_requested: int = 0
+    audio_downloaded: int = 0
+    audio_cached: int = 0
+    audio_failed: int = 0
+    audio_complete: bool = True
 
 
 class UpdateSummary(ContractModel):
@@ -502,6 +551,12 @@ class UpdateSummary(ContractModel):
     failures: int
     languages: list[LanguageUpdate]
     index: dict[str, Any] | None
+    with_audio: bool = False
+    audio_requested: int = 0
+    audio_downloaded: int = 0
+    audio_cached: int = 0
+    audio_failed: int = 0
+    audio_complete: bool = True
 
 
 class DoctorCheck(ContractModel):

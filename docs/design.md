@@ -76,12 +76,16 @@ Two rules follow from it, and both have already paid for themselves:
 
 A multilingual subtitle-only architecture, verified end to end with the initial Spanish corpus:
 
-- channel discovery and caption acquisition through `yt-dlp`, with no video or audio download;
+- channel discovery and caption acquisition through `yt-dlp`, with no video download and no audio
+  download unless audio is explicitly enabled;
 - creator-authored captions preferred, original-language automatic captions as a visible fallback;
 - timestamp-aware reconstruction of complete utterances from caption events;
 - accent-tolerant surface and lemma retrieval of words and contiguous 1–5-word phrases;
 - deterministic ranking, cross-video diversification, and range-limited YouTube playback with
-  self-rendered progressive subtitles.
+  self-rendered progressive subtitles;
+- an opt-in local audio cache with provider-format selection, immutable source retention, derived
+  16 kHz mono PCM clips, storage reporting, explicit pruning, and independently optional acoustic
+  features — measurement of caption reliability using it is a separate experiment, not a claim.
 
 ### Corpus representation
 
@@ -104,6 +108,12 @@ data/
 ├── raw/corpora/<language>/<video-key>/<track-id>/
 │   ├── metadata.json            # immutable acquired input and provenance
 │   └── subtitles.raw.json3      # unchanged source-caption strings
+├── raw/corpora/<language>/<video-key>/audio/
+│   ├── manifest.json            # optional audio readiness, provenance, failure diagnostics
+│   └── source.<ext>             # provider representation kept exactly as delivered
+├── derived/audio/clips/<language>/<video-key>/<clip-key>/
+│   ├── clip.wav                 # rebuildable 16 kHz mono PCM analysis clip
+│   └── manifest.json            # requested/effective range, checksums, preparation version
 ├── index/corpus.sqlite3         # derived, rebuildable
 ├── derived/translations.sqlite3 # persistent, lazily generated translation artifacts
 ├── derived/corpora/<language>/  # language-partitioned derived debug dumps
@@ -225,6 +235,29 @@ Audio is not required for lexical search, but it enables refined word timestamps
 detection, boundary estimation, acoustic quality scoring, overlap detection, ASR verification, and
 forced alignment. It is therefore an optional cache layer with its own opt-in, not a dependency of
 retrieval.
+
+Audio readiness lives in its own per-video manifest rather than in the caption manifest's track
+array, so a video whose audio is missing or failed stays fully usable for search and indexing, and
+caption `complete` keeps meaning "the requested caption tracks were acquired". Statuses are `ready`,
+`failed`, and absence meaning `missing`; bounded, sanitized attempt diagnostics are retained without
+provider URLs or credentials.
+
+The acquired provider representation is chosen by a versioned, recorded policy — audio-only formats
+that clear an explicit speech-quality floor, smallest advertised size first, with a deterministic
+bitrate and codec fallback when the provider advertises no size — and is then kept byte-for-byte.
+It is never transcoded in place, because a transcoded "input" would make acquisition compression
+indistinguishable from measured caption error later.
+
+Analysis clips are derived, replaceable, and identified by source checksum, requested range,
+padding, clamped effective range, and a named preparation version (`pcm-s16le-mono-16000-v1`). Both
+the requested and the effective clamped range are recorded, so a request near a file boundary stays
+distinguishable from an equivalent interior request, and changing the conversion contract makes old
+files unreachable instead of silently reused.
+
+Acoustic features are separate again: each returns a per-segment record keyed by segment ID, feature
+name, and feature version, with `complete`, `unavailable`, or `failed` status and its own model and
+settings provenance. A missing dependency or missing media is never a numeric zero, and feature
+values are never buried only inside clip manifests, because ranking consumes them by stable ID.
 
 ## Corpus selection
 

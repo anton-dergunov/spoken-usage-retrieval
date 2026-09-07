@@ -81,3 +81,83 @@ def test_update_once_continues_after_language_failure_and_preserves_last_success
     state = json.loads(state_path.read_text())
     assert state["last_successful_update"] == "2026-09-05T12:00:00+00:00"
     assert state["recent_failures"][0]["source_language"] == "en"
+
+
+def audio_report(*, status, complete=True, failures=None):
+    return {
+        "completed_at": "2026-09-06T12:00:00+00:00",
+        "videos": [{"status": "cached", "audio": {"status": status}}],
+        "failures": [],
+        "complete": True,
+        "audio_requested": True,
+        "audio_downloaded": int(status == "downloaded"),
+        "audio_cached": int(status == "cached"),
+        "audio_failed": int(status == "failed"),
+        "audio_complete": complete,
+        "audio_failures": failures or [],
+    }
+
+
+def test_update_once_requests_audio_only_when_the_setting_is_enabled(tmp_path, monkeypatch):
+    data_dir, catalogue_dir = indexed_data(tmp_path)
+    received = []
+
+    def fake_acquire(**kwargs):
+        received.append(kwargs)
+        if not kwargs.get("with_audio"):
+            return {
+                "completed_at": "2026-09-06T12:00:00+00:00",
+                "videos": [{"status": "cached"}],
+                "failures": [],
+                "complete": True,
+            }
+        return audio_report(status="downloaded")
+
+    monkeypatch.setattr(service_module, "acquire", fake_acquire)
+    settings = Settings(data_dir=data_dir, catalogue_dir=catalogue_dir, acquisition_limit=1)
+
+    default = Indexer(settings).update_once()
+    assert "with_audio" not in received[0]
+    assert default.with_audio is False
+    assert default.audio_requested == 0
+    assert default.audio_complete is True
+
+    summary = Indexer(settings.with_overrides(with_audio=True)).update_once()
+    assert received[1]["with_audio"] is True
+    assert received[1]["ffprobe"] == "ffprobe"
+    assert summary.with_audio is True
+    assert summary.audio_requested == 1
+    assert summary.audio_downloaded == 1
+    assert summary.successful is True
+
+
+def test_audio_failure_still_indexes_captions_but_reports_partial_failure(tmp_path, monkeypatch):
+    data_dir, catalogue_dir = indexed_data(tmp_path)
+
+    monkeypatch.setattr(
+        service_module,
+        "acquire",
+        lambda **_kwargs: audio_report(
+            status="failed",
+            complete=False,
+            failures=[{"video_id": "video-1", "error": "Private video"}],
+        ),
+    )
+    summary = Indexer(
+        Settings(
+            data_dir=data_dir,
+            catalogue_dir=catalogue_dir,
+            acquisition_limit=1,
+            with_audio=True,
+        )
+    ).update_once()
+
+    assert summary.successful is False
+    assert summary.audio_failed == 1
+    assert summary.audio_complete is False
+    assert summary.languages[0].complete is True
+    assert summary.index is not None
+    state = json.loads((data_dir / "reports" / "update-state.json").read_text())
+    assert state["recent_failures"][0]["operation"] == "audio"
+    assert state["recent_failures"][0]["message"] == "Private video"
+    assert state.get("last_successful_update") is None

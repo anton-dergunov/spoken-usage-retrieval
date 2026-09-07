@@ -235,6 +235,43 @@ export interface TranslationServiceStatus {
   cache: TranslationCacheStatistics;
 }
 
+export interface AudioChannelStatus {
+  channel: string | null;
+  videos: number;
+  ready: number;
+  missing: number;
+  failed: number;
+  raw_bytes: number;
+  derived_bytes: number;
+  derived_clips: number;
+}
+
+export interface AudioLanguageStatus {
+  source_language: string;
+  videos: number;
+  ready: number;
+  missing: number;
+  failed: number;
+  raw_bytes: number;
+  derived_bytes: number;
+  derived_clips: number;
+  channels: AudioChannelStatus[];
+}
+
+/** Optional local audio cache. Missing audio never makes the corpus unready. */
+export interface AudioCacheStatus {
+  enabled: boolean;
+  videos: number;
+  ready: number;
+  missing: number;
+  failed: number;
+  raw_bytes: number;
+  derived_bytes: number;
+  derived_clips: number;
+  issues: number;
+  languages: AudioLanguageStatus[];
+}
+
 export type SpeechClipPlayerClip = SpeechClip | SearchResult;
 
 export interface SearchResponse {
@@ -314,6 +351,8 @@ export interface CorpusStatus {
   caption_kinds: Record<string, number>;
   channel_mutations_enabled: boolean;
   translation: TranslationServiceStatus;
+  /** Absent when the service predates the optional audio cache. */
+  audio?: AudioCacheStatus;
 }
 
 export interface ChannelRecord {

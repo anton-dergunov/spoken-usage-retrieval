@@ -17,6 +17,7 @@ from .analysis import (
     UnsupportedAnalysisError,
     recorded_analyzer,
 )
+from .audio import audio_cache_status
 from .catalogue import canonical_language, load_catalogue_directory
 from .contracts import (
     Clip,
@@ -711,6 +712,9 @@ class Corpus:
                 "occurrences": totals["occurrences"],
                 "caption_kinds": dict(sorted(aggregate_captions.items())),
                 "channel_mutations_enabled": self.settings.enable_channel_mutations,
+                "audio": audio_cache_status(
+                    self.settings.data_dir, enabled=self.settings.with_audio
+                ).model_dump(mode="json"),
             }
         )
 

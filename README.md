@@ -17,8 +17,8 @@ example-quality ranking.
 
 ## Current state
 
-A working multilingual subtitle-only architecture with an initial Spanish catalogue. No video or
-audio is downloaded.
+A working multilingual subtitle-only architecture with an initial Spanish catalogue. No video is
+downloaded, and no audio is downloaded unless it is explicitly enabled.
 
 - versioned per-language channel catalogues and caption acquisition via `yt-dlp`, with
   creator-authored source-language captions preferred and original-language automatic captions as a
@@ -62,6 +62,8 @@ transcripts per enabled language, not attempted videos, and repeat runs reuse va
 Use `reindex` to rebuild solely from immutable local caption caches. The repository scripts remain
 available as compatibility wrappers, but the installed CLI exposes only the stable command set.
 
+The quick start downloads no audio. Search, ranking, and the viewer never require it.
+
 `serve` is API-only unless `--web-dist` is supplied. For frontend development, run it without a web
 build and then run `npm --prefix web run dev`; Vite proxies `/api` to port 8000.
 
@@ -98,8 +100,9 @@ app = create_app(settings)
 ```
 
 The foreground CLI provides `serve`, `update --once`, `search`, `channels`, `status`, `reindex`,
-`models`, `translation-cache`, and `doctor`. Every non-server command supports `--json`. Defaults can be supplied with
-`SPEECH_RETRIEVAL_*` environment variables and overridden by command flags.
+`models`, `translation-cache`, `audio-cache`, and `doctor`. Every non-server command supports `--json`.
+Defaults can be supplied with `SPEECH_RETRIEVAL_*` environment variables and overridden by command
+flags.
 
 The public HTTP contract is versioned under `/api/v1`; its checked-in OpenAPI document is
 [`docs/openapi-v1.json`](docs/openapi-v1.json). Liveness and readiness are separate at
@@ -107,6 +110,60 @@ The public HTTP contract is versioned under `/api/v1`; its checked-in OpenAPI do
 them explicitly with `SPEECH_RETRIEVAL_ENABLE_CHANNEL_MUTATIONS=true`; a non-loopback service also
 requires `SPEECH_RETRIEVAL_OPERATOR_TOKEN`, sent as a bearer token. API errors have a stable
 `error.code`, message, and request ID.
+
+### Optional audio
+
+Audio is an opt-in cache layer, not a retrieval dependency. Nothing downloads media unless
+`--with-audio` or `SPEECH_RETRIEVAL_WITH_AUDIO=true` is set, and a default acquisition run makes no
+media requests and writes no media files.
+
+```bash
+# Requires ffmpeg and ffprobe on PATH; check them first.
+uv run speech-retrieval doctor --json
+
+# Acquire captions as usual and, for the same selected videos, one audio-only source each.
+uv run speech-retrieval update --once --with-audio
+
+# Inspect raw and derived usage by language, channel, and video.
+uv run speech-retrieval audio-cache status --json
+
+# Preview a prune, then execute it. Ordinary pruning removes only derived clips.
+uv run speech-retrieval audio-cache prune --language es --older-than-days 30
+uv run speech-retrieval audio-cache prune --language es --older-than-days 30 --execute
+
+# Deleting the immutable source audio needs a separate, explicit flag.
+uv run speech-retrieval audio-cache prune --video-key vid_... --include-raw-audio --execute
+```
+
+The acquired provider file is kept exactly as delivered and treated as an immutable input; analysis
+clips are 16 kHz mono PCM WAVs derived on demand and keyed by source checksum, requested range,
+padding, clamped effective range, and a named preparation version, so a changed conversion contract
+can never reuse an old file. Audio failures are recorded in an independent per-video manifest and
+never invalidate captions or block the index rebuild; an audio-enabled run that could not acquire
+everything it was asked for exits nonzero while still indexing every valid caption.
+
+```python
+from speech_retrieval import audio_availability, prepare_clip
+
+record = audio_availability("data", language="es", video_key="vid_...")
+if record.ready:
+    clip = prepare_clip("data", language="es", video_key="vid_...", start=12.45, end=18.3)
+    print(clip.path, clip.sample_rate, clip.duration, clip.preparation_version)
+```
+
+Media is far larger than captions: a one-hour source at a typical speech bitrate is tens of
+megabytes, and each derived clip costs 32 kB per second. Measure a small sample with
+`audio-cache status` before enabling audio across a whole corpus, and prune derived clips you no
+longer need.
+
+**Downloading media is a decision the operator has to make, not a default.** YouTube's Terms of
+Service restrict downloading and automated access except as the service permits or with prior
+permission, and its API developer policies prohibit caching audiovisual content without written
+approval. Whether a particular local research use is nonetheless permitted depends on your
+jurisdiction, the applicable terms, the copyright and licence of each video, any research or
+teaching exception, and any permission from the channel owner. Assess that before enabling audio;
+"it is for research" does not settle it. Downloaded audio, full transcripts, and model caches must
+never be committed or republished.
 
 ### Word forms and optional language models
 
@@ -271,6 +328,10 @@ Generated corpus data stays local and untracked by default:
 data/
 ├── raw/corpora/<language>/<video-key>/<track-id>/
 │                                  # acquired metadata and captions; immutable inputs
+├── raw/corpora/<language>/<video-key>/audio/
+│                                  # optional immutable source audio and its own manifest
+├── derived/audio/clips/<language>/<video-key>/<clip-key>/
+│                                  # rebuildable 16 kHz mono PCM analysis clips
 ├── derived/corpora/<language>/  # rebuildable segments and debug artifacts
 ├── index/corpus.sqlite3         # rebuildable search index
 └── reports/                     # acquisition and index-build reports

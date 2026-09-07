@@ -1,0 +1,125 @@
+{
+  "config_version": 1,
+  "experiment_id": "audio-caption-reliability",
+  "decision": "For each predeclared source class, decide whether its captions can be used directly, need an attached reliability score, need selective verification, should be replaced by ASR, or need more evidence.",
+  "hypothesis": "Automatic Spanish captions disagree with a Whisper large-v3-class reference materially more than authored Spanish captions, and the disagreement is concentrated in cases a human agrees are real caption errors rather than in punctuation and segmentation differences.",
+  "acceptance_evidence": [
+    "the frozen sample is rerunnable without silent substitution and every stage failure is recorded against the same row",
+    "each predeclared source class has an automatic disagreement distribution with segment-level and video-level denominators",
+    "automatic disagreement is separated from human-confirmed caption error by documented manual adjudication of a predeclared subset",
+    "each predeclared source class receives exactly one recommendation with cited distributions and reviewed examples",
+    "each optional acoustic feature is marked usable, not_usable, or insufficient_evidence against a predeclared human counterpart"
+  ],
+  "source_languages": ["es"],
+  "source_classes": ["es/authored", "es/automatic"],
+  "recommendations": [
+    "use_directly",
+    "attach_score",
+    "verify_selectively",
+    "replace_with_asr",
+    "collect_more_evidence"
+  ],
+  "acoustic_vocabulary": [
+    "clean_single_speaker",
+    "background_music_or_noise",
+    "overlapping_speakers",
+    "distant_or_reverberant",
+    "fast_speech"
+  ],
+  "review_tags": [
+    "meaning_change",
+    "omitted_speech",
+    "extra_speech",
+    "name_or_entity_error",
+    "disfluency_difference",
+    "punctuation_only_difference",
+    "boundary_problem",
+    "start_cut",
+    "end_cut",
+    "overlap",
+    "noise_or_music",
+    "unclear_speech"
+  ],
+  "sampling": {
+    "seed": 20260907,
+    "algorithm": "sha256-hash-order-v1",
+    "inventory": "indexed_segments",
+    "per_video_cap": 8,
+    "minimum_clip_seconds": 1.5,
+    "maximum_clip_seconds": 15.0,
+    "minimum_tokens": 4,
+    "minimum_gap_seconds": 5.0,
+    "strata": [
+      {
+        "id": "es/authored",
+        "source_language": "es",
+        "caption_provenance": "authored",
+        "requested": 24
+      },
+      {
+        "id": "es/automatic",
+        "source_language": "es",
+        "caption_provenance": "automatic",
+        "requested": 24
+      }
+    ]
+  },
+  "audio": {
+    "use_segment_clip_range": true,
+    "padding_seconds": 0.0,
+    "preparation_version": "pcm-s16le-mono-16000-v1",
+    "duration_tolerance_ms": 50
+  },
+  "asr": {
+    "backend": "faster-whisper",
+    "model": "large-v3",
+    "revision": null,
+    "device": "auto",
+    "compute_type": "default",
+    "cpu_threads": 0,
+    "num_workers": 1,
+    "language": "es",
+    "task": "transcribe",
+    "beam_size": 5,
+    "best_of": 5,
+    "patience": 1.0,
+    "temperature": [0.0],
+    "condition_on_previous_text": false,
+    "vad_filter": false,
+    "word_timestamps": true,
+    "initial_prompt": null
+  },
+  "scoring": {
+    "orientation": "reference=asr,hypothesis=caption",
+    "normalization": {"es": "word-v1"},
+    "sensitivity_normalization": {"es": "word-accent-folded-v1"}
+  },
+  "features": {
+    "caption_agreement": true,
+    "speaking_rate": true,
+    "speech_ratio": true,
+    "squim_objective": true,
+    "squim_subjective": false,
+    "silero": {
+      "threshold": 0.5,
+      "min_speech_duration_ms": 250,
+      "min_silence_duration_ms": 100,
+      "speech_pad_ms": 30,
+      "backend": "torch"
+    },
+    "subjective_reference": null
+  },
+  "review": {
+    "rubric_version": "caption-review-v1",
+    "subset": "failed_plus_stratified_bins",
+    "disagreement_bins": [[0.0, 0.1], [0.1, 0.3], [0.3, 1000.0]],
+    "per_bin_per_stratum": 5,
+    "duplicate_review_fraction": 0.1
+  },
+  "authorization": {
+    "required": true,
+    "confirmed": false,
+    "basis": null,
+    "allowlist_path": null
+  }
+}

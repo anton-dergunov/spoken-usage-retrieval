@@ -12,6 +12,13 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from .audio import audio_availability
+from .audio_acquisition import (
+    AudioFormatPolicy,
+    acquire_audio,
+    record_audio_failure,
+    yt_dlp_version,
+)
 from .catalogue import Catalogue, Channel, canonical_language, load_catalogue
 from .identity import (
     ANALYZER_ID,
@@ -326,12 +333,103 @@ def _download_track(
         raise
 
 
+def _no_audio() -> dict[str, Any]:
+    return {
+        "status": "not_requested",
+        "format_id": None,
+        "size_bytes": None,
+        "duration": None,
+        "error": None,
+        "error_code": None,
+    }
+
+
+def _acquire_video_audio(
+    *,
+    data_dir: Path,
+    catalogue: Catalogue,
+    metadata: dict[str, Any],
+    info: dict[str, Any] | None,
+    url: str,
+    runner: Runner,
+    media_runner: Runner,
+    ffprobe: str,
+    policy: AudioFormatPolicy | None,
+    tool_version: str | None,
+) -> dict[str, Any]:
+    """Acquire audio for one already-selected caption video, independently of captions."""
+    language = catalogue.language
+    stable_video_key = str(metadata["video_key"])
+    provider_video_id = str(metadata["video_id"])
+    cached = audio_availability(
+        data_dir, language=language, video_key=stable_video_key, verify_checksum=True
+    )
+    if cached.ready:
+        return {
+            "status": "cached",
+            "format_id": cached.provider_format_id,
+            "size_bytes": cached.size_bytes,
+            "duration": cached.duration,
+            "error": None,
+            "error_code": None,
+        }
+    if info is None:
+        try:
+            info = _json_output(["--skip-download", url], runner)
+        except Exception as error:
+            failure = record_audio_failure(
+                data_dir,
+                language=language,
+                video_key=stable_video_key,
+                video_id=provider_video_id,
+                stage="selection",
+                message=str(error),
+                code="provider_metadata_failed",
+                retryable=True,
+            )
+            return {
+                "status": "failed",
+                "format_id": None,
+                "size_bytes": None,
+                "duration": None,
+                "error": failure.error,
+                "error_code": failure.error_code,
+            }
+    result = acquire_audio(
+        data_dir=data_dir,
+        language=language,
+        video_key=stable_video_key,
+        video_id=provider_video_id,
+        url=url,
+        info=info,
+        runner=media_runner,
+        policy=policy,
+        ffprobe=ffprobe,
+        yt_dlp_version=tool_version,
+    )
+    return {
+        "status": result.status,
+        "format_id": result.format_id,
+        "size_bytes": result.size_bytes,
+        "duration": result.duration,
+        "error": result.error,
+        "error_code": result.error_code,
+    }
+
+
 def _download_one(
     candidate: dict[str, Any],
     channel: Channel,
     catalogue: Catalogue,
     raw_root: Path,
     runner: Runner,
+    *,
+    data_dir: Path,
+    with_audio: bool = False,
+    media_runner: Runner | None = None,
+    ffprobe: str = "ffprobe",
+    audio_policy: AudioFormatPolicy | None = None,
+    tool_version: str | None = None,
 ) -> dict[str, Any]:
     provider = "youtube"
     provider_video_id = candidate["id"]
@@ -345,11 +443,26 @@ def _download_one(
         metadata = json.loads(
             (video_dir / source["track_id"] / "metadata.json").read_text(encoding="utf-8")
         )
+        audio = _no_audio()
+        if with_audio:
+            audio = _acquire_video_audio(
+                data_dir=data_dir,
+                catalogue=catalogue,
+                metadata=metadata,
+                info=None,
+                url=str(metadata.get("url") or candidate["url"]),
+                runner=runner,
+                media_runner=media_runner or runner,
+                ffprobe=ffprobe,
+                policy=audio_policy,
+                tool_version=tool_version,
+            )
         return {
             "video_id": provider_video_id,
             "status": "cached",
             "metadata": metadata,
             "manifest": manifest,
+            "audio": audio,
         }
     legacy_cached = _cached_transcript(
         video_dir,
@@ -395,12 +508,49 @@ def _download_one(
             "enumerated_at": datetime.now(UTC).isoformat(),
         }
         _write_json(video_dir / "manifest.json", legacy_manifest)
+        audio = _no_audio()
+        if with_audio:
+            cached_audio = audio_availability(
+                data_dir,
+                language=catalogue.language,
+                video_key=stable_video_key,
+                verify_checksum=True,
+            )
+            if cached_audio.ready:
+                audio = {
+                    "status": "cached",
+                    "format_id": cached_audio.provider_format_id,
+                    "size_bytes": cached_audio.size_bytes,
+                    "duration": cached_audio.duration,
+                    "error": None,
+                    "error_code": None,
+                }
+            else:
+                failure = record_audio_failure(
+                    data_dir,
+                    language=catalogue.language,
+                    video_key=stable_video_key,
+                    video_id=provider_video_id,
+                    stage="selection",
+                    message=str(error),
+                    code="provider_metadata_failed",
+                    retryable=True,
+                )
+                audio = {
+                    "status": "failed",
+                    "format_id": None,
+                    "size_bytes": None,
+                    "duration": None,
+                    "error": failure.error,
+                    "error_code": failure.error_code,
+                }
         return {
             "video_id": provider_video_id,
             "status": "cached",
             "metadata": legacy_cached,
             "manifest": legacy_manifest,
             "secondary_failures": [{"track_id": "enumeration", "error": str(error)}],
+            "audio": audio,
         }
     if info.get("is_live") or info.get("live_status") in {"is_live", "is_upcoming"}:
         raise AcquisitionError("video is live or upcoming")
@@ -497,12 +647,27 @@ def _download_one(
         "enumerated_at": datetime.now(UTC).isoformat(),
     }
     _write_json(video_dir / "manifest.json", manifest)
+    audio = _no_audio()
+    if with_audio:
+        audio = _acquire_video_audio(
+            data_dir=data_dir,
+            catalogue=catalogue,
+            metadata=metadata,
+            info=info,
+            url=str(metadata.get("url") or candidate["url"]),
+            runner=runner,
+            media_runner=media_runner or runner,
+            ffprobe=ffprobe,
+            policy=audio_policy,
+            tool_version=tool_version,
+        )
     return {
         "video_id": provider_video_id,
         "status": source_status,
         "metadata": metadata,
         "manifest": manifest,
         "secondary_failures": failures,
+        "audio": audio,
     }
 
 
@@ -513,6 +678,10 @@ def acquire(
     limit: int = 10,
     scan_limit: int = 25,
     runner: Runner = _run_ytdlp,
+    with_audio: bool = False,
+    media_runner: Runner | None = None,
+    ffprobe: str = "ffprobe",
+    audio_policy: AudioFormatPolicy | None = None,
 ) -> dict[str, Any]:
     if limit < 1:
         raise ValueError("limit must be at least 1")
@@ -537,7 +706,15 @@ def acquire(
         "authored_secondary_downloaded": 0,
         "authored_secondary_cached": 0,
         "authored_secondary_failed": 0,
+        "audio_requested": bool(with_audio),
+        "audio_downloaded": 0,
+        "audio_cached": 0,
+        "audio_failed": 0,
+        "audio_failures": [],
     }
+    tool_version = yt_dlp_version() if with_audio else None
+    if with_audio:
+        report["audio_tool_versions"] = {"yt_dlp": tool_version}
     queues: list[list[dict[str, Any]]] = []
     for channel in channels:
         try:
@@ -572,7 +749,19 @@ def acquire(
                 )
                 continue
             try:
-                result = _download_one(candidate, channel, catalogue, raw_root, runner)
+                result = _download_one(
+                    candidate,
+                    channel,
+                    catalogue,
+                    raw_root,
+                    runner,
+                    data_dir=data_dir,
+                    with_audio=with_audio,
+                    media_runner=media_runner,
+                    ffprobe=ffprobe,
+                    audio_policy=audio_policy,
+                    tool_version=tool_version,
+                )
                 metadata = result["metadata"]
                 manifest = result.get("manifest") or {}
                 secondary_tracks = [
@@ -587,6 +776,22 @@ def acquire(
                 report["authored_secondary_failed"] += sum(
                     track.get("status") == "failed" for track in secondary_tracks
                 )
+                audio = result.get("audio") or _no_audio()
+                if audio["status"] == "downloaded":
+                    report["audio_downloaded"] += 1
+                elif audio["status"] == "cached":
+                    report["audio_cached"] += 1
+                elif audio["status"] == "failed":
+                    report["audio_failed"] += 1
+                    report["audio_failures"].append(
+                        {
+                            "video_key": metadata["video_key"],
+                            "video_id": result["video_id"],
+                            "channel": channel.id,
+                            "error": audio["error"],
+                            "error_code": audio["error_code"],
+                        }
+                    )
                 report["videos"].append(
                     {
                         "video_key": metadata["video_key"],
@@ -605,6 +810,7 @@ def acquire(
                         ),
                         "authored_secondary_tracks": len(secondary_tracks),
                         "authored_secondary_failures": result.get("secondary_failures", []),
+                        "audio": audio,
                     }
                 )
             except Exception as error:
@@ -617,5 +823,8 @@ def acquire(
     report["completed_at"] = datetime.now(UTC).isoformat()
     report["successful"] = len(report["videos"])
     report["complete"] = len(report["videos"]) == limit
+    report["audio_complete"] = not with_audio or all(
+        item["audio"]["status"] in {"downloaded", "cached"} for item in report["videos"]
+    )
     _write_json(data_dir / "reports" / f"acquisition-{catalogue.language}.json", report)
     return report

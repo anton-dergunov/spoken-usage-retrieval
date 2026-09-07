@@ -4,9 +4,11 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import shutil
 import sys
 import tempfile
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +19,13 @@ from pydantic import BaseModel
 from .acquisition import acquire
 from .analysis import download_models, list_models
 from .api import create_app
+from .audio import (
+    AudioPruneRequest,
+    audio_storage,
+    execute_audio_prune,
+    plan_audio_prune,
+    tool_version,
+)
 from .catalogue import load_catalogue_directory
 from .channels import ChannelRepository
 from .contracts import ChannelCreate, ChannelUpdate, DoctorCheck, DoctorReport
@@ -33,6 +42,16 @@ def _payload(value: Any) -> Any:
         return value.model_dump(mode="json")
     if isinstance(value, list):
         return [_payload(item) for item in value]
+    return value
+
+
+def _json_ready(value: Any) -> Any:
+    if isinstance(value, Path):
+        return str(value)
+    if isinstance(value, dict):
+        return {key: _json_ready(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_json_ready(item) for item in value]
     return value
 
 
@@ -67,6 +86,7 @@ def _settings(args: argparse.Namespace) -> Settings:
         "enable_channel_mutations",
         "acquisition_limit",
         "scan_limit",
+        "with_audio",
         "max_ngram",
         "analyzer",
     )
@@ -236,6 +256,27 @@ def _doctor(args: argparse.Namespace) -> int:
             message="yt-dlp is installed" if ytdlp_available else "yt-dlp is not installed",
         )
     )
+    for name, executable in (("ffmpeg", settings.ffmpeg_path), ("ffprobe", settings.ffprobe_path)):
+        resolved = shutil.which(executable)
+        version = tool_version(executable) if resolved else None
+        if version:
+            checks.append(DoctorCheck(name=name, status="ok", message=version))
+        elif settings.with_audio:
+            checks.append(
+                DoctorCheck(
+                    name=name,
+                    status="error",
+                    message=f"{executable} is required while audio acquisition is enabled",
+                )
+            )
+        else:
+            checks.append(
+                DoctorCheck(
+                    name=name,
+                    status="warning",
+                    message=f"{executable} not found; optional audio remains disabled",
+                )
+            )
     if settings.web_dist is not None:
         exists = (settings.web_dist / "index.html").is_file()
         checks.append(
@@ -321,6 +362,36 @@ def _translation_cache_prune(args: argparse.Namespace) -> int:
     return 0
 
 
+def _audio_cache_status(args: argparse.Namespace) -> int:
+    settings = _settings(args)
+    languages = tuple(args.language) if args.language else None
+    summary = audio_storage(settings.data_dir, languages=languages)
+    payload = _json_ready(asdict(summary))
+    payload["enabled"] = settings.with_audio
+    _emit(payload, True)
+    return 0
+
+
+def _audio_cache_prune(args: argparse.Namespace) -> int:
+    settings = _settings(args)
+    request = AudioPruneRequest(
+        languages=tuple(args.language or ()),
+        channels=tuple(args.channel or ()),
+        video_keys=tuple(args.video_key or ()),
+        preparation_versions=tuple(args.preparation_version or ()),
+        older_than_days=args.older_than_days,
+        include_raw_audio=args.include_raw_audio,
+        select_all=args.all,
+    )
+    plan = (
+        execute_audio_prune(settings.data_dir, request)
+        if args.execute
+        else plan_audio_prune(settings.data_dir, request)
+    )
+    _emit(_json_ready(asdict(plan)), True)
+    return 0
+
+
 def _smoke(args: argparse.Namespace) -> int:
     _emit(run_smoke(), args.json)
     return 0
@@ -351,6 +422,7 @@ def _parser() -> argparse.ArgumentParser:
     update.add_argument("--scan-limit", type=int)
     update.add_argument("--max-ngram", type=int)
     update.add_argument("--analyzer", choices=("auto", "unicode", "simplemma", "stanza"))
+    update.add_argument("--with-audio", action=argparse.BooleanOptionalAction, default=None)
     update.add_argument("--json", action="store_true")
     update.set_defaults(handler=_update)
 
@@ -455,6 +527,34 @@ def _parser() -> argparse.ArgumentParser:
     cache_prune.add_argument("--all", action="store_true")
     cache_prune.add_argument("--json", action="store_true")
     cache_prune.set_defaults(handler=_translation_cache_prune)
+
+    audio_cache = commands.add_parser(
+        "audio-cache", help="Inspect or prune the optional audio cache."
+    )
+    audio_commands = audio_cache.add_subparsers(dest="audio_cache_command", required=True)
+    audio_status = audio_commands.add_parser("status")
+    _common(audio_status)
+    audio_status.add_argument("--language", action="append")
+    audio_status.add_argument("--json", action="store_true")
+    audio_status.set_defaults(handler=_audio_cache_status)
+    audio_prune = audio_commands.add_parser(
+        "prune", help="Preview or delete derived clips; raw audio needs an explicit flag."
+    )
+    _common(audio_prune)
+    audio_prune.add_argument("--language", action="append")
+    audio_prune.add_argument("--channel", action="append")
+    audio_prune.add_argument("--video-key", action="append")
+    audio_prune.add_argument("--preparation-version", action="append")
+    audio_prune.add_argument("--older-than-days", type=int)
+    audio_prune.add_argument("--all", action="store_true")
+    audio_prune.add_argument("--include-raw-audio", action="store_true")
+    audio_prune.add_argument(
+        "--execute",
+        action="store_true",
+        help="Delete the planned artifacts; without it the command only previews them.",
+    )
+    audio_prune.add_argument("--json", action="store_true")
+    audio_prune.set_defaults(handler=_audio_cache_prune)
 
     doctor = commands.add_parser("doctor", help="Run offline configuration checks.")
     _common(doctor)

@@ -1,0 +1,541 @@
+{
+  "$defs": {
+    "ReviewRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "acoustic_tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Acoustic Tags",
+          "type": "array"
+        },
+        "caption_verdict": {
+          "enum": [
+            "correct",
+            "acceptable",
+            "incorrect",
+            "uncertain"
+          ],
+          "title": "Caption Verdict",
+          "type": "string"
+        },
+        "corrected_transcript": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Corrected Transcript"
+        },
+        "note": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Note"
+        },
+        "reference_assessment": {
+          "enum": [
+            "equivalent",
+            "caption_better",
+            "asr_better",
+            "both_wrong",
+            "uncertain"
+          ],
+          "title": "Reference Assessment",
+          "type": "string"
+        },
+        "reviewed_at": {
+          "title": "Reviewed At",
+          "type": "string"
+        },
+        "reviewer": {
+          "title": "Reviewer",
+          "type": "string"
+        },
+        "rubric_version": {
+          "title": "Rubric Version",
+          "type": "string"
+        },
+        "tags": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Tags",
+          "type": "array"
+        }
+      },
+      "required": [
+        "reviewer",
+        "rubric_version",
+        "reviewed_at",
+        "caption_verdict",
+        "reference_assessment"
+      ],
+      "title": "ReviewRecord",
+      "type": "object"
+    },
+    "ScoreRecord": {
+      "additionalProperties": false,
+      "properties": {
+        "agreement": {
+          "title": "Agreement",
+          "type": "number"
+        },
+        "alignment": {
+          "items": {
+            "additionalProperties": true,
+            "type": "object"
+          },
+          "title": "Alignment",
+          "type": "array"
+        },
+        "deletions": {
+          "title": "Deletions",
+          "type": "integer"
+        },
+        "error_rate": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Error Rate"
+        },
+        "hits": {
+          "title": "Hits",
+          "type": "integer"
+        },
+        "hypothesis_length": {
+          "title": "Hypothesis Length",
+          "type": "integer"
+        },
+        "insertions": {
+          "title": "Insertions",
+          "type": "integer"
+        },
+        "metric": {
+          "enum": [
+            "wer",
+            "cer"
+          ],
+          "title": "Metric",
+          "type": "string"
+        },
+        "normalization_version": {
+          "title": "Normalization Version",
+          "type": "string"
+        },
+        "normalized_hypothesis": {
+          "title": "Normalized Hypothesis",
+          "type": "string"
+        },
+        "normalized_reference": {
+          "title": "Normalized Reference",
+          "type": "string"
+        },
+        "reference_length": {
+          "title": "Reference Length",
+          "type": "integer"
+        },
+        "substitutions": {
+          "title": "Substitutions",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "metric",
+        "normalization_version",
+        "error_rate",
+        "agreement",
+        "hits",
+        "substitutions",
+        "deletions",
+        "insertions",
+        "reference_length",
+        "hypothesis_length",
+        "normalized_reference",
+        "normalized_hypothesis"
+      ],
+      "title": "ScoreRecord",
+      "type": "object"
+    }
+  },
+  "$id": "https://spoken-usage-retrieval.local/schemas/audio-caption-reliability/result-schema-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One frozen sample row; identity never changes when a stage fails.",
+  "properties": {
+    "acoustic_tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Acoustic Tags",
+      "type": "array"
+    },
+    "asr_provenance": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Asr Provenance"
+    },
+    "asr_runtime_ms": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Asr Runtime Ms"
+    },
+    "asr_segments": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Asr Segments",
+      "type": "array"
+    },
+    "asr_text": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Asr Text"
+    },
+    "asr_words": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Asr Words",
+      "type": "array"
+    },
+    "boundary_confidence": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Boundary Confidence"
+    },
+    "boundary_reason": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Boundary Reason"
+    },
+    "caption_kind": {
+      "title": "Caption Kind",
+      "type": "string"
+    },
+    "caption_provenance": {
+      "enum": [
+        "authored",
+        "automatic"
+      ],
+      "title": "Caption Provenance",
+      "type": "string"
+    },
+    "caption_text": {
+      "title": "Caption Text",
+      "type": "string"
+    },
+    "channel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "title": "Channel"
+    },
+    "clip_key": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clip Key"
+    },
+    "clip_sha256": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clip Sha256"
+    },
+    "effective_end": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective End"
+    },
+    "effective_start": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Effective Start"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "additionalProperties": true,
+          "type": "object"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    },
+    "features": {
+      "items": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "title": "Features",
+      "type": "array"
+    },
+    "padding_after": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Padding After"
+    },
+    "padding_before": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Padding Before"
+    },
+    "preparation_version": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Preparation Version"
+    },
+    "quality_score": {
+      "anyOf": [
+        {
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Quality Score"
+    },
+    "reference_provenance": {
+      "default": "asr",
+      "title": "Reference Provenance",
+      "type": "string"
+    },
+    "requested_end": {
+      "title": "Requested End",
+      "type": "number"
+    },
+    "requested_start": {
+      "title": "Requested Start",
+      "type": "number"
+    },
+    "result_schema_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Result Schema Version",
+      "type": "integer"
+    },
+    "review": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ReviewRecord"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "score": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScoreRecord"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "segment_id": {
+      "title": "Segment Id",
+      "type": "string"
+    },
+    "sensitivity_score": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ScoreRecord"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "source_language": {
+      "title": "Source Language",
+      "type": "string"
+    },
+    "speech_style": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Speech Style",
+      "type": "array"
+    },
+    "status": {
+      "default": "pending",
+      "enum": [
+        "pending",
+        "complete",
+        "missing_audio",
+        "download_failed",
+        "clip_failed",
+        "asr_failed",
+        "scoring_failed"
+      ],
+      "title": "Status",
+      "type": "string"
+    },
+    "stratum": {
+      "title": "Stratum",
+      "type": "string"
+    },
+    "token_count": {
+      "anyOf": [
+        {
+          "type": "integer"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Token Count"
+    },
+    "track_id": {
+      "title": "Track Id",
+      "type": "string"
+    },
+    "video_id": {
+      "title": "Video Id",
+      "type": "string"
+    },
+    "video_key": {
+      "title": "Video Key",
+      "type": "string"
+    }
+  },
+  "required": [
+    "run_id",
+    "stratum",
+    "segment_id",
+    "video_key",
+    "video_id",
+    "track_id",
+    "source_language",
+    "channel",
+    "caption_provenance",
+    "caption_kind",
+    "caption_text",
+    "requested_start",
+    "requested_end"
+  ],
+  "title": "ResultRow",
+  "type": "object"
+}

@@ -64,6 +64,13 @@ typing = [
 experiments = [
   "sacrebleu>=2.5,<3",
 ]
+audio-experiments = [
+  "faster-whisper>=1.1,<2",
+  "jiwer>=4,<5",
+  "silero-vad>=5.1,<7",
+  "torch>=2.6,<3",
+  "torchaudio>=2.6,<3",
+]
 dev = [
   "httpx>=0.28,<1",
   "mypy>=1.20,<2",
@@ -79,7 +86,10 @@ exclude = ["/AGENTS.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "-q"
+addopts = "-q -m 'not network'"
+markers = [
+  "network: opt-in checks that contact a real provider; excluded by default",
+]
 
 [tool.ruff]
 target-version = "py312"

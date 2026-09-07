@@ -29,6 +29,9 @@ class Settings:
     operator_token: str | None = field(default=None, repr=False)
     acquisition_limit: int = 10
     scan_limit: int = 25
+    with_audio: bool = False
+    ffmpeg_path: str = "ffmpeg"
+    ffprobe_path: str = "ffprobe"
     max_ngram: int = 5
     analyzer: str = "auto"
     cors_origins: tuple[str, ...] = (
@@ -70,6 +73,8 @@ class Settings:
             raise ValueError("request limits must be positive")
         if self.recent_failure_limit < 1:
             raise ValueError("recent_failure_limit must be positive")
+        if not self.ffmpeg_path.strip() or not self.ffprobe_path.strip():
+            raise ValueError("ffmpeg_path and ffprobe_path must not be empty")
         if not self.translation_model.strip():
             raise ValueError("translation_model must not be empty")
         if self.translation_timeout_seconds <= 0:
@@ -104,6 +109,9 @@ class Settings:
             "operator_token": str,
             "acquisition_limit": int,
             "scan_limit": int,
+            "with_audio": _boolean,
+            "ffmpeg_path": str,
+            "ffprobe_path": str,
             "max_ngram": int,
             "analyzer": str,
             "cors_origins": lambda value: tuple(

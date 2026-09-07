@@ -21,6 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from . import __version__
 from .analysis import InvalidAnalysisError, UnsupportedAnalysisError
+from .audio import audio_cache_status
 from .catalogue import CatalogueError, canonical_language, load_catalogue_directory
 from .channels import (
     ChannelConflictError,
@@ -487,6 +488,7 @@ def create_app(
                 caption_kinds={},
                 channel_mutations_enabled=settings.enable_channel_mutations,
                 translation=service.status(),
+                audio=audio_cache_status(settings.data_dir, enabled=settings.with_audio),
             )
 
     @app.get("/api/v1/health/live")

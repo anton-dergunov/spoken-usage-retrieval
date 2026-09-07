@@ -1,0 +1,597 @@
+{
+  "$defs": {
+    "AsrSettings": {
+      "additionalProperties": false,
+      "description": "Frozen reference settings; backend defaults are never inherited implicitly.",
+      "properties": {
+        "backend": {
+          "const": "faster-whisper",
+          "default": "faster-whisper",
+          "title": "Backend",
+          "type": "string"
+        },
+        "beam_size": {
+          "minimum": 1,
+          "title": "Beam Size",
+          "type": "integer"
+        },
+        "best_of": {
+          "minimum": 1,
+          "title": "Best Of",
+          "type": "integer"
+        },
+        "compute_type": {
+          "default": "default",
+          "title": "Compute Type",
+          "type": "string"
+        },
+        "condition_on_previous_text": {
+          "default": false,
+          "title": "Condition On Previous Text",
+          "type": "boolean"
+        },
+        "cpu_threads": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Cpu Threads",
+          "type": "integer"
+        },
+        "device": {
+          "default": "auto",
+          "title": "Device",
+          "type": "string"
+        },
+        "initial_prompt": {
+          "default": null,
+          "description": "Must stay null: priming with the tested caption would bias agreement upward.",
+          "title": "Initial Prompt",
+          "type": "null"
+        },
+        "language": {
+          "title": "Language",
+          "type": "string"
+        },
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "num_workers": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Num Workers",
+          "type": "integer"
+        },
+        "patience": {
+          "exclusiveMinimum": 0,
+          "title": "Patience",
+          "type": "number"
+        },
+        "revision": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Revision"
+        },
+        "task": {
+          "const": "transcribe",
+          "default": "transcribe",
+          "title": "Task",
+          "type": "string"
+        },
+        "temperature": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "Temperature",
+          "type": "array"
+        },
+        "vad_filter": {
+          "default": false,
+          "title": "Vad Filter",
+          "type": "boolean"
+        },
+        "word_timestamps": {
+          "default": true,
+          "title": "Word Timestamps",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "model",
+        "language",
+        "beam_size",
+        "best_of",
+        "patience",
+        "temperature"
+      ],
+      "title": "AsrSettings",
+      "type": "object"
+    },
+    "AudioSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "duration_tolerance_ms": {
+          "default": 50,
+          "minimum": 0,
+          "title": "Duration Tolerance Ms",
+          "type": "integer"
+        },
+        "padding_seconds": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Padding Seconds",
+          "type": "number"
+        },
+        "preparation_version": {
+          "title": "Preparation Version",
+          "type": "string"
+        },
+        "use_segment_clip_range": {
+          "default": true,
+          "title": "Use Segment Clip Range",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "preparation_version"
+      ],
+      "title": "AudioSettings",
+      "type": "object"
+    },
+    "Authorization": {
+      "additionalProperties": false,
+      "description": "A preflight gate the code cannot infer from public visibility.",
+      "properties": {
+        "allowlist_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Allowlist Path"
+        },
+        "basis": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Basis"
+        },
+        "confirmed": {
+          "default": false,
+          "title": "Confirmed",
+          "type": "boolean"
+        },
+        "required": {
+          "default": true,
+          "title": "Required",
+          "type": "boolean"
+        }
+      },
+      "title": "Authorization",
+      "type": "object"
+    },
+    "FeatureSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "caption_agreement": {
+          "default": true,
+          "title": "Caption Agreement",
+          "type": "boolean"
+        },
+        "silero": {
+          "$ref": "#/$defs/SileroConfig"
+        },
+        "speaking_rate": {
+          "default": true,
+          "title": "Speaking Rate",
+          "type": "boolean"
+        },
+        "speech_ratio": {
+          "default": true,
+          "title": "Speech Ratio",
+          "type": "boolean"
+        },
+        "squim_objective": {
+          "default": true,
+          "title": "Squim Objective",
+          "type": "boolean"
+        },
+        "squim_subjective": {
+          "default": false,
+          "title": "Squim Subjective",
+          "type": "boolean"
+        },
+        "subjective_reference": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SubjectiveReferenceConfig"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "silero"
+      ],
+      "title": "FeatureSettings",
+      "type": "object"
+    },
+    "ReviewSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "disagreement_bins": {
+          "items": {
+            "items": {
+              "type": "number"
+            },
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Disagreement Bins",
+          "type": "array"
+        },
+        "duplicate_review_fraction": {
+          "default": 0.1,
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Duplicate Review Fraction",
+          "type": "number"
+        },
+        "per_bin_per_stratum": {
+          "minimum": 1,
+          "title": "Per Bin Per Stratum",
+          "type": "integer"
+        },
+        "rubric_version": {
+          "default": "caption-review-v1",
+          "title": "Rubric Version",
+          "type": "string"
+        },
+        "subset": {
+          "default": "failed_plus_stratified_bins",
+          "enum": [
+            "all",
+            "failed_plus_stratified_bins"
+          ],
+          "title": "Subset",
+          "type": "string"
+        }
+      },
+      "required": [
+        "disagreement_bins",
+        "per_bin_per_stratum"
+      ],
+      "title": "ReviewSettings",
+      "type": "object"
+    },
+    "Sampling": {
+      "additionalProperties": false,
+      "properties": {
+        "algorithm": {
+          "const": "sha256-hash-order-v1",
+          "default": "sha256-hash-order-v1",
+          "title": "Algorithm",
+          "type": "string"
+        },
+        "inventory": {
+          "const": "indexed_segments",
+          "default": "indexed_segments",
+          "title": "Inventory",
+          "type": "string"
+        },
+        "maximum_clip_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Maximum Clip Seconds",
+          "type": "number"
+        },
+        "minimum_clip_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Minimum Clip Seconds",
+          "type": "number"
+        },
+        "minimum_gap_seconds": {
+          "minimum": 0,
+          "title": "Minimum Gap Seconds",
+          "type": "number"
+        },
+        "minimum_tokens": {
+          "minimum": 1,
+          "title": "Minimum Tokens",
+          "type": "integer"
+        },
+        "per_video_cap": {
+          "minimum": 1,
+          "title": "Per Video Cap",
+          "type": "integer"
+        },
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "strata": {
+          "items": {
+            "$ref": "#/$defs/Stratum"
+          },
+          "minItems": 1,
+          "title": "Strata",
+          "type": "array"
+        }
+      },
+      "required": [
+        "seed",
+        "per_video_cap",
+        "minimum_clip_seconds",
+        "maximum_clip_seconds",
+        "minimum_tokens",
+        "minimum_gap_seconds",
+        "strata"
+      ],
+      "title": "Sampling",
+      "type": "object"
+    },
+    "ScoringSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "normalization": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Normalization",
+          "type": "object"
+        },
+        "orientation": {
+          "const": "reference=asr,hypothesis=caption",
+          "default": "reference=asr,hypothesis=caption",
+          "title": "Orientation",
+          "type": "string"
+        },
+        "sensitivity_normalization": {
+          "additionalProperties": {
+            "type": "string"
+          },
+          "title": "Sensitivity Normalization",
+          "type": "object"
+        }
+      },
+      "required": [
+        "normalization"
+      ],
+      "title": "ScoringSettings",
+      "type": "object"
+    },
+    "SileroConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "backend": {
+          "default": "torch",
+          "enum": [
+            "torch",
+            "onnx"
+          ],
+          "title": "Backend",
+          "type": "string"
+        },
+        "min_silence_duration_ms": {
+          "minimum": 0,
+          "title": "Min Silence Duration Ms",
+          "type": "integer"
+        },
+        "min_speech_duration_ms": {
+          "minimum": 0,
+          "title": "Min Speech Duration Ms",
+          "type": "integer"
+        },
+        "speech_pad_ms": {
+          "minimum": 0,
+          "title": "Speech Pad Ms",
+          "type": "integer"
+        },
+        "threshold": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "threshold",
+        "min_speech_duration_ms",
+        "min_silence_duration_ms",
+        "speech_pad_ms"
+      ],
+      "title": "SileroConfig",
+      "type": "object"
+    },
+    "Stratum": {
+      "additionalProperties": false,
+      "description": "A predeclared source class. Channel and acoustics are breakdowns, not classes.",
+      "properties": {
+        "caption_provenance": {
+          "enum": [
+            "authored",
+            "automatic"
+          ],
+          "title": "Caption Provenance",
+          "type": "string"
+        },
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "requested": {
+          "minimum": 1,
+          "title": "Requested",
+          "type": "integer"
+        },
+        "source_language": {
+          "title": "Source Language",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "source_language",
+        "caption_provenance",
+        "requested"
+      ],
+      "title": "Stratum",
+      "type": "object"
+    },
+    "SubjectiveReferenceConfig": {
+      "additionalProperties": false,
+      "properties": {
+        "content_sha256": {
+          "title": "Content Sha256",
+          "type": "string"
+        },
+        "license": {
+          "title": "License",
+          "type": "string"
+        },
+        "path": {
+          "title": "Path",
+          "type": "string"
+        },
+        "source": {
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "source",
+        "license",
+        "content_sha256"
+      ],
+      "title": "SubjectiveReferenceConfig",
+      "type": "object"
+    }
+  },
+  "$id": "https://spoken-usage-retrieval.local/schemas/audio-caption-reliability/config-schema-v1.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "acceptance_evidence": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Acceptance Evidence",
+      "type": "array"
+    },
+    "acoustic_vocabulary": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Acoustic Vocabulary",
+      "type": "array"
+    },
+    "asr": {
+      "$ref": "#/$defs/AsrSettings"
+    },
+    "audio": {
+      "$ref": "#/$defs/AudioSettings"
+    },
+    "authorization": {
+      "$ref": "#/$defs/Authorization"
+    },
+    "config_version": {
+      "const": 1,
+      "default": 1,
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "decision": {
+      "title": "Decision",
+      "type": "string"
+    },
+    "experiment_id": {
+      "const": "audio-caption-reliability",
+      "default": "audio-caption-reliability",
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "features": {
+      "$ref": "#/$defs/FeatureSettings"
+    },
+    "hypothesis": {
+      "title": "Hypothesis",
+      "type": "string"
+    },
+    "recommendations": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Recommendations",
+      "type": "array"
+    },
+    "review": {
+      "$ref": "#/$defs/ReviewSettings"
+    },
+    "review_tags": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Review Tags",
+      "type": "array"
+    },
+    "sampling": {
+      "$ref": "#/$defs/Sampling"
+    },
+    "scoring": {
+      "$ref": "#/$defs/ScoringSettings"
+    },
+    "source_classes": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Source Classes",
+      "type": "array"
+    },
+    "source_languages": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Source Languages",
+      "type": "array"
+    }
+  },
+  "required": [
+    "decision",
+    "hypothesis",
+    "acceptance_evidence",
+    "source_languages",
+    "source_classes",
+    "sampling",
+    "audio",
+    "asr",
+    "scoring",
+    "features",
+    "review",
+    "authorization"
+  ],
+  "title": "ExperimentConfig",
+  "type": "object"
+}

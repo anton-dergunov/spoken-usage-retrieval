@@ -88,7 +88,7 @@ owns Docker, systemd, or other process supervision.
 | Plan | Status | Depends on | Outcome |
 | --- | --- | --- | --- |
 | [08 · Target-language text](08-target-language-text.md) | Complete | 02, 05, 06 | Authored fallback plus independently cached sentence translation and fixed-token word-alignment graphs. |
-| [09 · Audio cache and caption-reliability benchmark](09-audio-and-caption-reliability.md) | Planned | 07 | Optional audio, an evidence-based caption-trust policy, and validated acoustic signals. |
+| [09 · Audio cache and caption-reliability benchmark](09-audio-and-caption-reliability.md) | In progress | 07 | Optional audio, an evidence-based caption-trust policy, and validated acoustic signals. Cache and tooling are implemented; the benchmark run is pending authorization, media, and review. |
 | [10 · Forced alignment](10-forced-alignment.md) | Planned | 09 | Confidence-bearing source-text timing with safe cue-level fallback. |
 
 ### Stage 4 · Retrieval science

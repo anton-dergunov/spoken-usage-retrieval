@@ -136,6 +136,177 @@
         "title": "AnalyzerInfo",
         "type": "object"
       },
+      "AudioCacheStatus": {
+        "additionalProperties": false,
+        "description": "Optional audio-cache state. Missing audio never makes the corpus unready.",
+        "properties": {
+          "derived_bytes": {
+            "default": 0,
+            "title": "Derived Bytes",
+            "type": "integer"
+          },
+          "derived_clips": {
+            "default": 0,
+            "title": "Derived Clips",
+            "type": "integer"
+          },
+          "enabled": {
+            "default": false,
+            "title": "Enabled",
+            "type": "boolean"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "issues": {
+            "default": 0,
+            "description": "Unrecognized, orphaned, or unreadable audio artifacts.",
+            "title": "Issues",
+            "type": "integer"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/AudioLanguageStatus"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "missing": {
+            "default": 0,
+            "title": "Missing",
+            "type": "integer"
+          },
+          "raw_bytes": {
+            "default": 0,
+            "title": "Raw Bytes",
+            "type": "integer"
+          },
+          "ready": {
+            "default": 0,
+            "title": "Ready",
+            "type": "integer"
+          },
+          "videos": {
+            "default": 0,
+            "description": "Videos present in the caption cache; the audio readiness denominator.",
+            "title": "Videos",
+            "type": "integer"
+          }
+        },
+        "title": "AudioCacheStatus",
+        "type": "object"
+      },
+      "AudioChannelStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Channel"
+          },
+          "derived_bytes": {
+            "default": 0,
+            "title": "Derived Bytes",
+            "type": "integer"
+          },
+          "derived_clips": {
+            "default": 0,
+            "title": "Derived Clips",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "missing": {
+            "default": 0,
+            "title": "Missing",
+            "type": "integer"
+          },
+          "raw_bytes": {
+            "default": 0,
+            "title": "Raw Bytes",
+            "type": "integer"
+          },
+          "ready": {
+            "default": 0,
+            "title": "Ready",
+            "type": "integer"
+          },
+          "videos": {
+            "default": 0,
+            "title": "Videos",
+            "type": "integer"
+          }
+        },
+        "title": "AudioChannelStatus",
+        "type": "object"
+      },
+      "AudioLanguageStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "channels": {
+            "items": {
+              "$ref": "#/components/schemas/AudioChannelStatus"
+            },
+            "title": "Channels",
+            "type": "array"
+          },
+          "derived_bytes": {
+            "default": 0,
+            "title": "Derived Bytes",
+            "type": "integer"
+          },
+          "derived_clips": {
+            "default": 0,
+            "title": "Derived Clips",
+            "type": "integer"
+          },
+          "failed": {
+            "default": 0,
+            "title": "Failed",
+            "type": "integer"
+          },
+          "missing": {
+            "default": 0,
+            "title": "Missing",
+            "type": "integer"
+          },
+          "raw_bytes": {
+            "default": 0,
+            "title": "Raw Bytes",
+            "type": "integer"
+          },
+          "ready": {
+            "default": 0,
+            "title": "Ready",
+            "type": "integer"
+          },
+          "source_language": {
+            "title": "Source Language",
+            "type": "string"
+          },
+          "videos": {
+            "default": 0,
+            "title": "Videos",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "source_language"
+        ],
+        "title": "AudioLanguageStatus",
+        "type": "object"
+      },
       "BoundaryInfo": {
         "additionalProperties": false,
         "properties": {
@@ -732,6 +903,9 @@
               }
             ],
             "title": "Analyzer Selection"
+          },
+          "audio": {
+            "$ref": "#/components/schemas/AudioCacheStatus"
           },
           "built_at": {
             "anyOf": [
