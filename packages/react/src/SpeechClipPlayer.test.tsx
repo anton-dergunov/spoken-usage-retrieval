@@ -5,6 +5,7 @@ import {
   ProgressiveSourceText,
   ProgressiveTargetText,
   SpeechClipPlayer,
+  isDisplaySafeAlignmentGroup,
 } from "./SpeechClipPlayer.js";
 import { fixtureResult as clip } from "./fixtures.js";
 import type { YouTubeNamespace, YouTubePlayer } from "./youtube.js";
@@ -162,12 +163,48 @@ it("highlights target ranges aligned to the source group active now", () => {
     { group_id: 2, source_ranges: [{ start: 11, end: 23 }], target_ranges: [{ start: 0, end: 3 }] },
   ];
   const { container } = render(<ProgressiveTargetText
+    sourceText={clip.sentence}
     text="dos uno"
     groups={groups}
     timing={clip.segments}
     currentTime={79}
   />);
   expect(container.querySelector(".sur-player__target-fragment--active")).toHaveTextContent("dos");
+});
+
+it("suppresses coarse and combined-repeat groups instead of reflashing misleading text", () => {
+  const repeatedSource = 'Digo, "Disfrutemos, disfrutemos porque seguimos."';
+  const repeatedTarget = 'I say, "Let\'s enjoy, let\'s enjoy because we continue."';
+  const repeated = {
+    group_id: 2,
+    source_ranges: [{ start: 7, end: 31 }],
+    target_ranges: [{ start: 8, end: 32 }],
+  };
+  expect(isDisplaySafeAlignmentGroup(repeated, repeatedSource, repeatedTarget)).toBe(false);
+  expect(isDisplaySafeAlignmentGroup({
+    group_id: 4,
+    source_ranges: [{ start: 0, end: 11 }],
+    target_ranges: [{ start: 0, end: 19 }],
+  }, "vamos ahora", "let us go let us go")).toBe(false);
+  const { container } = render(<ProgressiveTargetText
+    sourceText={repeatedSource}
+    text={repeatedTarget}
+    groups={[repeated]}
+    timing={[
+      { text: '"Disfrutemos,', start: 1, end: 2, char_start: 6, char_end: 19 },
+      { text: "disfrutemos", start: 2, end: 3, char_start: 20, char_end: 31 },
+    ]}
+    currentTime={2.5}
+  />);
+  expect(container.querySelector(".sur-player__target-fragment--active")).not.toBeInTheDocument();
+
+  const coarseSource = "Mm, decía que vamos a hablar sobre recuerdos usando el pasado.";
+  const coarseTarget = "Mm, I was saying that we are going to talk about memories using the past.";
+  expect(isDisplaySafeAlignmentGroup({
+    group_id: 3,
+    source_ranges: [{ start: 9, end: 61 }],
+    target_ranges: [{ start: 16, end: 72 }],
+  }, coarseSource, coarseTarget)).toBe(false);
 });
 
 it("requests and renders a configured target language", async () => {

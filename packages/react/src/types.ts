@@ -121,6 +121,7 @@ export interface TranslationResult {
   source_text_hash: string;
   target_text: string;
   alignment_groups: AlignmentGroup[];
+  alignment_quality: AlignmentQuality | null;
   provenance: "llm" | "authored_track";
   provider: string;
   model: string | null;
@@ -132,6 +133,17 @@ export interface TranslationResult {
   latency_ms: number | null;
   usage: Record<string, number> | null;
   provider_metadata: Record<string, string> | null;
+}
+
+export interface AlignmentQuality {
+  provider_groups: number;
+  display_groups: number;
+  suppressed_groups: number;
+  source_character_coverage: number;
+  target_character_coverage: number;
+  max_source_tokens_per_group: number;
+  coarse_group_ids: number[];
+  repeated_group_ids: number[];
 }
 
 export interface TranslationJob {

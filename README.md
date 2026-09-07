@@ -191,6 +191,13 @@ uv run speech-retrieval translation-cache prune --older-than-days 30
 Cache warming uses the same coalescing scheduler as interactive requests and never translates the
 whole corpus implicitly.
 
+Alignment output is quality-gated independently from translation text. Provider groups that are too
+coarse for cue-by-cue playback or combine adjacent repeated phrases are omitted from highlighting, while
+the complete translation stays visible. The result exposes aggregate `alignment_quality`
+diagnostics so hosts can distinguish provider groups from display-safe groups. The
+[live evaluation report](experiments/target-language-text/README.md) documents the thresholds,
+browser failure analysis, and English/Russian prompt iterations.
+
 The index stores each surface or lemma token once with its position inside a segment. Phrase lookup
 finds the first token and verifies successive positions in the same stream, deriving the occurrence
 and highlight from the first and last character offsets. It supports the same one-to-five-token

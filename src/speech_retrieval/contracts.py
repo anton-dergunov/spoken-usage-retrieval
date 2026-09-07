@@ -208,12 +208,24 @@ class SemanticAlignmentGroup(ContractModel):
     target_ranges: list[CharacterRange]
 
 
+class AlignmentQuality(ContractModel):
+    provider_groups: int
+    display_groups: int
+    suppressed_groups: int
+    source_character_coverage: float = Field(ge=0, le=1)
+    target_character_coverage: float = Field(ge=0, le=1)
+    max_source_tokens_per_group: int = Field(ge=0)
+    coarse_group_ids: list[int] = Field(default_factory=list)
+    repeated_group_ids: list[int] = Field(default_factory=list)
+
+
 class TranslationResult(ContractModel):
     source_language: str
     target_language: str
     source_text_hash: str
     target_text: str
     alignment_groups: list[SemanticAlignmentGroup]
+    alignment_quality: AlignmentQuality | None = None
     provenance: Literal["llm", "authored_track"]
     provider: str
     model: str | None

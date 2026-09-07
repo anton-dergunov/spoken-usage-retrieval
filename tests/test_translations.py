@@ -13,6 +13,7 @@ from speech_retrieval.translations import (
     TranslationProviderError,
     TranslationService,
     TranslationStore,
+    assess_alignment_quality,
     validate_provider_output,
 )
 
@@ -169,6 +170,58 @@ def test_empty_chunks_are_ignored_without_changing_text_or_ranges():
     assert result.alignment_groups[0].target_ranges[0] == CharacterRange(start=0, end=3)
 
 
+def test_alignment_quality_suppresses_coarse_and_combined_repeated_groups():
+    from speech_retrieval import SemanticAlignmentGroup
+
+    repeated_source = 'Digo, "Disfrutemos, disfrutemos porque seguimos."'
+    repeated_target = "I say, \"Let's enjoy, let's enjoy because we continue.\""
+    groups = [
+        SemanticAlignmentGroup(
+            group_id=1,
+            source_ranges=[CharacterRange(start=0, end=7)],
+            target_ranges=[CharacterRange(start=0, end=8)],
+        ),
+        SemanticAlignmentGroup(
+            group_id=2,
+            source_ranges=[CharacterRange(start=7, end=31)],
+            target_ranges=[CharacterRange(start=8, end=32)],
+        ),
+    ]
+    display, quality = assess_alignment_quality(repeated_source, repeated_target, groups)
+    assert [group.group_id for group in display] == [1]
+    assert quality.repeated_group_ids == [2]
+    assert quality.suppressed_groups == 1
+
+    _, repeated_phrase = assess_alignment_quality(
+        "vamos ahora",
+        "let us go let us go",
+        [
+            SemanticAlignmentGroup(
+                group_id=4,
+                source_ranges=[CharacterRange(start=0, end=11)],
+                target_ranges=[CharacterRange(start=0, end=19)],
+            )
+        ],
+    )
+    assert repeated_phrase.repeated_group_ids == [4]
+
+    coarse_source = "Mm, decía que vamos a hablar sobre recuerdos usando el pasado."
+    coarse_target = "Mm, I was saying that we are going to talk about memories using the past."
+    _, coarse = assess_alignment_quality(
+        coarse_source,
+        coarse_target,
+        [
+            SemanticAlignmentGroup(
+                group_id=3,
+                source_ranges=[CharacterRange(start=9, end=61)],
+                target_ranges=[CharacterRange(start=16, end=72)],
+            )
+        ],
+    )
+    assert coarse.coarse_group_ids == [3]
+    assert coarse.display_groups == 0
+
+
 def test_translation_service_coalesces_and_persists_cache(tmp_path):
     async def exercise():
         data_dir, catalogue_dir = indexed_data(tmp_path)
@@ -235,6 +288,7 @@ def test_cache_key_changes_with_source_model_prompt_and_schema(tmp_path, monkeyp
     clip = corpus.clip(corpus.search("la verdad", source_language="es").results[0].segment_id)
     provider = FakeProvider()
     service = TranslationService.configured(settings, corpus, provider)
+    prompt_version = translation_module.PROMPT_VERSION
     baseline = service._cache_key(clip, "en")
     assert (
         service._cache_key(clip.model_copy(update={"source_text": clip.source_text + "!"}), "en")
@@ -245,7 +299,7 @@ def test_cache_key_changes_with_source_model_prompt_and_schema(tmp_path, monkeyp
     provider.model = "literal-v1"
     monkeypatch.setattr(translation_module, "PROMPT_VERSION", "next-prompt")
     assert service._cache_key(clip, "en") != baseline
-    monkeypatch.setattr(translation_module, "PROMPT_VERSION", "literal-chunks-v3")
+    monkeypatch.setattr(translation_module, "PROMPT_VERSION", prompt_version)
     monkeypatch.setattr(translation_module, "TRANSLATION_SCHEMA_VERSION", 2)
     assert service._cache_key(clip, "en") != baseline
     corpus.close()

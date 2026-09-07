@@ -159,11 +159,13 @@ export function ProgressiveSourceText({
 }
 
 export function ProgressiveTargetText({
+  sourceText,
   text,
   groups,
   timing,
   currentTime,
 }: {
+  sourceText: string;
   text: string;
   groups: AlignmentGroup[];
   timing: TimedText[];
@@ -171,7 +173,9 @@ export function ProgressiveTargetText({
 }) {
   const characters = Array.from(text);
   const activeSource = timing.filter((item) => currentTime >= item.start && currentTime < item.end);
-  const activeRanges = groups.flatMap((group) => {
+  const activeRanges = groups.filter((group) => isDisplaySafeAlignmentGroup(
+    group, sourceText, text,
+  )).flatMap((group) => {
     const active = group.source_ranges.some((range) => activeSource.some(
       (timed) => range.start < timed.char_end && range.end > timed.char_start,
     ));
@@ -191,6 +195,32 @@ export function ProgressiveTargetText({
       key={`${start}:${end}`}
     >{characters.slice(start, end).join("")}</span>;
   })}</span>;
+}
+
+function wordsInRanges(text: string, ranges: AlignmentGroup["source_ranges"]): string[] {
+  const characters = Array.from(text);
+  return ranges.flatMap((range) =>
+    (characters.slice(range.start, range.end).join("").match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? [])
+      .map((word) => word.normalize("NFKD").toLocaleLowerCase().replace(/\p{M}/gu, "")),
+  );
+}
+
+export function isDisplaySafeAlignmentGroup(
+  group: AlignmentGroup,
+  sourceText: string,
+  targetText: string,
+): boolean {
+  const sourceWords = wordsInRanges(sourceText, group.source_ranges);
+  const targetWords = wordsInRanges(targetText, group.target_ranges);
+  const repeated = (words: string[]) => words.some((_, start) => (
+    Array.from({ length: Math.floor((words.length - start) / 2) }, (__, index) => index + 1)
+      .some((width) => words.slice(start, start + width).join("\0")
+        === words.slice(start + width, start + 2 * width).join("\0"))
+  ));
+  return sourceWords.length <= 4
+    && targetWords.length <= 6
+    && !repeated(sourceWords)
+    && !repeated(targetWords);
 }
 
 function statusMessage(status: SpeechClipPlayerStatus): string {
@@ -613,7 +643,7 @@ export function SpeechClipPlayer({
       >
         {targetText ? <p className="sur-player__target-text">
           {translationProvenance !== "authored_track" && alignmentGroups?.length
-            ? <ProgressiveTargetText text={targetText} groups={alignmentGroups} timing={timing} currentTime={current} />
+            ? <ProgressiveTargetText sourceText={text} text={targetText} groups={alignmentGroups} timing={timing} currentTime={current} />
             : targetText}
         </p> : (translationStatus === "queued" || translationStatus === "running") ? <p className="sur-player__translation-status">
           Translating… {onTranslationCancel && <button type="button" onClick={onTranslationCancel}>Cancel</button>}

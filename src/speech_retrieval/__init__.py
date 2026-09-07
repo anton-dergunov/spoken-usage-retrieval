@@ -11,6 +11,7 @@ from .channels import (
     ChannelRepositoryError,
 )
 from .contracts import (
+    AlignmentQuality,
     AnalyzerInfo,
     ChannelCreate,
     ChannelRecord,
@@ -51,10 +52,12 @@ from .translations import (
     TranslationProvider,
     TranslationProviderError,
     TranslationService,
+    assess_alignment_quality,
     validate_provider_output,
 )
 
 __all__ = [
+    "AlignmentQuality",
     "AnalyzerInfo",
     "ChannelCreate",
     "ChannelConflictError",
@@ -102,5 +105,6 @@ __all__ = [
     "UnsupportedAnalysisError",
     "UpdateSummary",
     "create_app",
+    "assess_alignment_quality",
     "validate_provider_output",
 ]

@@ -25,6 +25,64 @@
         "title": "Activity",
         "type": "object"
       },
+      "AlignmentQuality": {
+        "additionalProperties": false,
+        "properties": {
+          "coarse_group_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Coarse Group Ids",
+            "type": "array"
+          },
+          "display_groups": {
+            "title": "Display Groups",
+            "type": "integer"
+          },
+          "max_source_tokens_per_group": {
+            "minimum": 0.0,
+            "title": "Max Source Tokens Per Group",
+            "type": "integer"
+          },
+          "provider_groups": {
+            "title": "Provider Groups",
+            "type": "integer"
+          },
+          "repeated_group_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Repeated Group Ids",
+            "type": "array"
+          },
+          "source_character_coverage": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Source Character Coverage",
+            "type": "number"
+          },
+          "suppressed_groups": {
+            "title": "Suppressed Groups",
+            "type": "integer"
+          },
+          "target_character_coverage": {
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Target Character Coverage",
+            "type": "number"
+          }
+        },
+        "required": [
+          "provider_groups",
+          "display_groups",
+          "suppressed_groups",
+          "source_character_coverage",
+          "target_character_coverage",
+          "max_source_tokens_per_group"
+        ],
+        "title": "AlignmentQuality",
+        "type": "object"
+      },
       "AnalyzerInfo": {
         "additionalProperties": false,
         "properties": {
@@ -1894,6 +1952,16 @@
             },
             "title": "Alignment Groups",
             "type": "array"
+          },
+          "alignment_quality": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AlignmentQuality"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "authored_track_id": {
             "anyOf": [

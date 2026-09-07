@@ -150,6 +150,10 @@ track is the no-provider fallback for the translation path.
   integrated runtime-configured English/Russian selection into the standalone demo.
 - Verified a real 10-video update with 10 canonical source tracks, 13 independently acquired
   authored secondary tracks, and no secondary failures; the local data remains ignored.
-- Exercised 200 prompt-development calls plus a strict 20-call English/Russian confirmation set;
-  final validation accepted 18/20 and rejected both one-sided-group responses after one call. A
-  separate live HTTP request completed and its repeat was a persistent-cache hit.
+- Exercised 200 initial prompt-development calls plus strict and alignment-focused English/Russian
+  follow-ups. Browser-reported repeat/coarse-clause failures were traced to provider group
+  granularity, not offset lookup; v8 accepted 38/40 diverse calls while deterministic display
+  filtering suppressed 13 risky groups and allowed no displayed group to cross more than four
+  source cues. Full chronology, negative prompt iterations, examples, and limitations are recorded
+  in the experiment report. A separate live HTTP request completed and its repeat was a
+  persistent-cache hit.

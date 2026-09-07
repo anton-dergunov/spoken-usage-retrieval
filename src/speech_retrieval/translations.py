@@ -18,6 +18,7 @@ import httpx
 from .captions import manual_units
 from .catalogue import canonical_language
 from .contracts import (
+    AlignmentQuality,
     CharacterRange,
     Clip,
     SemanticAlignmentGroup,
@@ -32,9 +33,9 @@ from .contracts import (
 )
 from .search import Corpus
 from .settings import Settings
-from .text import join_text
+from .text import join_text, tokens_with_spans
 
-PROMPT_VERSION = "literal-chunks-v3"
+PROMPT_VERSION = "literal-chunks-v8"
 TRANSLATION_SCHEMA_VERSION = 1
 
 INSTRUCTIONS = """You translate short speech-caption excerpts for a language learner.
@@ -57,6 +58,14 @@ Before returning, silently compare the set of positive group_id values on both s
 be identical. If a chunk has no counterpart, label it 0 instead of inventing a one-sided group.
 Use warnings only for genuine ambiguity or a defective authored reference, not to explain ordinary
 translation or word-order choices.
+
+Granularity is part of the display contract. Prefer compact semantic phrases over whole clauses so
+that highlighting can follow speech progressively. A group should normally cover no more than four
+source words and six target words, but preserving an honest two-sided semantic mapping is more
+important than splitting mechanically. Give repeated occurrences different positive IDs, even when
+the repeated words and their translations are identical. For example, two consecutive occurrences
+of the same verb must activate two consecutive target ranges, not one range containing both
+translations. Use group 0 for genuinely unaligned material rather than creating a one-sided ID.
 
 An authored target-language caption may be supplied as a reference. It can be fluent but incomplete
 or freer than the source, so correct it toward the exact source rather than copying it blindly.
@@ -271,6 +280,62 @@ def _chunks(value: Any, name: str) -> list[tuple[str, int]]:
     return result
 
 
+def _tokens_in_ranges(text: str, ranges: list[CharacterRange]):
+    return [
+        token
+        for token in tokens_with_spans(text)
+        if any(token.start < value.end and token.end > value.start for value in ranges)
+    ]
+
+
+def _has_adjacent_repetition(tokens) -> bool:
+    normalized = [token.normalized for token in tokens]
+    return any(
+        normalized[start : start + width] == normalized[start + width : start + 2 * width]
+        for width in range(1, len(normalized) // 2 + 1)
+        for start in range(len(normalized) - 2 * width + 1)
+    )
+
+
+def assess_alignment_quality(
+    source_text: str,
+    target_text: str,
+    groups: list[SemanticAlignmentGroup],
+) -> tuple[list[SemanticAlignmentGroup], AlignmentQuality]:
+    """Keep only groups safe for cue-by-cue display and report deterministic diagnostics."""
+    coarse: list[int] = []
+    repeated: list[int] = []
+    max_source_tokens = 0
+    for group in groups:
+        source_tokens = _tokens_in_ranges(source_text, group.source_ranges)
+        target_tokens = _tokens_in_ranges(target_text, group.target_ranges)
+        max_source_tokens = max(max_source_tokens, len(source_tokens))
+        if len(source_tokens) > 4 or len(target_tokens) > 6:
+            coarse.append(group.group_id)
+        if _has_adjacent_repetition(source_tokens) or _has_adjacent_repetition(target_tokens):
+            repeated.append(group.group_id)
+    suppressed = set(coarse) | set(repeated)
+    display = [group for group in groups if group.group_id not in suppressed]
+
+    def coverage(ranges: list[CharacterRange], length: int) -> float:
+        return round(sum(value.end - value.start for value in ranges) / max(1, length), 4)
+
+    return display, AlignmentQuality(
+        provider_groups=len(groups),
+        display_groups=len(display),
+        suppressed_groups=len(suppressed),
+        source_character_coverage=coverage(
+            [value for group in display for value in group.source_ranges], len(source_text)
+        ),
+        target_character_coverage=coverage(
+            [value for group in display for value in group.target_ranges], len(target_text)
+        ),
+        max_source_tokens_per_group=max_source_tokens,
+        coarse_group_ids=coarse,
+        repeated_group_ids=repeated,
+    )
+
+
 def validate_provider_output(
     response: ProviderTranslationResponse,
     request: ProviderTranslationRequest,
@@ -320,19 +385,29 @@ def validate_provider_output(
             "Every positive semantic group must occur in both source and target chunks.",
             response.raw_output,
         )
+    provider_groups = [
+        SemanticAlignmentGroup(
+            group_id=group_id,
+            source_ranges=source_ranges[group_id],
+            target_ranges=target_ranges[group_id],
+        )
+        for group_id in sorted(shared_ids)
+    ]
+    display_groups, quality = assess_alignment_quality(
+        request.source_text, target_text, provider_groups
+    )
+    if quality.suppressed_groups:
+        warnings.append(
+            f"Suppressed {quality.suppressed_groups} alignment group(s) that were too coarse "
+            "or combined repeated occurrences."
+        )
     return TranslationResult(
         source_language=request.source_language,
         target_language=request.target_language,
         source_text_hash=_hash(request.source_text),
         target_text=target_text,
-        alignment_groups=[
-            SemanticAlignmentGroup(
-                group_id=group_id,
-                source_ranges=source_ranges[group_id],
-                target_ranges=target_ranges[group_id],
-            )
-            for group_id in sorted(shared_ids)
-        ],
+        alignment_groups=display_groups,
+        alignment_quality=quality,
         provenance="llm",
         provider=provider,
         model=model,
