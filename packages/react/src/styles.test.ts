@@ -38,7 +38,7 @@ describe("package styles", () => {
   });
 
   it("gives the native speed selector a specific compact font and enough width", () => {
-    expect(css).toMatch(/\.sur-player \.sur-player__speed-select\s*\{[^}]*width: 68px;[^}]*margin-left: 4px;[^}]*font: 11px var\(--sur-player-mono\);/s);
+    expect(css).toMatch(/\.sur-player \.sur-player__speed-select\s*\{[^}]*width: 68px;[^}]*margin-left: 12px;[^}]*font: 11px var\(--sur-player-mono\);/s);
   });
 
   it("aligns readable timeline text with the left edge of the slider", () => {
