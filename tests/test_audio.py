@@ -13,11 +13,44 @@ from speech_retrieval.audio import (
     AudioClipRange,
     AudioProbe,
     AudioProbeError,
+    prepared_clip_paths,
     probe_audio,
     validate_prepared_clip,
 )
 
 SOURCE_SHA256 = "a" * 64
+
+
+def test_prepared_clip_paths_resolves_the_canonical_derived_layout(tmp_path):
+    paths = prepared_clip_paths(
+        tmp_path,
+        language="es-MX",
+        video_key="vid_" + "a" * 20,
+        clip_key="clp_" + "b" * 20,
+    )
+
+    expected = tmp_path / "derived/audio/clips/es-MX" / ("vid_" + "a" * 20) / (
+        "clp_" + "b" * 20
+    )
+    assert paths.directory == expected
+    assert paths.clip == expected / "clip.wav"
+    assert paths.manifest == expected / "manifest.json"
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [("language", "../es"), ("video_key", "../video"), ("clip_key", "clp_ABC")],
+)
+def test_prepared_clip_paths_rejects_unsafe_components(tmp_path, field, value):
+    arguments = {
+        "language": "es",
+        "video_key": "vid_" + "a" * 20,
+        "clip_key": "clp_" + "b" * 20,
+        field: value,
+    }
+
+    with pytest.raises(ValueError):
+        prepared_clip_paths(tmp_path, **arguments)
 
 
 def test_audio_clip_range_canonicalizes_milliseconds_and_clamps_padding():

@@ -10,10 +10,13 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from .catalogue import canonical_language
 from .identity import clip_id
 
 AUDIO_PREPARATION_VERSION = "pcm-s16le-mono-16000-v1"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
+VIDEO_KEY_RE = re.compile(r"vid_[0-9a-f]{20}")
+CLIP_KEY_RE = re.compile(r"clp_[0-9a-f]{20}")
 
 
 class AudioProbeError(RuntimeError):
@@ -34,6 +37,33 @@ class AudioProbe:
     sample_rate: int
     channels: int
     bit_rate: int | None
+
+
+@dataclass(frozen=True, slots=True)
+class PreparedClipPaths:
+    directory: Path
+    clip: Path
+    manifest: Path
+
+
+def prepared_clip_paths(
+    data_dir: Path,
+    *,
+    language: str,
+    video_key: str,
+    clip_key: str,
+) -> PreparedClipPaths:
+    language = canonical_language(language)
+    if VIDEO_KEY_RE.fullmatch(video_key) is None:
+        raise ValueError("video_key must be a stable video ID")
+    if CLIP_KEY_RE.fullmatch(clip_key) is None:
+        raise ValueError("clip_key must be a stable clip ID")
+    directory = Path(data_dir) / "derived" / "audio" / "clips" / language / video_key / clip_key
+    return PreparedClipPaths(
+        directory=directory,
+        clip=directory / "clip.wav",
+        manifest=directory / "manifest.json",
+    )
 
 
 def _run_ffprobe(arguments: Sequence[str]) -> str:
