@@ -136,8 +136,15 @@ GUIDE = """
   <li>The automatic disagreement rate is hidden. Reveal it only after you have recorded your
       verdict, and only if you are curious.</li>
 </ol>
+<h2>Why these rows?</h2>
+<p id="subset-note"></p>
+<p>The review subset is predeclared in the configuration, before any result is looked at, so the
+choice of what to review cannot be steered by the outcome. It is every row that failed a pipeline
+stage, plus the first few rows per disagreement bin per source class in stable hash order. A bin
+contributes fewer than its quota when it does not contain that many rows.</p>
 <p><strong>Rows without audio are not review items.</strong> They are pipeline gaps recorded
-against the same frozen row. Leave them blank.</p>
+against the same frozen row: the row keeps its identity instead of being silently replaced by a
+different segment. Leave them blank.</p>
 """
 
 
@@ -309,11 +316,11 @@ _TEMPLATE = r"""<!doctype html>
   <label class="muted">Reviewer <input type="text" id="reviewer" placeholder="your name"></label>
   <label class="muted">Show
     <select id="filter">
-      <option value="reviewable">reviewable</option>
-      <option value="unreviewed">unreviewed</option>
-      <option value="reviewed">reviewed</option>
-      <option value="noaudio">no audio</option>
-      <option value="all">all</option>
+      <option value="reviewable">to judge</option>
+      <option value="unreviewed">not yet judged</option>
+      <option value="reviewed">already judged</option>
+      <option value="noaudio">no audio, not reviewable</option>
+      <option value="all">everything in the subset</option>
     </select>
   </label>
   <span class="mono" id="progress"></span>
@@ -526,10 +533,27 @@ _TEMPLATE = r"""<!doctype html>
   reviewer.value = state.reviewer || "";
   reviewer.addEventListener("input", () => { state.reviewer = reviewer.value; save(); });
 
+  const judgeable = items.filter(reviewable).length;
+  const withoutAudio = items.length - judgeable;
   document.getElementById("meta").textContent =
     runId + " · rubric " + data.worksheet.rubric_version + " · " +
-    items.length + " of " + data.worksheet.total + " rows in the predeclared subset · " +
+    judgeable + " to judge, " + withoutAudio + " without audio (" + items.length +
+    " of " + data.worksheet.total + " sampled rows in the review subset) · " +
     Math.round(data.embeddedBytes / 1048576) + " MB audio embedded";
+
+  document.getElementById("subset-note").textContent =
+    "This run froze " + data.worksheet.total + " sampled segments. " + items.length +
+    " of them are in the predeclared review subset: " + judgeable +
+    " have a prepared clip and are yours to judge, and " + withoutAudio +
+    " failed earlier in the pipeline and have no audio to listen to.";
+
+  for (const option of document.querySelectorAll("#filter option")) {
+    const counts = {
+      reviewable: judgeable, unreviewed: judgeable, reviewed: judgeable,
+      noaudio: withoutAudio, all: items.length,
+    };
+    option.textContent = option.textContent + " (" + counts[option.value] + ")";
+  }
 
   document.getElementById("import-cmd").textContent =
     "uv run python experiments/audio-caption-reliability/run_reliability.py review-import \\\n" +
