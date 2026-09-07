@@ -199,6 +199,26 @@ def probe_audio(path: Path, *, runner: ProbeRunner = _run_ffprobe) -> AudioProbe
     )
 
 
+def validate_audio_integrity(
+    probe: AudioProbe,
+    *,
+    expected_size_bytes: int,
+    expected_sha256: str,
+) -> None:
+    if (
+        isinstance(expected_size_bytes, bool)
+        or not isinstance(expected_size_bytes, int)
+        or expected_size_bytes <= 0
+    ):
+        raise ValueError("expected_size_bytes must be positive")
+    if not isinstance(expected_sha256, str) or SHA256_RE.fullmatch(expected_sha256) is None:
+        raise ValueError("expected_sha256 must be a lowercase SHA-256 digest")
+    if probe.size_bytes != expected_size_bytes:
+        raise AudioProbeError("audio size does not match its manifest")
+    if probe.content_sha256 != expected_sha256:
+        raise AudioProbeError("audio checksum does not match its manifest")
+
+
 def _milliseconds(value: float, *, name: str, exact: bool = True) -> int:
     if isinstance(value, bool):
         raise ValueError(f"{name} must be a finite number")

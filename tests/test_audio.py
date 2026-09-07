@@ -16,6 +16,7 @@ from speech_retrieval.audio import (
     prepared_clip_paths,
     probe_audio,
     raw_audio_paths,
+    validate_audio_integrity,
     validate_prepared_clip,
 )
 
@@ -283,6 +284,38 @@ def prepared_probe():
         channels=1,
         bit_rate=256000,
     )
+
+
+def test_validate_audio_integrity_accepts_matching_manifest_fields():
+    probe = prepared_probe()
+
+    assert (
+        validate_audio_integrity(
+            probe,
+            expected_size_bytes=probe.size_bytes,
+            expected_sha256=probe.content_sha256,
+        )
+        is None
+    )
+
+
+@pytest.mark.parametrize(
+    ("fields", "message"),
+    [
+        ({"expected_size_bytes": 1}, "size"),
+        ({"expected_sha256": "b" * 64}, "checksum"),
+    ],
+)
+def test_validate_audio_integrity_rejects_manifest_mismatches(fields, message):
+    probe = prepared_probe()
+    expected = {
+        "expected_size_bytes": probe.size_bytes,
+        "expected_sha256": probe.content_sha256,
+        **fields,
+    }
+
+    with pytest.raises(AudioProbeError, match=message):
+        validate_audio_integrity(probe, **expected)
 
 
 def test_validate_prepared_clip_accepts_the_versioned_output_contract():
