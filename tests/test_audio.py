@@ -28,6 +28,15 @@ def test_raw_audio_paths_resolves_the_canonical_video_cache_layout(tmp_path):
     expected = tmp_path / "raw/corpora/es-MX" / ("vid_" + "a" * 20) / "audio"
     assert paths.directory == expected
     assert paths.manifest == expected / "manifest.json"
+    assert paths.source("webm") == expected / "source.webm"
+
+
+@pytest.mark.parametrize("extension", [".wav", "WAV", "../wav", "web-m"])
+def test_raw_audio_paths_rejects_unsafe_source_extensions(tmp_path, extension):
+    paths = raw_audio_paths(tmp_path, language="es", video_key="vid_" + "a" * 20)
+
+    with pytest.raises(ValueError, match="audio extension"):
+        paths.source(extension)
 
 
 def test_prepared_clip_paths_resolves_the_canonical_derived_layout(tmp_path):

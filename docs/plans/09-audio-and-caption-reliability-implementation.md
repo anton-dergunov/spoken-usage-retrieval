@@ -12,6 +12,8 @@ Implemented next on 2026-09-07: `prepared_clip_paths()` and `PreparedClipPaths` 
 
 Implemented next on 2026-09-07: `raw_audio_paths()` and `RawAudioPaths` now resolve the corresponding per-video raw-audio directory and its independent `audio/manifest.json` without creating anything on disk. The helper canonicalizes the language and requires a stable video ID; a focused layout test was added. As requested, validation was not run for this increment.
 
+Implemented next on 2026-09-07: `RawAudioPaths.source()` now derives the immutable `source.<ext>` payload location while accepting only short lowercase alphanumeric media extensions. This keeps provider-supplied extension text from becoming an arbitrary path and completes the raw path descriptor without choosing a provider format. Focused valid/unsafe-extension tests were added; validation was not run, as requested.
+
 Initial repository shape: this is a Python 3.12+ `src/` package with an `argparse` CLI, Pydantic contracts, dataclass settings, `yt-dlp`-based subtitle acquisition, pytest tests, and experiment directories that keep executable scripts, versioned configurations/schemas, results, and narrative reports together. Audio should extend those conventions rather than become a separate application.
 
 Investigation order: trace acquisition/cache ownership and metadata first; then settings/CLI/status; caption provenance and segment identity; existing experiment/report formats; Plan 11/12 integration boundaries; finally dependencies and test seams. Findings below should turn into an implementation sequence once those paths are understood.
@@ -138,7 +140,7 @@ Keep the language acquisition limit defined as usable caption videos, as the REA
 
 Likely production code split:
 
-- `src/speech_retrieval/audio.py`: clip range/identity, common ffprobe inspection, raw/derived path descriptors, and derived-clip contract validation are implemented; source filename selection, yt-dlp media acquisition, manifest comparison/cached availability, ffmpeg conversion and cache publication, storage scan and prune planning/execution remain. If this grows, split acquisition and cache operations after the public types are stable.
+- `src/speech_retrieval/audio.py`: clip range/identity, common ffprobe inspection, raw/derived path descriptors (including safe raw source filenames), and derived-clip contract validation are implemented; yt-dlp format selection/acquisition, manifest comparison/cached availability, ffmpeg conversion and cache publication, storage scan and prune planning/execution remain. If this grows, split acquisition and cache operations after the public types are stable.
 - `src/speech_retrieval/audio_features.py`: dependency-light feature envelope/protocols and lazy adapters for ASR agreement, rate, Silero and SQUIM. Heavy imports must occur only when a feature is selected.
 - `src/speech_retrieval/identity.py`: `clip_id` is implemented; add a raw-audio identity only if multiple selected source representations become possible.
 - `src/speech_retrieval/settings.py`, `acquisition.py`, `service.py`, `cli.py`, and `contracts.py`: opt-in wiring and status/report contracts. `api.py` already enriches `CorpusStatus` with translation state via `model_copy`; audio cache state can be added similarly or computed inside `Corpus.status()` because it already owns `data_dir`.

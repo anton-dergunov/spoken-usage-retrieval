@@ -17,6 +17,7 @@ AUDIO_PREPARATION_VERSION = "pcm-s16le-mono-16000-v1"
 SHA256_RE = re.compile(r"[0-9a-f]{64}")
 VIDEO_KEY_RE = re.compile(r"vid_[0-9a-f]{20}")
 CLIP_KEY_RE = re.compile(r"clp_[0-9a-f]{20}")
+MEDIA_EXTENSION_RE = re.compile(r"[a-z0-9]{1,10}")
 
 
 class AudioProbeError(RuntimeError):
@@ -50,6 +51,11 @@ class PreparedClipPaths:
 class RawAudioPaths:
     directory: Path
     manifest: Path
+
+    def source(self, extension: str) -> Path:
+        if not isinstance(extension, str) or MEDIA_EXTENSION_RE.fullmatch(extension) is None:
+            raise ValueError("audio extension must contain only lowercase letters and digits")
+        return self.directory / f"source.{extension}"
 
 
 def raw_audio_paths(data_dir: Path, *, language: str, video_key: str) -> RawAudioPaths:
