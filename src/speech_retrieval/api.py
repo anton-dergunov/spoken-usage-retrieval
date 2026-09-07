@@ -50,7 +50,13 @@ from .translations import TranslationProvider, TranslationService, WordAlignment
 logger = logging.getLogger("speech_retrieval.api")
 
 ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {
-    status: {"model": ErrorResponse} for status in (400, 401, 404, 409, 413, 422, 503)
+    400: {"model": ErrorResponse, "description": "Bad Request"},
+    401: {"model": ErrorResponse, "description": "Unauthorized"},
+    404: {"model": ErrorResponse, "description": "Not Found"},
+    409: {"model": ErrorResponse, "description": "Conflict"},
+    413: {"model": ErrorResponse, "description": "Content Too Large"},
+    422: {"model": ErrorResponse, "description": "Unprocessable Content"},
+    503: {"model": ErrorResponse, "description": "Service Unavailable"},
 }
 
 
