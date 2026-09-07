@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   SpeechClipPlayer,
   createSpeechRetrievalClient,
@@ -74,6 +74,8 @@ export default function App() {
   const [targetLanguage, setTargetLanguage] = useState("");
   const [translationJob, setTranslationJob] = useState<TranslationJob | null>(null);
   const [translationLoading, setTranslationLoading] = useState(false);
+  const [translationRetry, setTranslationRetry] = useState<{ key: string; attempt: number } | null>(null);
+  const consumedTranslationRetry = useRef<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const theme = themeOverride ?? systemColorScheme;
@@ -181,6 +183,12 @@ export default function App() {
     setTranslationJob(null);
     setTranslationLoading(false);
     if (!selected || !targetLanguage || targetLanguage === selected.source_language) return;
+    const requestKey = `${selected.segment_id}:${targetLanguage}`;
+    const retrySignature = translationRetry?.key === requestKey
+      ? `${requestKey}:${translationRetry.attempt}`
+      : null;
+    const retryFailed = retrySignature !== null && retrySignature !== consumedTranslationRetry.current;
+    if (retryFailed) consumedTranslationRetry.current = retrySignature;
     const controller = new AbortController();
     let currentJobId: string | null = null;
     let disposed = false;
@@ -189,6 +197,7 @@ export default function App() {
       try {
         let job = await client.requestTranslation(selected.segment_id, {
           targetLanguage,
+          retryFailed,
           signal: controller.signal,
         });
         currentJobId = job.job_id;
@@ -214,7 +223,7 @@ export default function App() {
       controller.abort();
       if (currentJobId) void client.cancelTranslation(currentJobId).catch(() => undefined);
     };
-  }, [selected?.segment_id, selected?.source_language, targetLanguage]);
+  }, [selected?.segment_id, selected?.source_language, targetLanguage, translationRetry]);
 
   return <div className="app-shell">
     <header className="topbar">
@@ -307,9 +316,16 @@ export default function App() {
             targetLanguage={targetLanguage || null}
             targetText={translationJob?.result?.target_text}
             alignmentGroups={translationJob?.result?.alignment_groups}
+            alignmentGraph={translationJob?.result?.alignment_graph}
+            alignmentStatus={translationJob?.result?.alignment_status}
             translationProvenance={translationJob?.result?.provenance}
             translationStatus={translationJob?.status ?? (translationLoading ? "queued" : "not_requested")}
-            translationError={translationJob?.error?.message}
+            onTranslationRetry={() => {
+              if (selected && targetLanguage) {
+                const key = `${selected.segment_id}:${targetLanguage}`;
+                setTranslationRetry((value) => ({ key, attempt: value?.key === key ? value.attempt + 1 : 1 }));
+              }
+            }}
             onTranslationCancel={translationJob && ["queued", "running"].includes(translationJob.status)
               ? () => { void client.cancelTranslation(translationJob.job_id).then(setTranslationJob); }
               : undefined}

@@ -25,7 +25,7 @@ from .indexing import build_index
 from .search import Corpus
 from .service import Indexer, activity_is_alive, read_update_state
 from .settings import Settings
-from .translations import TranslationStore
+from .translation_store import TranslationStore
 
 
 def _payload(value: Any) -> Any:

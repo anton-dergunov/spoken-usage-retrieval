@@ -753,6 +753,7 @@ class Corpus:
                 },
                 "quality_score": row["quality_score"],
                 "analyzer": analysis["analyzer"],
+                "token_analysis": analysis["tokens"],
                 "video": {
                     "video_key": row["video_key"],
                     "provider": row["provider"],

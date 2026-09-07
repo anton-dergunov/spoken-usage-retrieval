@@ -3,107 +3,49 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
-import sqlite3
 import time
-import uuid
 from collections import defaultdict
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from pathlib import Path
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, cast
 from urllib.parse import quote
 
 import httpx
 
+from .analysis import UnsupportedAnalysisError, get_analyzer
 from .captions import manual_units
 from .catalogue import canonical_language
 from .contracts import (
     AlignmentQuality,
+    AlignmentToken,
     CharacterRange,
     Clip,
     SemanticAlignmentGroup,
     TranslationBatch,
-    TranslationBatchCounts,
-    TranslationBatchItem,
-    TranslationCacheStatistics,
     TranslationErrorInfo,
     TranslationJob,
     TranslationResult,
     TranslationServiceStatus,
+    WordAlignmentEdge,
+    WordAlignmentGraph,
+)
+from .prompt_registry import (
+    ALIGNMENT_PROMPT,
+    TRANSLATION_PROMPT,
+    TRANSLATION_SCHEMA,
+    alignment_schema,
 )
 from .search import Corpus
 from .settings import Settings
 from .text import join_text, tokens_with_spans
+from .translation_store import TranslationStore
 
-PROMPT_VERSION = "literal-chunks-v8"
-TRANSLATION_SCHEMA_VERSION = 1
-
-INSTRUCTIONS = """You translate short speech-caption excerpts for a language learner.
-
-Produce a faithful, literal-leaning translation into the requested target language. Keep the
-meaning, register, repetitions, discourse markers, names, and uncertainty of the source. Prefer a
-rendering that helps a learner compare the two lines over a freer idiomatic paraphrase. The target
-must still be grammatical and natural: preserve source structure only where the target language
-allows it, never by reproducing source-language grammar. Do not add explanations.
-
-Return the source and translation as ordered chunks. Concatenating source_chunks.text MUST reproduce
-the source text exactly, character for character, including whitespace and punctuation.
-Concatenating target_chunks.text is the translation. Give chunks that carry the same semantic
-content the same positive group_id, even when their order differs. A group may occur in more than
-one chunk on either side. Use group_id 0 only for whitespace, punctuation, or genuinely unaligned
-material. Every positive group_id must occur on both sides. Never calculate character offsets; the
-application derives them from the exact chunks.
-
-Before returning, silently compare the set of positive group_id values on both sides. The sets must
-be identical. If a chunk has no counterpart, label it 0 instead of inventing a one-sided group.
-Use warnings only for genuine ambiguity or a defective authored reference, not to explain ordinary
-translation or word-order choices.
-
-Granularity is part of the display contract. Prefer compact semantic phrases over whole clauses so
-that highlighting can follow speech progressively. A group should normally cover no more than four
-source words and six target words, but preserving an honest two-sided semantic mapping is more
-important than splitting mechanically. Give repeated occurrences different positive IDs, even when
-the repeated words and their translations are identical. For example, two consecutive occurrences
-of the same verb must activate two consecutive target ranges, not one range containing both
-translations. Use group 0 for genuinely unaligned material rather than creating a one-sided ID.
-
-An authored target-language caption may be supplied as a reference. It can be fluent but incomplete
-or freer than the source, so correct it toward the exact source rather than copying it blindly.
-"""
-
-GEMINI_SCHEMA: dict[str, Any] = {
-    "type": "OBJECT",
-    "properties": {
-        "source_chunks": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "text": {"type": "STRING"},
-                    "group_id": {"type": "INTEGER"},
-                },
-                "required": ["text", "group_id"],
-            },
-        },
-        "target_chunks": {
-            "type": "ARRAY",
-            "items": {
-                "type": "OBJECT",
-                "properties": {
-                    "text": {"type": "STRING"},
-                    "group_id": {"type": "INTEGER"},
-                },
-                "required": ["text", "group_id"],
-            },
-        },
-        "warnings": {"type": "ARRAY", "items": {"type": "STRING"}},
-    },
-    "required": ["source_chunks", "target_chunks", "warnings"],
-}
-
-
-def _now() -> str:
-    return datetime.now(UTC).isoformat()
+PROMPT_VERSION = TRANSLATION_PROMPT.version
+TRANSLATION_SCHEMA_VERSION = TRANSLATION_PROMPT.schema_version
+ALIGNMENT_PROMPT_VERSION = ALIGNMENT_PROMPT.version
+ALIGNMENT_SCHEMA_VERSION = ALIGNMENT_PROMPT.schema_version
+INSTRUCTIONS = TRANSLATION_PROMPT.text
+GEMINI_SCHEMA = TRANSLATION_SCHEMA
 
 
 def _hash(value: str) -> str:
@@ -117,9 +59,9 @@ class TranslationProviderError(RuntimeError):
         self.retryable = retryable
 
 
-class InvalidTranslationOutput(TranslationProviderError):
+class InvalidProviderOutput(TranslationProviderError):
     def __init__(self, message: str, raw_output: str = ""):
-        super().__init__("invalid_output", message, retryable=False)
+        super().__init__("invalid_output", message, retryable=True)
         self.raw_output = raw_output[:100_000]
 
 
@@ -132,7 +74,17 @@ class ProviderTranslationRequest:
 
 
 @dataclass(frozen=True)
-class ProviderTranslationResponse:
+class ProviderAlignmentRequest:
+    source_text: str
+    target_text: str
+    source_language: str
+    target_language: str
+    source_tokens: tuple[AlignmentToken, ...]
+    target_tokens: tuple[AlignmentToken, ...]
+
+
+@dataclass(frozen=True)
+class ProviderResponse:
     payload: dict[str, Any]
     latency_ms: float
     usage: dict[str, int] | None
@@ -140,18 +92,33 @@ class ProviderTranslationResponse:
     provider_metadata: dict[str, str] | None = None
 
 
+ProviderTranslationResponse = ProviderResponse
+ProviderAlignmentResponse = ProviderResponse
+
+
 class TranslationProvider(Protocol):
     provider: str
     model: str
 
-    async def generate(
+    async def translate(
         self, request: ProviderTranslationRequest
     ) -> ProviderTranslationResponse: ...
 
     async def aclose(self) -> None: ...
 
 
+class WordAlignmentProvider(Protocol):
+    provider: str
+    model: str
+
+    async def align(self, request: ProviderAlignmentRequest) -> ProviderAlignmentResponse: ...
+
+    async def aclose(self) -> None: ...
+
+
 class GeminiTranslationProvider:
+    """Small REST adapter implementing both provider stages without an SDK dependency."""
+
     provider = "gemini"
 
     def __init__(self, api_key: str, model: str, *, timeout_seconds: float = 30.0):
@@ -159,18 +126,14 @@ class GeminiTranslationProvider:
         self._api_key = api_key
         self._client = httpx.AsyncClient(timeout=timeout_seconds)
 
-    async def generate(self, request: ProviderTranslationRequest) -> ProviderTranslationResponse:
-        reference = (
-            f"\nAuthored target-language reference (possibly free or incomplete):\n"
-            f"{request.authored_reference}"
-            if request.authored_reference
-            else ""
-        )
-        user_text = (
-            f"Source language: {request.source_language}\n"
-            f"Target language: {request.target_language}\n"
-            f"Source text:\n{request.source_text}{reference}"
-        )
+    async def _generate(
+        self,
+        *,
+        instructions: str,
+        user_text: str,
+        schema: dict[str, Any],
+        temperature: float,
+    ) -> ProviderResponse:
         started = time.perf_counter()
         try:
             response = await self._client.post(
@@ -178,57 +141,57 @@ class GeminiTranslationProvider:
                 f"{quote(self.model, safe='')}:generateContent",
                 headers={"Content-Type": "application/json", "x-goog-api-key": self._api_key},
                 json={
-                    "systemInstruction": {"parts": [{"text": INSTRUCTIONS}]},
+                    "systemInstruction": {"parts": [{"text": instructions}]},
                     "contents": [{"role": "user", "parts": [{"text": user_text}]}],
                     "generationConfig": {
-                        "temperature": 0.2,
+                        "temperature": temperature,
                         "responseMimeType": "application/json",
-                        "responseSchema": GEMINI_SCHEMA,
+                        "responseSchema": schema,
                     },
                 },
             )
         except (httpx.TimeoutException, httpx.NetworkError) as error:
             raise TranslationProviderError(
                 "temporarily_unavailable",
-                "The translation provider is temporarily unreachable.",
+                "The language provider is temporarily unreachable.",
                 retryable=True,
             ) from error
         if response.status_code in {401, 403}:
             raise TranslationProviderError(
                 "provider_unavailable",
-                "The translation provider rejected its API key.",
+                "The language provider rejected its credentials.",
                 retryable=False,
             )
         if response.status_code == 429:
             raise TranslationProviderError(
-                "rate_limited", "The translation provider is rate limited.", retryable=True
+                "rate_limited", "The language provider is rate limited.", retryable=True
             )
         if response.status_code == 408 or response.status_code >= 500:
             raise TranslationProviderError(
                 "temporarily_unavailable",
-                "The translation provider is temporarily unavailable.",
+                "The language provider is temporarily unavailable.",
                 retryable=True,
             )
         if not response.is_success:
             raise TranslationProviderError(
                 "provider_unavailable",
-                "The translation provider could not translate this clip.",
+                "The language provider rejected the request.",
                 retryable=False,
             )
         try:
             body = response.json()
-            parts = body["candidates"][0]["content"]["parts"]
-            raw = "".join(str(part.get("text", "")) for part in parts)
+            raw = "".join(
+                str(part.get("text", "")) for part in body["candidates"][0]["content"]["parts"]
+            )
             payload = json.loads(raw)
         except (ValueError, KeyError, IndexError, TypeError) as error:
-            raw = response.text
-            raise InvalidTranslationOutput(
-                "Gemini returned unreadable structured output.", raw
+            raise InvalidProviderOutput(
+                "Provider returned unreadable structured output.", response.text
             ) from error
         usage_payload = body.get("usageMetadata") or {}
         usage = {
-            key: int(value)
-            for key, value in {
+            name: int(value)
+            for name, value in {
                 "input_tokens": usage_payload.get("promptTokenCount"),
                 "output_tokens": usage_payload.get("candidatesTokenCount"),
                 "total_tokens": usage_payload.get("totalTokenCount"),
@@ -236,9 +199,9 @@ class GeminiTranslationProvider:
             if isinstance(value, int)
         }
         candidate = body.get("candidates", [{}])[0]
-        provider_metadata = {
-            key: str(value)
-            for key, value in {
+        metadata = {
+            name: str(value)
+            for name, value in {
                 "response_id": body.get("responseId"),
                 "model_version": body.get("modelVersion"),
                 "finish_reason": candidate.get("finishReason")
@@ -247,605 +210,237 @@ class GeminiTranslationProvider:
             }.items()
             if value is not None
         }
-        return ProviderTranslationResponse(
+        return ProviderResponse(
             payload=payload,
             latency_ms=round((time.perf_counter() - started) * 1000, 2),
             usage=usage or None,
             raw_output=raw,
-            provider_metadata=provider_metadata or None,
+            provider_metadata=metadata or None,
+        )
+
+    async def translate(self, request: ProviderTranslationRequest) -> ProviderTranslationResponse:
+        reference = (
+            "\nAuthored target-language reference (possibly free or incomplete):\n"
+            + request.authored_reference
+            if request.authored_reference
+            else ""
+        )
+        return await self._generate(
+            instructions=TRANSLATION_PROMPT.text,
+            user_text=(
+                f"Source language: {request.source_language}\n"
+                f"Target language: {request.target_language}\n"
+                f"Source text:\n{request.source_text}{reference}"
+            ),
+            schema=TRANSLATION_SCHEMA,
+            temperature=TRANSLATION_PROMPT.temperature,
+        )
+
+    async def align(self, request: ProviderAlignmentRequest) -> ProviderAlignmentResponse:
+        def token_lines(tokens: tuple[AlignmentToken, ...]) -> str:
+            return "\n".join(
+                f"{token.id}: {json.dumps(token.text, ensure_ascii=False)}" for token in tokens
+            )
+
+        return await self._generate(
+            instructions=ALIGNMENT_PROMPT.text,
+            user_text=(
+                f"Source language: {request.source_language}\n"
+                f"Target language: {request.target_language}\n"
+                f"Source text: {request.source_text}\n"
+                f"Target text: {request.target_text}\n\n"
+                f"Source tokens:\n{token_lines(request.source_tokens)}\n\n"
+                f"Target tokens:\n{token_lines(request.target_tokens)}"
+            ),
+            schema=alignment_schema(
+                [token.id for token in request.source_tokens],
+                [token.id for token in request.target_tokens],
+            ),
+            temperature=ALIGNMENT_PROMPT.temperature,
         )
 
     async def aclose(self) -> None:
         await self._client.aclose()
 
 
-def _chunks(value: Any, name: str) -> list[tuple[str, int]]:
-    if not isinstance(value, list) or not value:
-        raise InvalidTranslationOutput(f"{name} must be a non-empty array.")
-    result: list[tuple[str, int]] = []
-    for item in value:
-        if not isinstance(item, dict):
-            raise InvalidTranslationOutput(f"{name} contains a non-object chunk.")
-        text = item.get("text")
-        group_id = item.get("group_id")
-        if not isinstance(text, str):
-            raise InvalidTranslationOutput(f"{name} contains a non-string chunk.")
-        if not isinstance(group_id, int) or isinstance(group_id, bool) or group_id < 0:
-            raise InvalidTranslationOutput(f"{name} contains an invalid group_id.")
-        if not text:
+@dataclass(frozen=True)
+class ValidatedTranslation:
+    target_text: str
+    warnings: list[str]
+
+
+@dataclass(frozen=True)
+class ValidatedAlignment:
+    graph: WordAlignmentGraph
+    groups: list[SemanticAlignmentGroup]
+    quality: AlignmentQuality
+    warnings: list[str]
+
+
+def _warnings(payload: dict[str, Any], raw_output: str) -> list[str]:
+    value = payload.get("warnings")
+    if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+        raise InvalidProviderOutput("warnings must be an array of strings.", raw_output)
+    return list(value)
+
+
+def validate_translation_output(response: ProviderTranslationResponse) -> ValidatedTranslation:
+    target_text = response.payload.get("target_text")
+    if not isinstance(target_text, str) or not target_text.strip():
+        raise InvalidProviderOutput(
+            "Translation output contains no target text.", response.raw_output
+        )
+    return ValidatedTranslation(target_text, _warnings(response.payload, response.raw_output))
+
+
+def alignment_tokens(
+    text: str, prefix: str, *, analyzed: list[Any] | None = None
+) -> tuple[AlignmentToken, ...]:
+    """Create stable lexical nodes and collapse expanded words sharing one source span."""
+    raw = analyzed if analyzed is not None else tokens_with_spans(text)
+    seen: set[tuple[int, int]] = set()
+    result: list[AlignmentToken] = []
+    for value in raw:
+        if isinstance(value, dict):
+            start = int(value["start"])
+            end = int(value["end"])
+        else:
+            start = int(value.start)
+            end = int(value.end)
+        if (start, end) in seen or not (0 <= start < end <= len(text)):
             continue
-        result.append((text, group_id))
-    if not result:
-        raise InvalidTranslationOutput(f"{name} contains no text.")
-    return result
+        seen.add((start, end))
+        result.append(
+            AlignmentToken(
+                id=f"{prefix}{len(result) + 1}",
+                text=text[start:end],
+                range=CharacterRange(start=start, end=end),
+            )
+        )
+    return tuple(result)
 
 
-def _tokens_in_ranges(text: str, ranges: list[CharacterRange]):
-    return [
-        token
-        for token in tokens_with_spans(text)
-        if any(token.start < value.end and token.end > value.start for value in ranges)
-    ]
-
-
-def _has_adjacent_repetition(tokens) -> bool:
-    normalized = [token.normalized for token in tokens]
-    return any(
-        normalized[start : start + width] == normalized[start + width : start + 2 * width]
-        for width in range(1, len(normalized) // 2 + 1)
-        for start in range(len(normalized) - 2 * width + 1)
-    )
-
-
-def assess_alignment_quality(
-    source_text: str,
-    target_text: str,
-    groups: list[SemanticAlignmentGroup],
-) -> tuple[list[SemanticAlignmentGroup], AlignmentQuality]:
-    """Keep only groups safe for cue-by-cue display and report deterministic diagnostics."""
-    coarse: list[int] = []
-    repeated: list[int] = []
-    max_source_tokens = 0
-    for group in groups:
-        source_tokens = _tokens_in_ranges(source_text, group.source_ranges)
-        target_tokens = _tokens_in_ranges(target_text, group.target_ranges)
-        max_source_tokens = max(max_source_tokens, len(source_tokens))
-        if len(source_tokens) > 4 or len(target_tokens) > 6:
-            coarse.append(group.group_id)
-        if _has_adjacent_repetition(source_tokens) or _has_adjacent_repetition(target_tokens):
-            repeated.append(group.group_id)
-    suppressed = set(coarse) | set(repeated)
-    display = [group for group in groups if group.group_id not in suppressed]
-
-    def coverage(ranges: list[CharacterRange], length: int) -> float:
-        return round(sum(value.end - value.start for value in ranges) / max(1, length), 4)
-
-    return display, AlignmentQuality(
-        provider_groups=len(groups),
-        display_groups=len(display),
-        suppressed_groups=len(suppressed),
-        source_character_coverage=coverage(
-            [value for group in display for value in group.source_ranges], len(source_text)
-        ),
-        target_character_coverage=coverage(
-            [value for group in display for value in group.target_ranges], len(target_text)
-        ),
-        max_source_tokens_per_group=max_source_tokens,
-        coarse_group_ids=coarse,
-        repeated_group_ids=repeated,
-    )
-
-
-def validate_provider_output(
-    response: ProviderTranslationResponse,
-    request: ProviderTranslationRequest,
-    *,
-    provider: str,
-    model: str,
-) -> TranslationResult:
+def validate_alignment_output(
+    response: ProviderAlignmentResponse, request: ProviderAlignmentRequest
+) -> ValidatedAlignment:
     payload = response.payload
-    if not isinstance(payload, dict):
-        raise InvalidTranslationOutput("Provider output must be an object.", response.raw_output)
-    source_chunks = _chunks(payload.get("source_chunks"), "source_chunks")
-    target_chunks = _chunks(payload.get("target_chunks"), "target_chunks")
-    if "".join(text for text, _ in source_chunks) != request.source_text:
-        raise InvalidTranslationOutput(
-            "Source chunks do not reconstruct the source text exactly.", response.raw_output
+    rows = payload.get("alignments")
+    unaligned_target = payload.get("unaligned_target_ids")
+    if not isinstance(rows, list) or not isinstance(unaligned_target, list):
+        raise InvalidProviderOutput(
+            "Alignment rows and unaligned targets must be arrays.", response.raw_output
         )
-    target_text = "".join(text for text, _ in target_chunks)
-    if not target_text.strip():
-        raise InvalidTranslationOutput("Target text is empty.", response.raw_output)
-    source_ids = {group for _, group in source_chunks if group > 0}
-    target_ids = {group for _, group in target_chunks if group > 0}
-    shared_ids = source_ids & target_ids
-    if not shared_ids:
-        raise InvalidTranslationOutput(
-            "Provider output contains no semantic group shared by source and target.",
+    if not all(isinstance(item, str) for item in unaligned_target):
+        raise InvalidProviderOutput("Unaligned target IDs must be strings.", response.raw_output)
+
+    source_ids = [token.id for token in request.source_tokens]
+    target_ids = {token.id for token in request.target_tokens}
+    returned_sources: list[str] = []
+    unaligned_source: list[str] = []
+    edges: list[WordAlignmentEdge] = []
+    pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        if not isinstance(row, dict) or not isinstance(row.get("source_id"), str):
+            raise InvalidProviderOutput(
+                "Alignment contains an invalid source row.", response.raw_output
+            )
+        targets = row.get("target_ids")
+        if not isinstance(targets, list) or not all(isinstance(item, str) for item in targets):
+            raise InvalidProviderOutput(
+                "Alignment target IDs must be string arrays.", response.raw_output
+            )
+        source_id = row["source_id"]
+        returned_sources.append(source_id)
+        if not targets:
+            unaligned_source.append(source_id)
+        for target_id in targets:
+            pair = (source_id, target_id)
+            if target_id not in target_ids or pair in pairs:
+                raise InvalidProviderOutput(
+                    "Alignment contains an unknown or duplicate edge.", response.raw_output
+                )
+            pairs.add(pair)
+            edges.append(WordAlignmentEdge(source_token_id=source_id, target_token_id=target_id))
+    if returned_sources != source_ids:
+        raise InvalidProviderOutput(
+            "Alignment must contain every source token exactly once and in order.",
             response.raw_output,
         )
-
-    def ranges(chunks: list[tuple[str, int]]) -> dict[int, list[CharacterRange]]:
-        offset = 0
-        grouped: dict[int, list[CharacterRange]] = defaultdict(list)
-        for text, group in chunks:
-            end = offset + len(text)
-            if group > 0:
-                grouped[group].append(CharacterRange(start=offset, end=end))
-            offset = end
-        return grouped
-
-    source_ranges = ranges(source_chunks)
-    target_ranges = ranges(target_chunks)
-    warnings = payload.get("warnings")
-    if not isinstance(warnings, list) or not all(isinstance(item, str) for item in warnings):
-        raise InvalidTranslationOutput("warnings must be an array of strings.", response.raw_output)
-    warnings = list(warnings)
-    if source_ids != target_ids:
-        raise InvalidTranslationOutput(
-            "Every positive semantic group must occur in both source and target chunks.",
-            response.raw_output,
+    if (
+        len(unaligned_target) != len(set(unaligned_target))
+        or not set(unaligned_target) <= target_ids
+    ):
+        raise InvalidProviderOutput(
+            "Alignment contains invalid unaligned targets.", response.raw_output
         )
-    provider_groups = [
+    linked_targets = {edge.target_token_id for edge in edges}
+    if (
+        linked_targets & set(unaligned_target)
+        or linked_targets | set(unaligned_target) != target_ids
+    ):
+        raise InvalidProviderOutput(
+            "Every target token must be linked or explicitly unaligned.", response.raw_output
+        )
+    if not edges:
+        raise InvalidProviderOutput("Alignment contains no semantic links.", response.raw_output)
+
+    graph = WordAlignmentGraph(
+        source_tokens=list(request.source_tokens),
+        target_tokens=list(request.target_tokens),
+        edges=edges,
+        unaligned_source_token_ids=unaligned_source,
+        unaligned_target_token_ids=list(unaligned_target),
+    )
+    target_by_id = {token.id: token for token in request.target_tokens}
+    targets_by_source: dict[str, list[CharacterRange]] = defaultdict(list)
+    for edge in edges:
+        targets_by_source[edge.source_token_id].append(target_by_id[edge.target_token_id].range)
+    groups = [
         SemanticAlignmentGroup(
-            group_id=group_id,
-            source_ranges=source_ranges[group_id],
-            target_ranges=target_ranges[group_id],
+            group_id=index,
+            source_ranges=[token.range],
+            target_ranges=targets_by_source[token.id],
         )
-        for group_id in sorted(shared_ids)
+        for index, token in enumerate(request.source_tokens, 1)
+        if token.id in targets_by_source
     ]
-    display_groups, quality = assess_alignment_quality(
-        request.source_text, target_text, provider_groups
+    linked_sources = {edge.source_token_id for edge in edges}
+    quality = AlignmentQuality(
+        source_character_coverage=round(
+            sum(
+                token.range.end - token.range.start
+                for token in request.source_tokens
+                if token.id in linked_sources
+            )
+            / max(1, len(request.source_text)),
+            4,
+        ),
+        target_character_coverage=round(
+            sum(
+                token.range.end - token.range.start
+                for token in request.target_tokens
+                if token.id in linked_targets
+            )
+            / max(1, len(request.target_text)),
+            4,
+        ),
+        edge_count=len(edges),
+        source_token_coverage=round(len(linked_sources) / len(request.source_tokens), 4),
+        target_token_coverage=round(len(linked_targets) / len(request.target_tokens), 4),
     )
-    if quality.suppressed_groups:
-        warnings.append(
-            f"Suppressed {quality.suppressed_groups} alignment group(s) that were too coarse "
-            "or combined repeated occurrences."
-        )
-    return TranslationResult(
-        source_language=request.source_language,
-        target_language=request.target_language,
-        source_text_hash=_hash(request.source_text),
-        target_text=target_text,
-        alignment_groups=display_groups,
-        alignment_quality=quality,
-        provenance="llm",
-        provider=provider,
-        model=model,
-        prompt_version=PROMPT_VERSION,
-        schema_version=TRANSLATION_SCHEMA_VERSION,
-        warnings=warnings,
-        latency_ms=response.latency_ms,
-        usage=response.usage,
-        provider_metadata=response.provider_metadata,
-    )
-
-
-class TranslationStore:
-    def __init__(self, path: Path, *, recover_unfinished: bool = False):
-        self.path = path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with self._connect() as connection:
-            connection.executescript(
-                """
-                PRAGMA journal_mode=WAL;
-                CREATE TABLE IF NOT EXISTS translation_meta (
-                    key TEXT PRIMARY KEY,
-                    value TEXT NOT NULL
-                );
-                INSERT OR IGNORE INTO translation_meta VALUES ('schema_version', '1');
-                CREATE TABLE IF NOT EXISTS cache_entries (
-                    cache_key TEXT PRIMARY KEY,
-                    source_text_hash TEXT NOT NULL,
-                    source_language TEXT NOT NULL,
-                    target_language TEXT NOT NULL,
-                    provider TEXT NOT NULL,
-                    model TEXT,
-                    prompt_version TEXT NOT NULL,
-                    schema_version INTEGER NOT NULL,
-                    status TEXT NOT NULL,
-                    result_json TEXT,
-                    error_json TEXT,
-                    raw_output TEXT,
-                    segment_id TEXT NOT NULL,
-                    video_key TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL,
-                    last_accessed_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS jobs (
-                    job_id TEXT PRIMARY KEY,
-                    cache_key TEXT,
-                    segment_id TEXT NOT NULL,
-                    target_language TEXT NOT NULL,
-                    status TEXT NOT NULL,
-                    cache_hit INTEGER NOT NULL,
-                    result_json TEXT,
-                    error_json TEXT,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS batches (
-                    batch_id TEXT PRIMARY KEY,
-                    target_language TEXT NOT NULL,
-                    created_at TEXT NOT NULL,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS batch_jobs (
-                    batch_id TEXT NOT NULL REFERENCES batches(batch_id),
-                    position INTEGER NOT NULL,
-                    segment_id TEXT NOT NULL,
-                    job_id TEXT NOT NULL REFERENCES jobs(job_id),
-                    PRIMARY KEY(batch_id, position)
-                );
-                CREATE TABLE IF NOT EXISTS counters (
-                    name TEXT PRIMARY KEY,
-                    value INTEGER NOT NULL
-                );
-                INSERT OR IGNORE INTO counters VALUES ('hits', 0);
-                INSERT OR IGNORE INTO counters VALUES ('misses', 0);
-                """
-            )
-            schema = connection.execute(
-                "SELECT value FROM translation_meta WHERE key = 'schema_version'"
-            ).fetchone()
-            if schema is None or schema[0] != "1":
-                raise ValueError("incompatible translation cache schema; prune the derived cache")
-            if recover_unfinished:
-                now = _now()
-                connection.execute(
-                    "UPDATE jobs SET status = 'interrupted', updated_at = ? "
-                    "WHERE status IN ('queued', 'running')",
-                    (now,),
-                )
-
-    def _connect(self) -> sqlite3.Connection:
-        connection = sqlite3.connect(self.path, timeout=10)
-        connection.row_factory = sqlite3.Row
-        return connection
-
-    def increment(self, name: str) -> None:
-        with self._connect() as connection:
-            connection.execute("UPDATE counters SET value = value + 1 WHERE name = ?", (name,))
-
-    def cached(self, cache_key: str) -> tuple[str, TranslationResult | TranslationErrorInfo] | None:
-        with self._connect() as connection:
-            row = connection.execute(
-                "SELECT status, result_json, error_json FROM cache_entries WHERE cache_key = ?",
-                (cache_key,),
-            ).fetchone()
-            if row is not None:
-                connection.execute(
-                    "UPDATE cache_entries SET last_accessed_at = ? WHERE cache_key = ?",
-                    (_now(), cache_key),
-                )
-        self.increment("hits" if row is not None else "misses")
-        if row is None:
-            return None
-        if row["status"] == "complete" and row["result_json"]:
-            return "complete", TranslationResult.model_validate_json(row["result_json"])
-        if row["status"] == "invalid" and row["error_json"]:
-            return "failed", TranslationErrorInfo.model_validate_json(row["error_json"])
-        return None
-
-    def save_result(
-        self,
-        cache_key: str,
-        clip: Clip,
-        result: TranslationResult,
-        *,
-        status: str = "complete",
-        error: TranslationErrorInfo | None = None,
-        raw_output: str | None = None,
-    ) -> None:
-        now = _now()
-        with self._connect() as connection:
-            connection.execute(
-                """INSERT OR REPLACE INTO cache_entries VALUES
-                (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (
-                    cache_key,
-                    result.source_text_hash,
-                    result.source_language,
-                    result.target_language,
-                    result.provider,
-                    result.model,
-                    result.prompt_version,
-                    result.schema_version,
-                    status,
-                    result.model_dump_json() if status == "complete" else None,
-                    error.model_dump_json() if error else None,
-                    raw_output,
-                    clip.segment_id,
-                    clip.video.video_key,
-                    now,
-                    now,
-                    now,
-                ),
-            )
-
-    def save_invalid(
-        self,
-        cache_key: str,
-        clip: Clip,
-        target_language: str,
-        provider: str,
-        model: str,
-        error: TranslationErrorInfo,
-        raw_output: str,
-    ) -> None:
-        placeholder = TranslationResult(
-            source_language=clip.source_language,
-            target_language=target_language,
-            source_text_hash=_hash(clip.source_text),
-            target_text="invalid",
-            alignment_groups=[],
-            provenance="llm",
-            provider=provider,
-            model=model,
-            prompt_version=PROMPT_VERSION,
-            schema_version=TRANSLATION_SCHEMA_VERSION,
-        )
-        self.save_result(
-            cache_key, clip, placeholder, status="invalid", error=error, raw_output=raw_output
-        )
-
-    def create_job(
-        self,
-        segment_id: str,
-        target_language: str,
-        status: str,
-        *,
-        cache_key: str | None,
-        cache_hit: bool = False,
-        result: TranslationResult | None = None,
-        error: TranslationErrorInfo | None = None,
-    ) -> TranslationJob:
-        job_id = f"trn_{uuid.uuid4().hex}"
-        now = _now()
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO jobs VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (
-                    job_id,
-                    cache_key,
-                    segment_id,
-                    target_language,
-                    status,
-                    int(cache_hit),
-                    result.model_dump_json() if result else None,
-                    error.model_dump_json() if error else None,
-                    now,
-                    now,
-                ),
-            )
-        return self.job(job_id)
-
-    def update_job(
-        self,
-        job_id: str,
-        status: str,
-        *,
-        result: TranslationResult | None = None,
-        error: TranslationErrorInfo | None = None,
-    ) -> None:
-        with self._connect() as connection:
-            connection.execute(
-                "UPDATE jobs SET status = ?, result_json = ?, error_json = ?, updated_at = ? "
-                "WHERE job_id = ?",
-                (
-                    status,
-                    result.model_dump_json() if result else None,
-                    error.model_dump_json() if error else None,
-                    _now(),
-                    job_id,
-                ),
-            )
-
-    def job(self, job_id: str) -> TranslationJob:
-        with self._connect() as connection:
-            row = connection.execute("SELECT * FROM jobs WHERE job_id = ?", (job_id,)).fetchone()
-        if row is None:
-            raise KeyError(job_id)
-        return TranslationJob(
-            job_id=row["job_id"],
-            segment_id=row["segment_id"],
-            target_language=row["target_language"],
-            status=row["status"],
-            cache_hit=bool(row["cache_hit"]),
-            result=TranslationResult.model_validate_json(row["result_json"])
-            if row["result_json"]
-            else None,
-            error=TranslationErrorInfo.model_validate_json(row["error_json"])
-            if row["error_json"]
-            else None,
-            created_at=row["created_at"],
-            updated_at=row["updated_at"],
-        )
-
-    def create_batch(self, target_language: str, jobs: list[TranslationJob]) -> str:
-        batch_id = f"trb_{uuid.uuid4().hex}"
-        now = _now()
-        with self._connect() as connection:
-            connection.execute(
-                "INSERT INTO batches VALUES (?, ?, ?, ?)", (batch_id, target_language, now, now)
-            )
-            connection.executemany(
-                "INSERT INTO batch_jobs VALUES (?, ?, ?, ?)",
-                [(batch_id, index, job.segment_id, job.job_id) for index, job in enumerate(jobs)],
-            )
-        return batch_id
-
-    def batch(self, batch_id: str) -> TranslationBatch:
-        with self._connect() as connection:
-            batch = connection.execute(
-                "SELECT * FROM batches WHERE batch_id = ?", (batch_id,)
-            ).fetchone()
-            rows = connection.execute(
-                """SELECT bj.segment_id, j.job_id, j.status, j.cache_hit, j.updated_at
-                FROM batch_jobs bj JOIN jobs j ON j.job_id = bj.job_id
-                WHERE bj.batch_id = ? ORDER BY bj.position""",
-                (batch_id,),
-            ).fetchall()
-        if batch is None:
-            raise KeyError(batch_id)
-        counts: dict[str, int] = {
-            state: 0
-            for state in (
-                "queued",
-                "running",
-                "complete",
-                "failed",
-                "cancelled",
-                "interrupted",
-                "unavailable",
-            )
-        }
-        for row in rows:
-            counts[row["status"]] = counts.get(row["status"], 0) + 1
-        updated = max([batch["updated_at"], *(row["updated_at"] for row in rows)])
-        return TranslationBatch(
-            batch_id=batch_id,
-            target_language=batch["target_language"],
-            total=len(rows),
-            counts=TranslationBatchCounts(
-                total=len(rows),
-                cached=sum(bool(row["cache_hit"]) for row in rows),
-                **counts,
-            ),
-            jobs=[
-                TranslationBatchItem(
-                    segment_id=row["segment_id"],
-                    job_id=row["job_id"],
-                    status=row["status"],
-                    cache_hit=bool(row["cache_hit"]),
-                )
-                for row in rows
-            ],
-            created_at=batch["created_at"],
-            updated_at=updated,
-        )
-
-    def statistics(self, concurrency: int) -> TranslationCacheStatistics:
-        with self._connect() as connection:
-            counts = dict(
-                connection.execute(
-                    "SELECT status, COUNT(*) FROM cache_entries GROUP BY status"
-                ).fetchall()
-            )
-            counters = dict(connection.execute("SELECT name, value FROM counters").fetchall())
-            active = connection.execute(
-                "SELECT COUNT(*) FROM jobs WHERE status IN ('queued', 'running')"
-            ).fetchone()[0]
-        return TranslationCacheStatistics(
-            completed_entries=int(counts.get("complete", 0)),
-            failed_entries=int(counts.get("invalid", 0)),
-            invalid_entries=int(counts.get("invalid", 0)),
-            hits=int(counters.get("hits", 0)),
-            misses=int(counters.get("misses", 0)),
-            active_jobs=int(active),
-            database_bytes=sum(
-                path.stat().st_size
-                for path in (
-                    self.path,
-                    Path(str(self.path) + "-wal"),
-                    Path(str(self.path) + "-shm"),
-                )
-                if path.exists()
-            ),
-            concurrency=concurrency,
-        )
-
-    def prune(
-        self,
-        *,
-        target_language: str | None = None,
-        provider: str | None = None,
-        model: str | None = None,
-        older_than_days: int | None = None,
-    ) -> int:
-        if target_language is not None:
-            target_language = canonical_language(target_language)
-        if older_than_days is not None and older_than_days < 0:
-            raise ValueError("older_than_days must not be negative")
-        clauses: list[str] = []
-        values: list[Any] = []
-        for column, value in (
-            ("target_language", target_language),
-            ("provider", provider),
-            ("model", model),
-        ):
-            if value is not None:
-                clauses.append(f"{column} = ?")
-                values.append(value)
-        if older_than_days is not None:
-            clauses.append("last_accessed_at < ?")
-            values.append((datetime.now(UTC) - timedelta(days=older_than_days)).isoformat())
-        where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        with self._connect() as connection:
-            cursor = connection.execute("DELETE FROM cache_entries" + where, values)
-            return cursor.rowcount
-
-    def entries(
-        self,
-        *,
-        target_language: str | None = None,
-        provider: str | None = None,
-        model: str | None = None,
-        older_than_days: int | None = None,
-        limit: int = 100,
-    ) -> list[dict[str, Any]]:
-        if not 1 <= limit <= 1000:
-            raise ValueError("limit must be between 1 and 1000")
-        if target_language is not None:
-            target_language = canonical_language(target_language)
-        if older_than_days is not None and older_than_days < 0:
-            raise ValueError("older_than_days must not be negative")
-        clauses: list[str] = []
-        values: list[Any] = []
-        for column, value in (
-            ("target_language", target_language),
-            ("provider", provider),
-            ("model", model),
-        ):
-            if value is not None:
-                clauses.append(f"{column} = ?")
-                values.append(value)
-        if older_than_days is not None:
-            clauses.append("last_accessed_at < ?")
-            values.append((datetime.now(UTC) - timedelta(days=older_than_days)).isoformat())
-        where = " WHERE " + " AND ".join(clauses) if clauses else ""
-        values.append(limit)
-        with self._connect() as connection:
-            rows = connection.execute(
-                """SELECT cache_key, source_text_hash, source_language, target_language,
-                          provider, model, prompt_version, schema_version, status, segment_id,
-                          video_key, created_at, updated_at, last_accessed_at
-                   FROM cache_entries"""
-                + where
-                + " ORDER BY last_accessed_at DESC LIMIT ?",
-                values,
-            ).fetchall()
-        return [dict(row) for row in rows]
-
-
-@dataclass
-class _SharedOperation:
-    task: asyncio.Task[None]
-    subscribers: set[str]
+    return ValidatedAlignment(graph, groups, quality, _warnings(payload, response.raw_output))
 
 
 def _authored_reference(
     settings: Settings, clip: Clip, target_language: str
 ) -> tuple[str, dict[str, str]] | None:
     video_dir = settings.data_dir / "raw" / "corpora" / clip.source_language / clip.video.video_key
-    manifest_path = video_dir / "manifest.json"
     try:
-        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest = json.loads((video_dir / "manifest.json").read_text(encoding="utf-8"))
     except (OSError, ValueError):
         return None
-    candidates = []
+    candidates: list[tuple[int, str, str, dict[str, Any]]] = []
     for track in manifest.get("tracks", []):
-        language = track.get("language")
         if (
             track.get("kind") != "authored"
             or track.get("is_source")
@@ -853,18 +448,13 @@ def _authored_reference(
         ):
             continue
         try:
-            normalized = canonical_language(str(language).removesuffix("-orig"))
+            language = canonical_language(str(track.get("language")).removesuffix("-orig"))
         except ValueError:
             continue
-        priority = (
-            0
-            if normalized == target_language
-            else 1
-            if normalized.split("-", 1)[0] == target_language.split("-", 1)[0]
-            else 2
-        )
+        primary_match = language.split("-")[0] == target_language.split("-")[0]
+        priority = 0 if language == target_language else 1 if primary_match else 2
         if priority < 2:
-            candidates.append((priority, str(track.get("track_id")), normalized, track))
+            candidates.append((priority, str(track.get("track_id")), language, track))
     if not candidates:
         return None
     _, track_id, language, track = min(candidates, key=lambda item: (item[0], item[1]))
@@ -887,47 +477,53 @@ def _authored_reference(
     }
 
 
+@dataclass
+class _SharedOperation:
+    task: asyncio.Task[None]
+    subscribers: set[str]
+
+
 class TranslationService:
+    """Persistent translation followed by independently validated semantic alignment."""
+
     def __init__(
-        self, settings: Settings, corpus: Corpus, provider: TranslationProvider | None = None
+        self,
+        settings: Settings,
+        corpus: Corpus,
+        translation_provider: TranslationProvider | None = None,
+        alignment_provider: WordAlignmentProvider | None = None,
     ):
         self.settings = settings
         self.corpus = corpus
-        self.provider = provider
+        self.translation_provider = translation_provider
+        self.alignment_provider = alignment_provider or (
+            cast(WordAlignmentProvider, translation_provider)
+            if translation_provider is not None and hasattr(translation_provider, "align")
+            else None
+        )
         self.store = TranslationStore(
             settings.data_dir / "derived" / "translations.sqlite3", recover_unfinished=True
         )
         self._semaphore = asyncio.Semaphore(settings.translation_concurrency)
         self._operations: dict[str, _SharedOperation] = {}
+        self._stage_tasks: dict[str, asyncio.Task[dict[str, Any]]] = {}
         self._job_keys: dict[str, str] = {}
 
     @classmethod
     def configured(
-        cls, settings: Settings, corpus: Corpus, provider: TranslationProvider | None = None
+        cls,
+        settings: Settings,
+        corpus: Corpus,
+        translation_provider: TranslationProvider | None = None,
+        alignment_provider: WordAlignmentProvider | None = None,
     ) -> TranslationService:
-        if provider is None and settings.gemini_api_key:
-            provider = GeminiTranslationProvider(
+        if translation_provider is None and settings.gemini_api_key:
+            translation_provider = GeminiTranslationProvider(
                 settings.gemini_api_key,
                 settings.translation_model,
                 timeout_seconds=settings.translation_timeout_seconds,
             )
-        return cls(settings, corpus, provider)
-
-    def _cache_key(self, clip: Clip, target_language: str) -> str:
-        assert self.provider is not None
-        return _hash(
-            "\0".join(
-                (
-                    _hash(clip.source_text),
-                    clip.source_language,
-                    target_language,
-                    self.provider.provider,
-                    self.provider.model,
-                    PROMPT_VERSION,
-                    str(TRANSLATION_SCHEMA_VERSION),
-                )
-            )
-        )
+        return cls(settings, corpus, translation_provider, alignment_provider)
 
     def validate(self, segment_id: str, target_language: str) -> tuple[Clip, str]:
         target = canonical_language(target_language)
@@ -936,120 +532,273 @@ class TranslationService:
             raise ValueError("target language must differ from the source language")
         return clip, target
 
-    async def request(self, segment_id: str, target_language: str) -> TranslationJob:
+    def translation_key(
+        self, clip: Clip, target: str, authored: tuple[str, dict[str, str]] | None
+    ) -> str:
+        assert self.translation_provider is not None
+        return _hash(
+            "\0".join(
+                (
+                    _hash(clip.source_text),
+                    clip.source_language,
+                    target,
+                    self.translation_provider.provider,
+                    self.translation_provider.model,
+                    PROMPT_VERSION,
+                    TRANSLATION_PROMPT.sha256,
+                    str(TRANSLATION_SCHEMA_VERSION),
+                    authored[1]["checksum"] if authored else "",
+                )
+            )
+        )
+
+    @staticmethod
+    def _operation_key(clip: Clip, translation_key: str) -> str:
+        anchors = json.dumps(
+            {
+                "segment_id": clip.segment_id,
+                "tokens": [
+                    token.model_dump(mode="json")
+                    for token in alignment_tokens(
+                        clip.source_text, "S", analyzed=clip.token_analysis
+                    )
+                ],
+                "analyzer": clip.analyzer.model_dump(mode="json"),
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return f"{translation_key}:{_hash(anchors)}"
+
+    def _tokenize(
+        self, clip: Clip, target: str, target_text: str
+    ) -> tuple[
+        tuple[AlignmentToken, ...],
+        tuple[AlignmentToken, ...],
+        dict[str, Any],
+        dict[str, Any],
+    ]:
+        source_tokens = alignment_tokens(clip.source_text, "S", analyzed=clip.token_analysis)
+        source_provenance = clip.analyzer.model_dump(mode="json")
+        analyzer = get_analyzer(target, "auto", str(self.settings.resolved_models_dir))
+        target_analysis = analyzer.analyze(target_text)
+        target_tokens = alignment_tokens(target_text, "T", analyzed=list(target_analysis.tokens))
+        target_provenance = target_analysis.provenance.as_dict()
+        if not source_tokens or not target_tokens:
+            raise UnsupportedAnalysisError("No lexical tokens are available for semantic alignment")
+
+        def unreliable_cjk(text: str, provenance: dict[str, Any], count: int) -> bool:
+            contains_cjk = any(
+                "\u3400" <= char <= "\u9fff" or "\u3040" <= char <= "\u30ff" for char in text
+            )
+            return contains_cjk and provenance["name"] == "unicode" and count <= 1
+
+        if unreliable_cjk(
+            clip.source_text, source_provenance, len(source_tokens)
+        ) or unreliable_cjk(target_text, target_provenance, len(target_tokens)):
+            raise UnsupportedAnalysisError("Reliable CJK tokenization is unavailable")
+        return source_tokens, target_tokens, source_provenance, target_provenance
+
+    def alignment_key(
+        self,
+        clip: Clip,
+        target: str,
+        target_text: str,
+        source_tokens: tuple[AlignmentToken, ...],
+        target_tokens: tuple[AlignmentToken, ...],
+        source_tokenizer: dict[str, Any],
+        target_tokenizer: dict[str, Any],
+    ) -> str:
+        assert self.alignment_provider is not None
+        anchors = json.dumps(
+            {
+                "source": [token.model_dump(mode="json") for token in source_tokens],
+                "target": [token.model_dump(mode="json") for token in target_tokens],
+                "source_tokenizer": source_tokenizer,
+                "target_tokenizer": target_tokenizer,
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+        )
+        return _hash(
+            "\0".join(
+                (
+                    _hash(clip.source_text),
+                    _hash(target_text),
+                    clip.source_language,
+                    target,
+                    self.alignment_provider.provider,
+                    self.alignment_provider.model,
+                    _hash(anchors),
+                    ALIGNMENT_PROMPT_VERSION,
+                    ALIGNMENT_PROMPT.sha256,
+                    str(ALIGNMENT_SCHEMA_VERSION),
+                )
+            )
+        )
+
+    async def request(
+        self, segment_id: str, target_language: str, *, retry_failed: bool = False
+    ) -> TranslationJob:
         clip, target = self.validate(segment_id, target_language)
         authored = _authored_reference(self.settings, clip, target)
-        if self.provider is None:
-            if authored is None:
-                return self.store.create_job(
-                    segment_id,
-                    target,
-                    "unavailable",
-                    cache_key=None,
-                    error=TranslationErrorInfo(
-                        code="provider_unavailable",
-                        message="No translation provider or authored target-language track is available.",
-                    ),
-                )
-            text, metadata = authored
-            result = TranslationResult(
-                source_language=clip.source_language,
-                target_language=target,
-                source_text_hash=_hash(clip.source_text),
-                target_text=text,
-                alignment_groups=[],
-                provenance="authored_track",
-                provider="youtube",
-                model=None,
-                prompt_version="authored-track-v1",
-                schema_version=TRANSLATION_SCHEMA_VERSION,
-                authored_track_language=metadata["language"],
-                authored_track_id=metadata["track_id"],
-                warnings=["Authored caption fallback has no semantic alignment."],
-                provider_metadata={"video_id": clip.video.id},
-            )
-            cache_key = _hash(
-                "\0".join(
-                    (
-                        _hash(clip.source_text),
-                        clip.source_language,
-                        target,
-                        "authored_track",
-                        metadata["checksum"],
-                        "authored-track-v1",
-                        str(TRANSLATION_SCHEMA_VERSION),
-                    )
-                )
-            )
-            cached = self.store.cached(cache_key)
-            if cached and cached[0] == "complete":
-                result = cached[1]  # type: ignore[assignment]
-            else:
-                self.store.save_result(cache_key, clip, result)
+        if self.translation_provider is None:
+            return self._authored_or_unavailable(clip, target, authored)
+        translation_key = self.translation_key(clip, target, authored)
+        cached_translation = self.store.stage_cached("translation", translation_key)
+        if cached_translation and cached_translation[0] == "failed" and not retry_failed:
             return self.store.create_job(
-                segment_id,
+                clip.segment_id,
+                target,
+                "failed",
+                cache_key=translation_key,
+                cache_hit=True,
+                error=_public_error("invalid_output", retryable=True),
+            )
+        translation_value: dict[str, Any] | None = None
+        alignment_cache_checked = False
+        if cached_translation and cached_translation[0] == "complete":
+            translation_value = cast(dict[str, Any], cached_translation[1])
+            immediate = self._cached_result(
+                clip,
+                target,
+                translation_key,
+                translation_value,
+                retry_failed=retry_failed,
+            )
+            if immediate:
+                return immediate
+            alignment_cache_checked = True
+        job = self.store.create_job(clip.segment_id, target, "queued", cache_key=translation_key)
+        operation_key = self._operation_key(clip, translation_key)
+        self._job_keys[job.job_id] = operation_key
+        if operation := self._operations.get(operation_key):
+            operation.subscribers.add(job.job_id)
+        else:
+            task = asyncio.create_task(
+                self._run(
+                    operation_key,
+                    translation_key,
+                    clip,
+                    target,
+                    authored,
+                    retry_failed,
+                    translation_value,
+                    alignment_cache_checked,
+                )
+            )
+            self._operations[operation_key] = _SharedOperation(task, {job.job_id})
+        return job
+
+    def _cached_result(
+        self,
+        clip: Clip,
+        target: str,
+        translation_key: str,
+        translation: dict[str, Any],
+        *,
+        retry_failed: bool,
+    ) -> TranslationJob | None:
+        if self.alignment_provider is None:
+            result = self._compose(clip, target, translation, None, alignment_status="unavailable")
+            return self.store.create_job(
+                clip.segment_id,
                 target,
                 "complete",
-                cache_key=cache_key,
-                cache_hit=cached is not None,
+                cache_key=translation_key,
+                cache_hit=True,
                 result=result,
             )
-
-        cache_key = self._cache_key(clip, target)
-        cached = self.store.cached(cache_key)
-        if cached is not None:
-            status, value = cached
-            return self.store.create_job(
-                segment_id,
-                target,
-                status,
-                cache_key=cache_key,
-                cache_hit=True,
-                result=value if isinstance(value, TranslationResult) else None,
-                error=value if isinstance(value, TranslationErrorInfo) else None,
+        try:
+            source_tokens, target_tokens, source_tokenizer, target_tokenizer = self._tokenize(
+                clip, target, translation["target_text"]
             )
-        job = self.store.create_job(segment_id, target, "queued", cache_key=cache_key)
-        self._job_keys[job.job_id] = cache_key
-        operation = self._operations.get(cache_key)
-        if operation is not None:
-            operation.subscribers.add(job.job_id)
-            return job
-        task = asyncio.create_task(self._run(cache_key, clip, target, authored))
-        self._operations[cache_key] = _SharedOperation(task=task, subscribers={job.job_id})
-        return job
+        except UnsupportedAnalysisError:
+            result = self._compose(clip, target, translation, None, alignment_status="unavailable")
+            return self.store.create_job(
+                clip.segment_id,
+                target,
+                "complete",
+                cache_key=translation_key,
+                cache_hit=True,
+                result=result,
+            )
+        key = self.alignment_key(
+            clip,
+            target,
+            translation["target_text"],
+            source_tokens,
+            target_tokens,
+            source_tokenizer,
+            target_tokenizer,
+        )
+        cached = self.store.stage_cached("alignment", key)
+        if cached and cached[0] == "complete":
+            result = self._compose(
+                clip,
+                target,
+                translation,
+                cast(dict[str, Any], cached[1]),
+                alignment_status="complete",
+                source_tokenizer=source_tokenizer,
+                target_tokenizer=target_tokenizer,
+            )
+        elif cached and cached[0] == "failed" and not retry_failed:
+            result = self._compose(
+                clip,
+                target,
+                translation,
+                None,
+                alignment_status="failed",
+                alignment_error_code="invalid_output",
+                source_tokenizer=source_tokenizer,
+                target_tokenizer=target_tokenizer,
+            )
+        else:
+            return None
+        return self.store.create_job(
+            clip.segment_id, target, "complete", cache_key=key, cache_hit=True, result=result
+        )
 
     async def _run(
         self,
-        cache_key: str,
+        operation_key: str,
+        translation_key: str,
         clip: Clip,
         target: str,
         authored: tuple[str, dict[str, str]] | None,
+        retry_failed: bool,
+        cached_translation: dict[str, Any] | None,
+        alignment_cache_checked: bool,
     ) -> None:
-        operation = self._operations[cache_key]
+        operation = self._operations[operation_key]
         try:
-            async with self._semaphore:
-                for job_id in list(operation.subscribers):
-                    self.store.update_job(job_id, "running")
-                assert self.provider is not None
-                request = ProviderTranslationRequest(
-                    source_text=clip.source_text,
-                    source_language=clip.source_language,
-                    target_language=target,
-                    authored_reference=authored[0] if authored else None,
+            for job_id in list(operation.subscribers):
+                self.store.update_job(job_id, "running")
+            if cached_translation is None:
+                translation = await self._shared_stage(
+                    f"translation:{translation_key}",
+                    lambda: self._translate(
+                        clip,
+                        target,
+                        authored,
+                        translation_key,
+                        next(iter(operation.subscribers), None),
+                    ),
                 )
-                response = await self.provider.generate(request)
-                result = validate_provider_output(
-                    response, request, provider=self.provider.provider, model=self.provider.model
-                )
-                if authored:
-                    result = result.model_copy(
-                        update={
-                            "authored_track_language": authored[1]["language"],
-                            "authored_track_id": authored[1]["track_id"],
-                        }
-                    )
-                self.store.save_result(cache_key, clip, result)
-                for job_id in list(operation.subscribers):
+            else:
+                translation = cached_translation
+            result = await self._resolve_alignment(
+                clip,
+                target,
+                translation_key,
+                translation,
+                retry_failed,
+                next(iter(operation.subscribers), None),
+                alignment_cache_checked,
+            )
+            for job_id in list(operation.subscribers):
+                if self.store.job(job_id).status != "cancelled":
                     self.store.update_job(job_id, "complete", result=result)
         except asyncio.CancelledError:
             for job_id in list(operation.subscribers):
@@ -1057,32 +806,359 @@ class TranslationService:
                     self.store.update_job(job_id, "interrupted")
             raise
         except TranslationProviderError as error:
-            info = TranslationErrorInfo(
-                code=error.code, message=str(error), retryable=error.retryable
-            )
-            if isinstance(error, InvalidTranslationOutput):
-                assert self.provider is not None
-                self.store.save_invalid(
-                    cache_key,
-                    clip,
-                    target,
-                    self.provider.provider,
-                    self.provider.model,
-                    info,
-                    error.raw_output,
-                )
+            public = _public_error(error.code, retryable=error.retryable)
             for job_id in list(operation.subscribers):
-                self.store.update_job(job_id, "failed", error=info)
+                if self.store.job(job_id).status != "cancelled":
+                    self.store.update_job(job_id, "failed", error=public)
         except Exception:
-            info = TranslationErrorInfo(
-                code="temporarily_unavailable",
-                message="The translation provider failed unexpectedly.",
-                retryable=True,
-            )
+            public = _public_error("temporarily_unavailable", retryable=True)
             for job_id in list(operation.subscribers):
-                self.store.update_job(job_id, "failed", error=info)
+                if self.store.job(job_id).status != "cancelled":
+                    self.store.update_job(job_id, "failed", error=public)
         finally:
-            self._operations.pop(cache_key, None)
+            if self._operations.get(operation_key) is operation:
+                self._operations.pop(operation_key, None)
+            for job_id in operation.subscribers:
+                self._job_keys.pop(job_id, None)
+
+    async def _translate(
+        self,
+        clip: Clip,
+        target: str,
+        authored: tuple[str, dict[str, str]] | None,
+        key: str,
+        job_id: str | None,
+    ) -> dict[str, Any]:
+        assert self.translation_provider is not None
+        response: ProviderResponse | None = None
+        try:
+            async with self._semaphore:
+                response = await self.translation_provider.translate(
+                    ProviderTranslationRequest(
+                        clip.source_text,
+                        clip.source_language,
+                        target,
+                        authored[0] if authored else None,
+                    )
+                )
+            validated = validate_translation_output(response)
+            value = {
+                "target_text": validated.target_text,
+                "warnings": validated.warnings,
+                "latency_ms": response.latency_ms,
+                "usage": response.usage,
+                "provider_metadata": response.provider_metadata,
+            }
+            self.store.save_translation(
+                key,
+                clip,
+                target,
+                self.translation_provider.provider,
+                self.translation_provider.model,
+                PROMPT_VERSION,
+                TRANSLATION_SCHEMA_VERSION,
+                value,
+            )
+            self._attempt("translation", key, job_id, "complete", response)
+            return value
+        except InvalidProviderOutput as error:
+            self.store.save_translation(
+                key,
+                clip,
+                target,
+                self.translation_provider.provider,
+                self.translation_provider.model,
+                PROMPT_VERSION,
+                TRANSLATION_SCHEMA_VERSION,
+                None,
+                status="invalid",
+                error=_public_error("invalid_output", retryable=True),
+            )
+            self._attempt("translation", key, job_id, "invalid", response, str(error))
+            raise
+        except TranslationProviderError as error:
+            self._attempt("translation", key, job_id, "failed", response, error.code)
+            raise
+
+    async def _shared_stage(
+        self,
+        stage_key: str,
+        start: Callable[[], Coroutine[Any, Any, dict[str, Any]]],
+    ) -> dict[str, Any]:
+        task = self._stage_tasks.get(stage_key)
+        if task is None:
+            task = asyncio.create_task(start())
+            self._stage_tasks[stage_key] = task
+
+            def discard(completed: asyncio.Task[dict[str, Any]]) -> None:
+                if self._stage_tasks.get(stage_key) is completed:
+                    self._stage_tasks.pop(stage_key, None)
+
+            task.add_done_callback(discard)
+        # Cancelling one job must not propagate into work shared with another job.
+        # If no subscriber remains, the late valid result may still warm the cache.
+        return await asyncio.shield(task)
+
+    async def _resolve_alignment(
+        self,
+        clip: Clip,
+        target: str,
+        translation_key: str,
+        translation: dict[str, Any],
+        retry_failed: bool,
+        job_id: str | None,
+        cache_checked: bool,
+    ) -> TranslationResult:
+        if self.alignment_provider is None:
+            return self._compose(clip, target, translation, None, alignment_status="unavailable")
+        try:
+            source_tokens, target_tokens, source_tokenizer, target_tokenizer = self._tokenize(
+                clip, target, translation["target_text"]
+            )
+        except UnsupportedAnalysisError:
+            return self._compose(clip, target, translation, None, alignment_status="unavailable")
+        key = self.alignment_key(
+            clip,
+            target,
+            translation["target_text"],
+            source_tokens,
+            target_tokens,
+            source_tokenizer,
+            target_tokenizer,
+        )
+        cached = None if cache_checked else self.store.stage_cached("alignment", key)
+        if cached and cached[0] == "complete":
+            alignment = cast(dict[str, Any], cached[1])
+            status: Literal["complete", "failed", "unavailable"] = "complete"
+            error_code = None
+        elif cached and cached[0] == "failed" and not retry_failed:
+            alignment = None
+            status = "failed"
+            error_code = "invalid_output"
+        else:
+            try:
+                alignment = await self._shared_stage(
+                    f"alignment:{key}",
+                    lambda: self._align(
+                        clip,
+                        target,
+                        translation_key,
+                        translation["target_text"],
+                        source_tokens,
+                        target_tokens,
+                        source_tokenizer,
+                        target_tokenizer,
+                        key,
+                        job_id,
+                    ),
+                )
+                status = "complete"
+                error_code = None
+            except TranslationProviderError as error:
+                alignment = None
+                status = "failed"
+                error_code = error.code
+        return self._compose(
+            clip,
+            target,
+            translation,
+            alignment,
+            alignment_status=status,
+            alignment_error_code=error_code,
+            source_tokenizer=source_tokenizer,
+            target_tokenizer=target_tokenizer,
+        )
+
+    async def _align(
+        self,
+        clip: Clip,
+        target: str,
+        translation_key: str,
+        target_text: str,
+        source_tokens: tuple[AlignmentToken, ...],
+        target_tokens: tuple[AlignmentToken, ...],
+        source_tokenizer: dict[str, Any],
+        target_tokenizer: dict[str, Any],
+        key: str,
+        job_id: str | None,
+    ) -> dict[str, Any]:
+        assert self.alignment_provider is not None
+        request = ProviderAlignmentRequest(
+            clip.source_text,
+            target_text,
+            clip.source_language,
+            target,
+            source_tokens,
+            target_tokens,
+        )
+        response: ProviderResponse | None = None
+        try:
+            async with self._semaphore:
+                response = await self.alignment_provider.align(request)
+            validated = validate_alignment_output(response, request)
+            value = {
+                "graph": validated.graph.model_dump(mode="json"),
+                "groups": [group.model_dump(mode="json") for group in validated.groups],
+                "quality": validated.quality.model_dump(mode="json"),
+                "warnings": validated.warnings,
+                "latency_ms": response.latency_ms,
+                "usage": response.usage,
+                "provider_metadata": response.provider_metadata,
+            }
+            self.store.save_alignment(
+                key,
+                translation_key,
+                clip,
+                target,
+                _hash(target_text),
+                self.alignment_provider.provider,
+                self.alignment_provider.model,
+                ALIGNMENT_PROMPT_VERSION,
+                ALIGNMENT_SCHEMA_VERSION,
+                source_tokenizer,
+                target_tokenizer,
+                value,
+            )
+            self._attempt("alignment", key, job_id, "complete", response)
+            return value
+        except InvalidProviderOutput as error:
+            self.store.save_alignment(
+                key,
+                translation_key,
+                clip,
+                target,
+                _hash(target_text),
+                self.alignment_provider.provider,
+                self.alignment_provider.model,
+                ALIGNMENT_PROMPT_VERSION,
+                ALIGNMENT_SCHEMA_VERSION,
+                source_tokenizer,
+                target_tokenizer,
+                None,
+                status="invalid",
+                error=_public_error("invalid_output", retryable=True),
+            )
+            self._attempt("alignment", key, job_id, "invalid", response, str(error))
+            raise
+        except TranslationProviderError as error:
+            self._attempt("alignment", key, job_id, "failed", response, error.code)
+            raise
+
+    def _attempt(
+        self,
+        stage: str,
+        key: str,
+        job_id: str | None,
+        status: str,
+        response: ProviderResponse | None,
+        internal_error: str | None = None,
+    ) -> None:
+        self.store.save_attempt(
+            stage,
+            key,
+            job_id=job_id,
+            status=status,
+            latency_ms=response.latency_ms if response else None,
+            usage=response.usage if response else None,
+            provider_metadata=response.provider_metadata if response else None,
+            raw_output=response.raw_output if response else None,
+            internal_error=internal_error,
+        )
+
+    def _compose(
+        self,
+        clip: Clip,
+        target: str,
+        translation: dict[str, Any],
+        alignment: dict[str, Any] | None,
+        *,
+        alignment_status: Literal["complete", "failed", "unavailable"],
+        alignment_error_code: str | None = None,
+        source_tokenizer: dict[str, Any] | None = None,
+        target_tokenizer: dict[str, Any] | None = None,
+    ) -> TranslationResult:
+        graph = WordAlignmentGraph.model_validate(alignment["graph"]) if alignment else None
+        groups = (
+            [SemanticAlignmentGroup.model_validate(item) for item in alignment["groups"]]
+            if alignment
+            else []
+        )
+        quality = AlignmentQuality.model_validate(alignment["quality"]) if alignment else None
+        usage: dict[str, int] = defaultdict(int)
+        for candidate in (translation.get("usage"), alignment.get("usage") if alignment else None):
+            if candidate:
+                for name, count in candidate.items():
+                    usage[name] += int(count)
+        return TranslationResult(
+            source_language=clip.source_language,
+            target_language=target,
+            source_text_hash=_hash(clip.source_text),
+            target_text=translation["target_text"],
+            alignment_groups=groups,
+            alignment_graph=graph,
+            alignment_status=alignment_status,
+            alignment_error_code=alignment_error_code,
+            alignment_quality=quality,
+            provenance="llm",
+            provider=self.translation_provider.provider if self.translation_provider else "unknown",
+            model=self.translation_provider.model if self.translation_provider else None,
+            prompt_version=PROMPT_VERSION,
+            schema_version=TRANSLATION_SCHEMA_VERSION,
+            alignment_prompt_version=ALIGNMENT_PROMPT_VERSION,
+            alignment_schema_version=ALIGNMENT_SCHEMA_VERSION,
+            alignment_provider=self.alignment_provider.provider
+            if self.alignment_provider
+            else None,
+            alignment_model=self.alignment_provider.model if self.alignment_provider else None,
+            source_tokenizer=source_tokenizer,
+            target_tokenizer=target_tokenizer,
+            warnings=[
+                *translation.get("warnings", []),
+                *(alignment.get("warnings", []) if alignment else []),
+            ],
+            latency_ms=round(
+                float(translation.get("latency_ms", 0))
+                + float(alignment.get("latency_ms", 0) if alignment else 0),
+                2,
+            ),
+            usage=dict(usage) or None,
+            provider_metadata=translation.get("provider_metadata"),
+        )
+
+    def _authored_or_unavailable(
+        self, clip: Clip, target: str, authored: tuple[str, dict[str, str]] | None
+    ) -> TranslationJob:
+        if authored is None:
+            return self.store.create_job(
+                clip.segment_id,
+                target,
+                "unavailable",
+                cache_key=None,
+                error=TranslationErrorInfo(
+                    code="provider_unavailable", message="Translation is unavailable."
+                ),
+            )
+        text, metadata = authored
+        result = TranslationResult(
+            source_language=clip.source_language,
+            target_language=target,
+            source_text_hash=_hash(clip.source_text),
+            target_text=text,
+            alignment_groups=[],
+            alignment_status="unavailable",
+            provenance="authored_track",
+            provider="youtube",
+            model=None,
+            prompt_version="authored-track-v1",
+            schema_version=1,
+            authored_track_language=metadata["language"],
+            authored_track_id=metadata["track_id"],
+            warnings=["Authored caption fallback has no semantic alignment."],
+            provider_metadata={"video_id": clip.video.id},
+        )
+        return self.store.create_job(
+            clip.segment_id, target, "complete", cache_key=None, result=result
+        )
 
     def job(self, job_id: str) -> TranslationJob:
         return self.store.job(job_id)
@@ -1092,22 +1168,28 @@ class TranslationService:
         if job.status not in {"queued", "running"}:
             return job
         self.store.update_job(job_id, "cancelled")
-        cache_key = self._job_keys.get(job_id)
-        operation = self._operations.get(cache_key or "")
+        operation_key = self._job_keys.pop(job_id, "")
+        operation = self._operations.get(operation_key)
         if operation:
             operation.subscribers.discard(job_id)
             if not operation.subscribers:
+                self._operations.pop(operation_key, None)
                 operation.task.cancel()
         return self.store.job(job_id)
 
-    async def create_batch(self, segment_ids: list[str], target_language: str) -> TranslationBatch:
+    async def create_batch(
+        self, segment_ids: list[str], target_language: str, *, retry_failed: bool = False
+    ) -> TranslationBatch:
         if not 1 <= len(segment_ids) <= 50:
             raise ValueError("translation batches require between 1 and 50 segment_ids")
         if len(segment_ids) != len(set(segment_ids)):
             raise ValueError("segment_ids must be unique")
         validated = [self.validate(segment_id, target_language) for segment_id in segment_ids]
         target = validated[0][1]
-        jobs = [await self.request(clip.segment_id, target) for clip, _ in validated]
+        jobs = [
+            await self.request(clip.segment_id, target, retry_failed=retry_failed)
+            for clip, _ in validated
+        ]
         return self.store.batch(self.store.create_batch(target, jobs))
 
     def batch(self, batch_id: str) -> TranslationBatch:
@@ -1121,19 +1203,30 @@ class TranslationService:
 
     def status(self) -> TranslationServiceStatus:
         return TranslationServiceStatus(
-            provider_available=self.provider is not None,
-            provider=self.provider.provider if self.provider else None,
-            model=self.provider.model if self.provider else None,
+            provider_available=self.translation_provider is not None,
+            provider=self.translation_provider.provider if self.translation_provider else None,
+            model=self.translation_provider.model if self.translation_provider else None,
             target_languages=list(self.settings.translation_target_languages),
             default_target_language=self.settings.default_target_language,
             cache=self.store.statistics(self.settings.translation_concurrency),
         )
 
     async def aclose(self) -> None:
-        tasks = [operation.task for operation in self._operations.values()]
+        tasks = [
+            *[operation.task for operation in self._operations.values()],
+            *self._stage_tasks.values(),
+        ]
         for task in tasks:
             task.cancel()
         if tasks:
             await asyncio.gather(*tasks, return_exceptions=True)
-        if self.provider is not None:
-            await self.provider.aclose()
+        if self.translation_provider:
+            await self.translation_provider.aclose()
+        if self.alignment_provider and self.alignment_provider is not self.translation_provider:
+            await self.alignment_provider.aclose()
+
+
+def _public_error(code: str, *, retryable: bool) -> TranslationErrorInfo:
+    return TranslationErrorInfo(
+        code=code, message="Translation could not be generated.", retryable=retryable
+    )

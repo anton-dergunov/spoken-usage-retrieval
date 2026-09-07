@@ -45,7 +45,7 @@ from .contracts import (
 )
 from .search import Corpus, IncompatibleIndexError, SearchError
 from .settings import Settings
-from .translations import TranslationProvider, TranslationService
+from .translations import TranslationProvider, TranslationService, WordAlignmentProvider
 
 logger = logging.getLogger("speech_retrieval.api")
 
@@ -89,7 +89,10 @@ def _is_loopback(host: str) -> bool:
 
 
 def create_app(
-    settings: Settings, *, translation_provider: TranslationProvider | None = None
+    settings: Settings,
+    *,
+    translation_provider: TranslationProvider | None = None,
+    alignment_provider: WordAlignmentProvider | None = None,
 ) -> FastAPI:
     if (
         settings.enable_channel_mutations
@@ -103,7 +106,7 @@ def create_app(
         app.state.corpus = Corpus(settings)
         app.state.channels = ChannelRepository(settings.catalogue_dir)
         app.state.translations = TranslationService.configured(
-            settings, app.state.corpus, translation_provider
+            settings, app.state.corpus, translation_provider, alignment_provider
         )
         try:
             yield
@@ -291,7 +294,9 @@ def create_app(
         service: TranslationService = Depends(translations),
     ) -> TranslationJob:
         try:
-            return await service.request(segment_id, body.target_language)
+            return await service.request(
+                segment_id, body.target_language, retry_failed=body.retry_failed
+            )
         except KeyError as error:
             raise ServiceError(404, "segment_not_found", "Segment was not found") from error
         except Exception as error:
@@ -329,7 +334,9 @@ def create_app(
         service: TranslationService = Depends(translations),
     ) -> TranslationBatch:
         try:
-            return await service.create_batch(body.segment_ids, body.target_language)
+            return await service.create_batch(
+                body.segment_ids, body.target_language, retry_failed=body.retry_failed
+            )
         except KeyError as error:
             raise ServiceError(
                 404, "segment_not_found", f"Segment was not found: {error.args[0]}"

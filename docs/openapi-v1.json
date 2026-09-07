@@ -28,59 +28,65 @@
       "AlignmentQuality": {
         "additionalProperties": false,
         "properties": {
-          "coarse_group_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "title": "Coarse Group Ids",
-            "type": "array"
-          },
-          "display_groups": {
-            "title": "Display Groups",
-            "type": "integer"
-          },
-          "max_source_tokens_per_group": {
+          "edge_count": {
+            "default": 0,
             "minimum": 0.0,
-            "title": "Max Source Tokens Per Group",
+            "title": "Edge Count",
             "type": "integer"
-          },
-          "provider_groups": {
-            "title": "Provider Groups",
-            "type": "integer"
-          },
-          "repeated_group_ids": {
-            "items": {
-              "type": "integer"
-            },
-            "title": "Repeated Group Ids",
-            "type": "array"
           },
           "source_character_coverage": {
+            "default": 0,
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Source Character Coverage",
             "type": "number"
           },
-          "suppressed_groups": {
-            "title": "Suppressed Groups",
-            "type": "integer"
+          "source_token_coverage": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Source Token Coverage",
+            "type": "number"
           },
           "target_character_coverage": {
+            "default": 0,
             "maximum": 1.0,
             "minimum": 0.0,
             "title": "Target Character Coverage",
             "type": "number"
+          },
+          "target_token_coverage": {
+            "default": 0,
+            "maximum": 1.0,
+            "minimum": 0.0,
+            "title": "Target Token Coverage",
+            "type": "number"
+          }
+        },
+        "title": "AlignmentQuality",
+        "type": "object"
+      },
+      "AlignmentToken": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "range": {
+            "$ref": "#/components/schemas/CharacterRange"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
           }
         },
         "required": [
-          "provider_groups",
-          "display_groups",
-          "suppressed_groups",
-          "source_character_coverage",
-          "target_character_coverage",
-          "max_source_tokens_per_group"
+          "id",
+          "text",
+          "range"
         ],
-        "title": "AlignmentQuality",
+        "title": "AlignmentToken",
         "type": "object"
       },
       "AnalyzerInfo": {
@@ -578,6 +584,13 @@
             ],
             "description": "Reserved for the optional translation capability.",
             "title": "Target Text"
+          },
+          "token_analysis": {
+            "items": {
+              "$ref": "#/components/schemas/TokenInfo"
+            },
+            "title": "Token Analysis",
+            "type": "array"
           },
           "translation_provenance": {
             "anyOf": [
@@ -1763,6 +1776,11 @@
       "TranslationBatchRequest": {
         "additionalProperties": false,
         "properties": {
+          "retry_failed": {
+            "default": false,
+            "title": "Retry Failed",
+            "type": "boolean"
+          },
           "segment_ids": {
             "items": {
               "type": "string"
@@ -1790,6 +1808,26 @@
           "active_jobs": {
             "default": 0,
             "title": "Active Jobs",
+            "type": "integer"
+          },
+          "alignment_entries": {
+            "default": 0,
+            "title": "Alignment Entries",
+            "type": "integer"
+          },
+          "alignment_failures": {
+            "default": 0,
+            "title": "Alignment Failures",
+            "type": "integer"
+          },
+          "alignment_hits": {
+            "default": 0,
+            "title": "Alignment Hits",
+            "type": "integer"
+          },
+          "alignment_misses": {
+            "default": 0,
+            "title": "Alignment Misses",
             "type": "integer"
           },
           "completed_entries": {
@@ -1825,6 +1863,31 @@
           "misses": {
             "default": 0,
             "title": "Misses",
+            "type": "integer"
+          },
+          "provider_attempts": {
+            "default": 0,
+            "title": "Provider Attempts",
+            "type": "integer"
+          },
+          "translation_entries": {
+            "default": 0,
+            "title": "Translation Entries",
+            "type": "integer"
+          },
+          "translation_failures": {
+            "default": 0,
+            "title": "Translation Failures",
+            "type": "integer"
+          },
+          "translation_hits": {
+            "default": 0,
+            "title": "Translation Hits",
+            "type": "integer"
+          },
+          "translation_misses": {
+            "default": 0,
+            "title": "Translation Misses",
             "type": "integer"
           }
         },
@@ -1932,6 +1995,11 @@
       "TranslationRequest": {
         "additionalProperties": false,
         "properties": {
+          "retry_failed": {
+            "default": false,
+            "title": "Retry Failed",
+            "type": "boolean"
+          },
           "target_language": {
             "title": "Target Language",
             "type": "string"
@@ -1946,12 +2014,66 @@
       "TranslationResult": {
         "additionalProperties": false,
         "properties": {
+          "alignment_error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Error Code"
+          },
+          "alignment_graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/WordAlignmentGraph"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "alignment_groups": {
             "items": {
               "$ref": "#/components/schemas/SemanticAlignmentGroup"
             },
             "title": "Alignment Groups",
             "type": "array"
+          },
+          "alignment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Model"
+          },
+          "alignment_prompt_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Prompt Version"
+          },
+          "alignment_provider": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Provider"
           },
           "alignment_quality": {
             "anyOf": [
@@ -1962,6 +2084,27 @@
                 "type": "null"
               }
             ]
+          },
+          "alignment_schema_version": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alignment Schema Version"
+          },
+          "alignment_status": {
+            "default": "unavailable",
+            "enum": [
+              "complete",
+              "failed",
+              "unavailable"
+            ],
+            "title": "Alignment Status",
+            "type": "string"
           },
           "authored_track_id": {
             "anyOf": [
@@ -2049,6 +2192,18 @@
             "title": "Source Text Hash",
             "type": "string"
           },
+          "source_tokenizer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Tokenizer"
+          },
           "target_language": {
             "title": "Target Language",
             "type": "string"
@@ -2056,6 +2211,18 @@
           "target_text": {
             "title": "Target Text",
             "type": "string"
+          },
+          "target_tokenizer": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Tokenizer"
           },
           "usage": {
             "anyOf": [
@@ -2289,6 +2456,72 @@
           "caption_language"
         ],
         "title": "VideoInfo",
+        "type": "object"
+      },
+      "WordAlignmentEdge": {
+        "additionalProperties": false,
+        "properties": {
+          "source_token_id": {
+            "title": "Source Token Id",
+            "type": "string"
+          },
+          "target_token_id": {
+            "title": "Target Token Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_token_id",
+          "target_token_id"
+        ],
+        "title": "WordAlignmentEdge",
+        "type": "object"
+      },
+      "WordAlignmentGraph": {
+        "additionalProperties": false,
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/WordAlignmentEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "source_tokens": {
+            "items": {
+              "$ref": "#/components/schemas/AlignmentToken"
+            },
+            "title": "Source Tokens",
+            "type": "array"
+          },
+          "target_tokens": {
+            "items": {
+              "$ref": "#/components/schemas/AlignmentToken"
+            },
+            "title": "Target Tokens",
+            "type": "array"
+          },
+          "unaligned_source_token_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unaligned Source Token Ids",
+            "type": "array"
+          },
+          "unaligned_target_token_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Unaligned Target Token Ids",
+            "type": "array"
+          }
+        },
+        "required": [
+          "source_tokens",
+          "target_tokens",
+          "edges"
+        ],
+        "title": "WordAlignmentGraph",
         "type": "object"
       }
     },

@@ -1,159 +1,125 @@
-# Plan 08: Target-language text
+# Plan 08: Target-language text and word alignment
 
 **Status:** Complete
 
-**Depends on:** Plans 02, 05, and 06. Plan 07 is not required.
+**Depends on:** Plans 02, 05, and 06. Plan 07 and Acervo are not required.
 
 ## Outcome
 
-Give an opened clip readable text in whatever language the caller asks for: a creator-authored track
-when one exists, and otherwise one literal-leaning LLM translation with source-to-target character
-alignment groups. Source playback is immediate, no provider is required, and each uncached
-source/target/model/prompt combination uses exactly one generation call.
+An opened clip can display a caller-selected target language without changing acquisition, indexing,
+retrieval, ranking, or immediate source playback. A matching creator-authored caption is the
+no-provider fallback. Otherwise the service performs two independently cached Gemini operations:
 
-This plan merges the authored-track acquisition work with the query-time translation work, because
-both exist to answer the same question — what does this clip say in my language — and the authored
-track is the no-provider fallback for the translation path.
+1. translate the complete source sentence;
+2. align fixed, occurrence-labeled lexical tokens in the immutable source and target strings.
 
-## Current state
+The normalized alignment is a many-to-many bipartite graph. Character offsets are derived locally;
+caption cues or future forced-alignment timing only project the graph onto playback. A valid
+translation remains visible when alignment is invalid or unavailable.
 
-- Acquisition downloads one caption track per video in the source language.
-- Track metadata is not rich enough to distinguish authored captions, source-language automatic
-  captions, creator translations, and generated translation offers throughout the pipeline.
-- The prototype shows source text only.
-- A completed English-track probe found three directly downloadable authored English tracks among
-  ten cached videos, while advertised automatic translations repeatedly failed with HTTP 429.
-- A completed literalness probe found authored English tracks fluent but not literal enough to be the
-  learner-facing authority on their own.
+## Acquisition and fallback
 
-## Decisions
+- Enumerate a video's caption tracks once and record provider track ID, normalized BCP-47 language,
+  authored/automatic kind, canonical-source choice, acquisition status, checksum, and provenance.
+- Select creator-authored source captions first, then same-language automatic captions. Index only
+  the canonical source track.
+- Download directly available authored secondary tracks independently and exclude generated
+  translation offers. A secondary failure never invalidates source acquisition and is retried
+  without redownloading valid tracks.
+- For fallback, combine authored target cues overlapping the source sentence interval. Prefer an
+  exact language match, then the same primary language, and return actual track provenance without
+  semantic alignment.
 
-### Acquisition of authored tracks
+## Translation and word-alignment stages
 
-- Select the canonical source track using the catalogue source language: prefer creator-authored
-  captions, then original-language automatic captions. Record the chosen rule and the actual result.
-- Preserve each downloadable creator-authored subtitle track, regardless of target language, when it
-  is returned directly by the provider. Exclude generated auto-translations from routine acquisition;
-  they are neither reliable nor authored.
-- Keep one source transcript as the only indexing input. Secondary authored tracks are optional
-  reference and translation material and never replace source text implicitly.
-- Keep the implementation provider-specific and small. Do not build a general subtitle-policy engine
-  until another provider or a concrete exception requires one.
+- `TranslationProvider.translate` receives exact text, source/target tags, and an optional authored
+  excerpt. The versioned packaged prompt requests one literal-leaning, grammatical, learner-facing
+  `target_text` at temperature 0.2.
+- `WordAlignmentProvider.align` receives immutable strings and lexical nodes labeled `S1…Sn` and
+  `T1…Tn`. At temperature 0.0 it returns one adjacency row per source node plus explicit unaligned
+  target IDs.
+- Request-specific JSON Schema enums constrain all IDs. Local validation additionally enforces
+  source row order/completeness, unique known IDs and edges, exclusive linked/unaligned accounting,
+  nonempty graphs, and Unicode bounds. There is no hidden repair call.
+- Repeated forms are distinct nodes. One-to-many, many-to-one, crossing, and noncontiguous edges are
+  legal. One compatibility `SemanticAlignmentGroup` is derived per linked source token.
+- Source tokens use stored analysis, deduplicating Stanza multi-word expansions sharing a span.
+  Target tokens use the configured analyzer infrastructure and record its identity. Whitespace-free
+  CJK with only unreliable fallback segmentation returns translation with alignment unavailable.
 
-### Translation
+## Persistent derived cache and jobs
 
-- Translation happens only for a selected clip. It never changes indexing, retrieval, ranking, or
-  the canonical source transcript.
-- Target language is a request parameter, never a build-time constant, and never appears in an index
-  key. English has no special status.
-- Make one schema-constrained LLM request on a cache miss. It returns target text and semantic groups
-  referencing source and target character ranges; schema repair must not make a hidden second
-  generation call.
-- Ask for a **literal, learner-facing** rendering rather than an idiomatic one, because the reader is
-  looking at the source text beside it and wants to see which source words carry which meaning.
-- When an authored target-language track covers the same time range, pass it into the request as a
-  reference to be corrected toward literalness rather than trusted verbatim. The probe showed
-  authored tracks are a good prior and a poor authority.
-- Define a small injected provider protocol. Add optional adapters when credentials are configured;
-  retain a fake provider for deterministic tests. Keep provider SDK imports out of the no-provider
-  path.
-- With no provider or key, return the source immediately and expose a matching authored
-  target-language track statically when one exists. Never depend on YouTube-generated translations.
-- Use a simple in-process asynchronous job registry backed by the cache/database already in use. Do
-  not add a queue service solely for interactive translation.
-- Treat semantic alignment as display guidance, not literal word equivalence. Groups may be
-  many-to-one, one-to-many, reordered, or explicitly unaligned.
+- `data/derived/translations.sqlite3` is independent of the rebuildable corpus index.
+- Translation keys include source hash/languages, provider/model, prompt version/hash, schema, and
+  authored-reference checksum.
+- Alignment keys include source/target hashes, both token sequences and tokenizer identities,
+  languages, provider/model, and alignment prompt version/hash/schema. Timing is intentionally not
+  a key input.
+- Translation and alignment successes and schema-invalid terminal failures are stored separately.
+  Temporary transport/rate failures remain retryable. Append-only attempts retain stage, raw output,
+  internal validation failure, latency, usage, and provider metadata for diagnosis.
+- One in-process scheduler bounds provider calls (default concurrency four), coalesces identical
+  work, preserves per-request job IDs, isolates cancellation, and marks unfinished jobs interrupted
+  on restart.
+- `retry_failed: true` is accepted only as an explicit caller action. It reuses successful translation
+  and makes exactly one alignment call when only alignment failed. A successful cache entry is never
+  bypassed.
+- Batches atomically validate up to 50 unique segment IDs and use the identical scheduler/cache path.
+  Reindexing never deletes translation or alignment entries. The operator CLI lists statistics and
+  prunes deliberately by language, provider/model, or age.
+- The obsolete joint experimental cache schema is invalidated during the schema-2 migration; no
+  production compatibility implementation for its free-form chunks is retained.
 
-## Implementation work
+## Public interfaces
 
-1. Enumerate available tracks once per video and normalize their language, display name, provider
-   track ID, authored/automatic kind, translatability flag, and source URL metadata. Choose and
-   download the canonical source track using a deterministic preference order and the existing
-   retry/cache behavior.
-2. Download directly available creator-authored secondary tracks independently, store each in a
-   distinct cache entry, and add a compact manifest linking the canonical source and optional
-   secondary tracks. Record individual failures without failing or deleting a valid source
-   transcript.
-3. Carry caption provenance into transcript metadata, segments, reports, API results, and the demo's
-   diagnostic display, and extend acquisition reporting with source-track selection and
-   authored-secondary coverage counts.
-4. Define a versioned provider-neutral translation schema with source/target languages, translation,
-   complete character-range groups, and optional warnings. Validate range bounds and target coverage,
-   preserve whitespace and punctuation, and store invalid provider output as a diagnosable failure
-   rather than attempting unbounded repair.
-5. Implement the provider protocol and optional adapters with explicit timeouts and cancellation, and
-   a prompt that requests literal rendering and accepts an optional authored-track reference.
-6. Cache by source-text hash, source language, target language, provider/model, prompt version, and
-   output-schema version. Coalesce concurrent identical requests.
-7. Add clip translation request, status, result, and cancellation operations. Cancellation is best
-   effort and must never cancel source playback or discard a completed cache entry.
-8. Map a matching creator-authored track into a static fallback response with its own provenance.
-   Defer cross-track semantic alignment unless an experiment demonstrates its value.
-9. Add the translation states to `SpeechClipPlayer` through the props Plan 06 reserved, and record
-   latency, cache hits, provenance, validation failures, cancellation, and approximate cost when the
-   provider supplies usage data.
+- `POST /api/v1/clips/{segment_id}/translations`
+- `GET`/`DELETE /api/v1/translations/{job_id}`
+- `POST /api/v1/translation-batches`
+- `GET`/`DELETE /api/v1/translation-batches/{batch_id}`
 
-## Public interfaces and data
+Requests accept any valid target BCP-47 tag and reject the canonical source language. Advertised
+target languages configure only the standalone demo. Job states remain `not_requested`, `queued`,
+`running`, `complete`, `failed`, `cancelled`, `interrupted`, and `unavailable`. Results independently
+report alignment `complete`, `failed`, or `unavailable` with stable public error codes and no raw
+provider/validator message.
 
-- A caption track records `track_id`, `language`, `kind` (`authored` or `automatic`), `is_source`,
-  provider provenance, acquisition time, and content checksum. A video manifest names exactly one
-  canonical source track when acquisition succeeds and zero or more secondary authored tracks.
-- Source-language acquisition success is independent from secondary-track status.
-- `POST /api/v1/clips/{segment_id}/translations` accepts `target_language`; status/result and
-  cancellation routes use a stable job ID. A cache hit may complete immediately.
-- States are `not_requested`, `queued`, `running`, `complete`, `failed`, `cancelled`, and
-  `unavailable` with a small stable error vocabulary.
-- A completed result contains source/target languages, source text hash, target text, semantic
-  groups, provenance (`llm` or `authored_track`), and version metadata.
+Python, OpenAPI, and TypeScript export `AlignmentToken`, `WordAlignmentEdge`,
+`WordAlignmentGraph`, the derived character groups, stage provenance/status, provider protocols,
+jobs, batches, and cache statistics.
 
-## Acceptance tests and verification
+## Player behavior
 
-- Fixtures cover authored-source preference, automatic-source fallback, multiple authored languages,
-  generated translation exclusion, and ambiguous/missing language metadata.
-- A secondary download failure still produces a valid source manifest and indexable transcript, and
-  repeat acquisition safely fills previously missing optional tracks.
-- Reports distinguish authored source, automatic source, authored secondary, unavailable, and failed
-  tracks without counting a generated translation as authored coverage.
-- Schema tests cover reordered, one-to-many, untranslated, punctuation-heavy, and non-Latin examples
-  while rejecting out-of-bounds or uncovered target output.
-- An instrumented fake proves exactly one provider generation call per cache miss and zero on a cache
-  hit or coalesced duplicate request, including when an authored reference is supplied.
-- No-provider tests show source immediately, use an authored matching track when present, and return
-  a clear unavailable state otherwise.
-- Status polling and cancellation do not block clip lookup or playback; late provider completion is
-  handled consistently.
-- Optional live tests for each configured adapter are manually invoked, cost-bounded, and excluded
-  from ordinary CI.
-- Existing source-only acquisition and search tests continue to pass.
+- The demo requests translation when a clip/language becomes active and cancels obsolete polling.
+  `retry_failed` is sent only after an explicit retry click.
+- Source or target token hover/focus highlights direct graph neighbors. Click/tap pins a relation;
+  a second tap, background tap, or Escape clears it. A pin takes precedence over playback.
+- Playback finds source nodes intersecting the current timing range and highlights the union of their
+  target neighbors. Finer future source timing automatically improves projection without a new
+  semantic alignment.
+- With fewer than two distinct source timing units or no internal boundary, automatic target
+  highlighting is disabled because highlighting the whole translation conveys no information.
+- Authored fallback stays static. Queued, failed, cancelled, and unavailable translation never
+  blocks source playback. Learner UI shows neutral retry controls and never raw backend errors.
+
+## Research evidence
+
+The [fixed-token word-alignment experiment](../../experiments/target-language-word-alignment/README.md)
+contains the 50-pair Spanish/German/Russian/Chinese/Japanese challenge set, exact call chronology,
+prompt/schema comparison, AER/F1/coverage/latency/usage metrics, structured successes and failures,
+translation chrF++ plus manual review, limitations, licenses, and a dated bibliography covering
+SimAlign, AWESOME-align, cross-language span prediction, Lexi-align, XL-WA, Azure alignment, and
+Gemini structured output.
+
+The locked held-out run produced 39/40 structurally valid graphs and 0.879 end-to-end micro F1 when
+the invalid graph is scored empty. The complete pipeline produced 50/50 valid translations and
+49/50 valid alignments. The former free-chunk study is retained only as a superseded historical
+baseline; its runtime heuristics are not part of this implementation.
 
 ## Non-goals
 
-- Indexing translated text, translating the corpus in advance, translating search queries, or
+- Indexing translated text, translating the whole corpus, translating search queries, or
   cross-language retrieval.
-- Downloading every generated YouTube translation, synchronizing tracks, or judging translation
-  quality automatically.
-- Requiring an LLM in production or treating an authored target track as perfect semantic alignment.
-- Streaming tokens, a provider marketplace, automatic prompt optimization, or a durable distributed
-  translation queue.
-- Supporting arbitrary video providers before one is actually added.
-
-## Implementation and verification record
-
-- Added YouTube track manifests, canonical-source selection, independently resumable authored
-  secondary acquisition, and authored target-track fallback without indexing secondary text.
-- Added a provider-neutral asynchronous translation service, direct Gemini structured-output
-  adapter, Unicode semantic-range validation, persistent translation cache, coalesced jobs,
-  cancellation, and bounded explicit cache-warming batches.
-- Added typed Python, OpenAPI, and TypeScript contracts plus cache inspection/pruning commands and
-  secret-safe runtime configuration.
-- Added target-language states and current-semantic-group highlighting to the reusable player and
-  integrated runtime-configured English/Russian selection into the standalone demo.
-- Verified a real 10-video update with 10 canonical source tracks, 13 independently acquired
-  authored secondary tracks, and no secondary failures; the local data remains ignored.
-- Exercised 200 initial prompt-development calls plus strict and alignment-focused English/Russian
-  follow-ups. Browser-reported repeat/coarse-clause failures were traced to provider group
-  granularity, not offset lookup; v8 accepted 38/40 diverse calls while deterministic display
-  filtering suppressed 13 risky groups and allowed no displayed group to cross more than four
-  source cues. Full chronology, negative prompt iterations, examples, and limitations are recorded
-  in the experiment report. A separate live HTTP request completed and its repeat was a
-  persistent-cache hit.
+- Downloading generated YouTube translations or semantically aligning authored fallback captions.
+- Adding PyTorch/model weights for SimAlign/AWESOME-align before an operational need justifies them.
+- Training a supervised span aligner without professionally annotated in-domain data.
+- A provider marketplace, streaming generation, or a durable distributed queue.

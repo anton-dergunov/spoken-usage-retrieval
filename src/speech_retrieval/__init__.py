@@ -12,6 +12,7 @@ from .channels import (
 )
 from .contracts import (
     AlignmentQuality,
+    AlignmentToken,
     AnalyzerInfo,
     ChannelCreate,
     ChannelRecord,
@@ -41,23 +42,30 @@ from .contracts import (
     TranslationResult,
     TranslationServiceStatus,
     UpdateSummary,
+    WordAlignmentEdge,
+    WordAlignmentGraph,
 )
 from .search import Corpus, IncompatibleIndexError, SearchError
 from .service import Indexer
 from .settings import Settings
 from .translations import (
     GeminiTranslationProvider,
+    ProviderAlignmentRequest,
+    ProviderAlignmentResponse,
     ProviderTranslationRequest,
     ProviderTranslationResponse,
     TranslationProvider,
     TranslationProviderError,
     TranslationService,
-    assess_alignment_quality,
-    validate_provider_output,
+    WordAlignmentProvider,
+    alignment_tokens,
+    validate_alignment_output,
+    validate_translation_output,
 )
 
 __all__ = [
     "AlignmentQuality",
+    "AlignmentToken",
     "AnalyzerInfo",
     "ChannelCreate",
     "ChannelConflictError",
@@ -102,9 +110,15 @@ __all__ = [
     "GeminiTranslationProvider",
     "ProviderTranslationRequest",
     "ProviderTranslationResponse",
+    "ProviderAlignmentRequest",
+    "ProviderAlignmentResponse",
     "UnsupportedAnalysisError",
     "UpdateSummary",
+    "WordAlignmentEdge",
+    "WordAlignmentGraph",
+    "WordAlignmentProvider",
     "create_app",
-    "assess_alignment_quality",
-    "validate_provider_output",
+    "alignment_tokens",
+    "validate_alignment_output",
+    "validate_translation_output",
 ]

@@ -5,7 +5,6 @@ import {
   ProgressiveSourceText,
   ProgressiveTargetText,
   SpeechClipPlayer,
-  isDisplaySafeAlignmentGroup,
 } from "./SpeechClipPlayer.js";
 import { fixtureResult as clip } from "./fixtures.js";
 import type { YouTubeNamespace, YouTubePlayer } from "./youtube.js";
@@ -172,39 +171,100 @@ it("highlights target ranges aligned to the source group active now", () => {
   expect(container.querySelector(".sur-player__target-fragment--active")).toHaveTextContent("dos");
 });
 
-it("suppresses coarse and combined-repeat groups instead of reflashing misleading text", () => {
-  const repeatedSource = 'Digo, "Disfrutemos, disfrutemos porque seguimos."';
-  const repeatedTarget = 'I say, "Let\'s enjoy, let\'s enjoy because we continue."';
-  const repeated = {
-    group_id: 2,
-    source_ranges: [{ start: 7, end: 31 }],
-    target_ranges: [{ start: 8, end: 32 }],
-  };
-  expect(isDisplaySafeAlignmentGroup(repeated, repeatedSource, repeatedTarget)).toBe(false);
-  expect(isDisplaySafeAlignmentGroup({
-    group_id: 4,
-    source_ranges: [{ start: 0, end: 11 }],
-    target_ranges: [{ start: 0, end: 19 }],
-  }, "vamos ahora", "let us go let us go")).toBe(false);
+it("does not animate a translation when timing has no internal lexical boundary", () => {
   const { container } = render(<ProgressiveTargetText
-    sourceText={repeatedSource}
-    text={repeatedTarget}
-    groups={[repeated]}
-    timing={[
-      { text: '"Disfrutemos,', start: 1, end: 2, char_start: 6, char_end: 19 },
-      { text: "disfrutemos", start: 2, end: 3, char_start: 20, char_end: 31 },
-    ]}
-    currentTime={2.5}
+    sourceText="¿Por qué no funciona?"
+    text="Why isn't it working?"
+    groups={[{
+      group_id: 1,
+      source_ranges: [{ start: 0, end: 21 }],
+      target_ranges: [{ start: 0, end: 21 }],
+    }]}
+    timing={[{ text: "¿Por qué no funciona?", start: 1, end: 3, char_start: 0, char_end: 21 }]}
+    currentTime={2}
   />);
+  expect(container).toHaveTextContent("Why isn't it working?");
   expect(container.querySelector(".sur-player__target-fragment--active")).not.toBeInTheDocument();
+});
 
-  const coarseSource = "Mm, decía que vamos a hablar sobre recuerdos usando el pasado.";
-  const coarseTarget = "Mm, I was saying that we are going to talk about memories using the past.";
-  expect(isDisplaySafeAlignmentGroup({
-    group_id: 3,
-    source_ranges: [{ start: 9, end: 61 }],
-    target_ranges: [{ start: 16, end: 72 }],
-  }, coarseSource, coarseTarget)).toBe(false);
+it("links repeated occurrences by token ID and supports pinning", async () => {
+  const graph = {
+    source_tokens: [
+      { id: "S1", text: "Disfrutemos", range: { start: 0, end: 11 } },
+      { id: "S2", text: "disfrutemos", range: { start: 13, end: 24 } },
+    ],
+    target_tokens: [
+      { id: "T1", text: "Let's", range: { start: 0, end: 5 } },
+      { id: "T2", text: "enjoy", range: { start: 6, end: 11 } },
+      { id: "T3", text: "let's", range: { start: 13, end: 18 } },
+      { id: "T4", text: "enjoy", range: { start: 19, end: 24 } },
+    ],
+    edges: [
+      { source_token_id: "S1", target_token_id: "T1" },
+      { source_token_id: "S1", target_token_id: "T2" },
+      { source_token_id: "S2", target_token_id: "T3" },
+      { source_token_id: "S2", target_token_id: "T4" },
+    ],
+    unaligned_source_token_ids: [],
+    unaligned_target_token_ids: [],
+  };
+  const repeatedClip = {
+    ...clip,
+    sentence: "Disfrutemos, disfrutemos",
+    segments: [
+      { text: "Disfrutemos", start: clip.clip_start, end: 78.5, char_start: 0, char_end: 11 },
+      { text: "disfrutemos", start: 78.6, end: 80.1, char_start: 13, char_end: 24 },
+    ],
+  };
+  const { container, rerender } = render(<SpeechClipPlayer
+    clip={repeatedClip} youtubeApiLoader={loader} targetLanguage="en"
+    targetText="Let's enjoy, let's enjoy" translationStatus="complete"
+    translationProvenance="llm" alignmentStatus="complete" alignmentGraph={graph}
+  />);
+  expect(container.querySelectorAll(".sur-player__alignment-token--target.sur-player__alignment-token--playback"))
+    .toHaveLength(2);
+  expect(container.querySelector(".sur-player__alignment-token--target.sur-player__timed-fragment--spoken"))
+    .not.toBeInTheDocument();
+  const sourceOccurrences = screen.getAllByRole("button", { name: /Show translation links for disfrutemos/i });
+  fireEvent.mouseEnter(sourceOccurrences[1]);
+  expect(container.querySelectorAll(".sur-player__alignment-token--target.sur-player__alignment-token--selected"))
+    .toHaveLength(2);
+  fireEvent.click(sourceOccurrences[1]);
+  fireEvent.mouseLeave(sourceOccurrences[1]);
+  expect(container.querySelectorAll(".sur-player__alignment-token--target.sur-player__alignment-token--selected"))
+    .toHaveLength(2);
+  fireEvent.keyDown(screen.getByRole("article"), { key: "Escape" });
+  expect(container.querySelector(".sur-player__alignment-token--selected")).not.toBeInTheDocument();
+  rerender(<SpeechClipPlayer
+    clip={repeatedClip} youtubeApiLoader={loader} targetLanguage="en"
+    targetText="Let's enjoy, let's enjoy" translationStatus="complete"
+    translationProvenance="llm" alignmentStatus="complete" alignmentGraph={graph}
+    sourceTiming={[{
+      text: repeatedClip.sentence,
+      start: clip.clip_start,
+      end: clip.clip_end,
+      char_start: 0,
+      char_end: repeatedClip.sentence.length,
+    }]}
+  />);
+  expect(container.querySelector(".sur-player__alignment-token--playback")).not.toBeInTheDocument();
+});
+
+it("shows neutral retry controls without rendering backend errors", () => {
+  const onRetry = vi.fn();
+  const { rerender } = render(<SpeechClipPlayer
+    clip={clip} youtubeApiLoader={loader} targetLanguage="en" translationStatus="failed"
+    onTranslationRetry={onRetry}
+  />);
+  expect(screen.getByText("Translation could not be loaded.")).toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Retry translation" }));
+  expect(onRetry).toHaveBeenCalledWith("en");
+  rerender(<SpeechClipPlayer
+    clip={clip} youtubeApiLoader={loader} targetLanguage="en" targetText="A translation"
+    translationStatus="complete" translationProvenance="llm" alignmentStatus="failed"
+    onTranslationRetry={onRetry}
+  />);
+  expect(screen.getByRole("button", { name: "Retry translation links" })).toBeInTheDocument();
 });
 
 it("requests and renders a configured target language", async () => {

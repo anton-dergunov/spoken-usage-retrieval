@@ -155,6 +155,49 @@ it("cancels obsolete translation polling and suppresses a stale language result"
   await waitFor(() => expect(screen.queryByText("Stale English result")).not.toBeInTheDocument());
 });
 
+it("sends retry_failed only after the learner explicitly retries", async () => {
+  const translatedStatus = {
+    ...statusResponse,
+    translation: {
+      provider_available: true, provider: "gemini", model: "gemini-3.1-flash-lite",
+      target_languages: ["en", "ru"], default_target_language: "en", cache: {},
+    },
+  };
+  const requestBodies: Array<Record<string, unknown>> = [];
+  vi.stubGlobal("fetch", vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    if (url.includes("status")) return Promise.resolve(new Response(JSON.stringify(translatedStatus)));
+    if (url.includes("suggestions")) return Promise.resolve(new Response(JSON.stringify(suggestionResponse)));
+    if (!url.includes("translations")) return Promise.resolve(new Response(JSON.stringify(searchResponse)));
+    if (init?.method === "DELETE") return Promise.resolve(new Response(JSON.stringify({ status: "cancelled" })));
+    const body = JSON.parse(String(init?.body));
+    requestBodies.push(body);
+    const retried = body.retry_failed === true;
+    return Promise.resolve(new Response(JSON.stringify({
+      job_id: retried ? "job-retry" : "job-first", segment_id: "segment-one",
+      target_language: "en", status: retried ? "complete" : "failed", cache_hit: !retried,
+      error: retried ? null : { code: "invalid_output", message: "Translation could not be generated.", retryable: true },
+      created_at: "now", updated_at: "now",
+      result: retried ? {
+        source_language: "es", target_language: "en", source_text_hash: "hash",
+        target_text: "The truth is a good idea.", alignment_groups: [], alignment_graph: null,
+        alignment_status: "unavailable", alignment_error_code: null, alignment_quality: null,
+        provenance: "llm", provider: "gemini", model: "gemini-3.1-flash-lite",
+        prompt_version: "literal-translation-v1", schema_version: 1,
+        alignment_prompt_version: null, alignment_schema_version: null,
+        alignment_provider: null, alignment_model: null, source_tokenizer: null,
+        target_tokenizer: null, authored_track_language: null, authored_track_id: null,
+        warnings: [], latency_ms: 10, usage: null, provider_metadata: null,
+      } : null,
+    }), { status: 202 }));
+  }));
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "la verdad" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Retry translation" }));
+  expect(await screen.findByText("The truth is a good idea.")).toBeInTheDocument();
+  expect(requestBodies.map((body) => body.retry_failed)).toEqual([false, true]);
+});
+
 it("requires a language choice when several enabled corpora are indexed", async () => {
   const multilingualStatus = {
     ...statusResponse,

@@ -55,13 +55,14 @@ keys seek by one second when the player itself is focused. Buttons and the range
 native keyboard behavior. Status changes are announced through a polite live region, errors use an
 alert, and package motion is effectively disabled when the user requests reduced motion.
 
-`targetLanguage`, `translationStatus`, `targetText`, `translationProvenance`, `alignmentGroups`,
-`onTranslationRequest`, and `onTranslationCancel` render the optional translation lifecycle. Target
-ranges aligned to the currently active source cue are highlighted; finer source timing can be
-supplied later without changing or regenerating semantic groups. The player independently rejects
-overly coarse groups and groups that combine adjacent repeated phrases, so old cached or host-supplied
-alignments cannot cause a large target phrase to flash for every source cue. Translation text is
-still rendered when an unsafe group is omitted.
+`targetLanguage`, `translationStatus`, `targetText`, `translationProvenance`, `alignmentStatus`,
+`alignmentGraph`, `alignmentGroups`, `onTranslationRequest`, `onTranslationRetry`, and
+`onTranslationCancel` render the optional translation lifecycle. Graph token IDs distinguish
+repeated spellings and support many-to-many and noncontiguous links. Hover/focus explores direct
+neighbors; click/tap pins a relation until it is tapped again, the background is tapped, or Escape is
+pressed. Playback highlights target neighbors of the active source tokens. One whole-sentence timing
+unit deliberately produces no automatic target highlight; finer `sourceTiming` works without
+regenerating the graph. Authored fallback and valid translations with failed alignment remain static.
 
 The typed client exposes single-clip translation jobs and bounded translation batches. Hosts remain
 responsible for polling and for choosing the one active target language.

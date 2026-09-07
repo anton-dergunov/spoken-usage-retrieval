@@ -1,5 +1,11 @@
 # Target-language translation and alignment evaluation
 
+> **Superseded on 2026-09-07.** This report remains the historical free-chunk baseline. Production
+> no longer uses joint translation/alignment or its display-width heuristics; see the
+> [fixed-token graph experiment](../target-language-word-alignment/README.md). Reproduce this exact
+> implementation by checking out the historical Git commit that contains this report, rather than
+> adding compatibility code to the current service.
+
 ## Decision and scope
 
 This experiment asks two separate questions:

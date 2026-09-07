@@ -41,6 +41,7 @@ export interface SuggestionOptions extends RequestOptions {
 
 export interface TranslationRequestOptions extends RequestOptions {
   targetLanguage: string;
+  retryFailed?: boolean;
 }
 
 export interface TranslationBatchOptions extends TranslationRequestOptions {
@@ -137,9 +138,9 @@ export function createSpeechRetrievalClient(options: SpeechRetrievalClientOption
     clip(segmentId, requestOptions) {
       return request<SpeechClip>(`/clips/${part(segmentId)}`, { signal: requestOptions?.signal });
     },
-    requestTranslation(segmentId, { targetLanguage, signal }) {
+    requestTranslation(segmentId, { targetLanguage, retryFailed = false, signal }) {
       return request<TranslationJob>(`/clips/${part(segmentId)}/translations`, {
-        method: "POST", body: JSON.stringify({ target_language: targetLanguage }), signal,
+        method: "POST", body: JSON.stringify({ target_language: targetLanguage, retry_failed: retryFailed }), signal,
       });
     },
     translation(jobId, requestOptions) {
@@ -150,9 +151,9 @@ export function createSpeechRetrievalClient(options: SpeechRetrievalClientOption
         method: "DELETE", signal: requestOptions?.signal,
       });
     },
-    createTranslationBatch({ segmentIds, targetLanguage, signal }) {
+    createTranslationBatch({ segmentIds, targetLanguage, retryFailed = false, signal }) {
       return request<TranslationBatch>("/translation-batches", {
-        method: "POST", body: JSON.stringify({ segment_ids: segmentIds, target_language: targetLanguage }), signal,
+        method: "POST", body: JSON.stringify({ segment_ids: segmentIds, target_language: targetLanguage, retry_failed: retryFailed }), signal,
       });
     },
     translationBatch(batchId, requestOptions) {

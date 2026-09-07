@@ -10,10 +10,12 @@ import {
 } from "react";
 import type {
   AlignmentGroup,
+  AlignmentToken,
   MatchSpan,
   SpeechClipPlayerClip,
   TimedText,
   TranslationState,
+  WordAlignmentGraph,
 } from "./types.js";
 import {
   loadYouTubeApi,
@@ -56,10 +58,12 @@ export interface SpeechClipPlayerProps {
   targetText?: string | null;
   targetLanguage?: string | null;
   translationStatus?: TranslationState;
-  translationError?: string | null;
   translationProvenance?: "llm" | "authored_track" | null;
+  alignmentStatus?: "complete" | "failed" | "unavailable";
   alignmentGroups?: AlignmentGroup[] | null;
+  alignmentGraph?: WordAlignmentGraph | null;
   onTranslationRequest?: (targetLanguage: string) => void;
+  onTranslationRetry?: (targetLanguage: string) => void;
   onTranslationCancel?: () => void;
   accessibleName?: string;
   youtubeApiLoader?: YouTubeApiLoader;
@@ -171,11 +175,11 @@ export function ProgressiveTargetText({
   timing: TimedText[];
   currentTime: number;
 }) {
+  void sourceText;
   const characters = Array.from(text);
+  if (!hasGranularTiming(timing)) return <span aria-label={text}>{text}</span>;
   const activeSource = timing.filter((item) => currentTime >= item.start && currentTime < item.end);
-  const activeRanges = groups.filter((group) => isDisplaySafeAlignmentGroup(
-    group, sourceText, text,
-  )).flatMap((group) => {
+  const activeRanges = groups.flatMap((group) => {
     const active = group.source_ranges.some((range) => activeSource.some(
       (timed) => range.start < timed.char_end && range.end > timed.char_start,
     ));
@@ -197,30 +201,67 @@ export function ProgressiveTargetText({
   })}</span>;
 }
 
-function wordsInRanges(text: string, ranges: AlignmentGroup["source_ranges"]): string[] {
-  const characters = Array.from(text);
-  return ranges.flatMap((range) =>
-    (characters.slice(range.start, range.end).join("").match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu) ?? [])
-      .map((word) => word.normalize("NFKD").toLocaleLowerCase().replace(/\p{M}/gu, "")),
-  );
+export function hasGranularTiming(timing: TimedText[]): boolean {
+  const distinct = new Set(timing.map((item) => `${item.start}:${item.end}:${item.char_start}:${item.char_end}`));
+  if (distinct.size < 2) return false;
+  const tokenSets = new Set(timing.map((item) => `${item.char_start}:${item.char_end}`));
+  return tokenSets.size >= 2;
 }
 
-export function isDisplaySafeAlignmentGroup(
-  group: AlignmentGroup,
-  sourceText: string,
-  targetText: string,
-): boolean {
-  const sourceWords = wordsInRanges(sourceText, group.source_ranges);
-  const targetWords = wordsInRanges(targetText, group.target_ranges);
-  const repeated = (words: string[]) => words.some((_, start) => (
-    Array.from({ length: Math.floor((words.length - start) / 2) }, (__, index) => index + 1)
-      .some((width) => words.slice(start, start + width).join("\0")
-        === words.slice(start + width, start + 2 * width).join("\0"))
-  ));
-  return sourceWords.length <= 4
-    && targetWords.length <= 6
-    && !repeated(sourceWords)
-    && !repeated(targetWords);
+function GraphLine({
+  text,
+  tokens,
+  side,
+  selected,
+  playback,
+  timing,
+  currentTime,
+  match,
+  onEnter,
+  onLeave,
+  onPin,
+}: {
+  text: string;
+  tokens: AlignmentToken[];
+  side: "source" | "target";
+  selected: Set<string>;
+  playback: Set<string>;
+  timing: TimedText[];
+  currentTime: number;
+  match?: MatchSpan;
+  onEnter: (side: "source" | "target", id: string) => void;
+  onLeave: () => void;
+  onPin: (side: "source" | "target", id: string) => void;
+}) {
+  const characters = Array.from(text);
+  const parts: ReactNode[] = [];
+  let offset = 0;
+  for (const token of tokens) {
+    const start = Math.max(offset, Math.min(characters.length, token.range.start));
+    const end = Math.max(start, Math.min(characters.length, token.range.end));
+    if (start > offset) parts.push(<span key={`gap:${offset}`}>{characters.slice(offset, start).join("")}</span>);
+    const timed = side === "source" ? timing.find((item) => start < item.char_end && end > item.char_start) : undefined;
+    const matched = side === "source" && match && start < match.char_end && end > match.char_start;
+    const classNames = ["sur-player__alignment-token", `sur-player__alignment-token--${side}`];
+    if (selected.has(token.id)) classNames.push("sur-player__alignment-token--selected");
+    if (playback.has(token.id)) classNames.push("sur-player__alignment-token--playback");
+    if (matched) classNames.push("sur-player__alignment-token--match");
+    if (timed) classNames.push(`sur-player__timed-fragment--${currentTime >= timed.start ? "spoken" : "upcoming"}`);
+    parts.push(<button
+      type="button"
+      className={classNames.join(" ")}
+      key={token.id}
+      aria-label={`Show translation links for ${token.text}`}
+      onMouseEnter={() => onEnter(side, token.id)}
+      onMouseLeave={onLeave}
+      onFocus={() => onEnter(side, token.id)}
+      onBlur={onLeave}
+      onClick={(event) => { event.stopPropagation(); onPin(side, token.id); }}
+    >{characters.slice(start, end).join("")}</button>);
+    offset = end;
+  }
+  if (offset < characters.length) parts.push(<span key={`gap:${offset}`}>{characters.slice(offset).join("")}</span>);
+  return <span aria-label={text}>{parts}</span>;
 }
 
 function statusMessage(status: SpeechClipPlayerStatus): string {
@@ -255,10 +296,12 @@ export function SpeechClipPlayer({
   targetText,
   targetLanguage,
   translationStatus = "not_requested",
-  translationError,
   translationProvenance,
+  alignmentStatus = "unavailable",
   alignmentGroups,
+  alignmentGraph,
   onTranslationRequest,
+  onTranslationRetry,
   onTranslationCancel,
 }: SpeechClipPlayerProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -276,11 +319,35 @@ export function SpeechClipPlayer({
   const [current, setCurrent] = useState(clip.clip_start);
   const [playerError, setPlayerError] = useState<SpeechClipPlayerError | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
+  const [hoveredAlignment, setHoveredAlignment] = useState<{ side: "source" | "target"; id: string } | null>(null);
+  const [pinnedAlignment, setPinnedAlignment] = useState<{ side: "source" | "target"; id: string } | null>(null);
   const text = clipText(clip);
   const match = clipMatch(clip);
   const timing = sourceTiming ?? clip.segments;
   const duration = Math.max(0.1, clip.clip_end - clip.clip_start);
   const sourceUrl = useMemo(() => directSourceUrl(clip), [clip]);
+  const selectedAlignment = pinnedAlignment ?? hoveredAlignment;
+  const graphSelection = useMemo(() => {
+    const source = new Set<string>();
+    const target = new Set<string>();
+    if (!selectedAlignment || !alignmentGraph) return { source, target };
+    (selectedAlignment.side === "source" ? source : target).add(selectedAlignment.id);
+    for (const edge of alignmentGraph.edges) {
+      if (selectedAlignment.side === "source" && edge.source_token_id === selectedAlignment.id) target.add(edge.target_token_id);
+      if (selectedAlignment.side === "target" && edge.target_token_id === selectedAlignment.id) source.add(edge.source_token_id);
+    }
+    return { source, target };
+  }, [alignmentGraph, selectedAlignment]);
+  const playbackTargetIds = useMemo(() => {
+    const result = new Set<string>();
+    if (!alignmentGraph || !hasGranularTiming(timing) || pinnedAlignment) return result;
+    const active = timing.filter((item) => current >= item.start && current < item.end);
+    const activeSource = new Set(alignmentGraph.source_tokens.filter((token) => active.some(
+      (item) => token.range.start < item.char_end && token.range.end > item.char_start,
+    )).map((token) => token.id));
+    for (const edge of alignmentGraph.edges) if (activeSource.has(edge.source_token_id)) result.add(edge.target_token_id);
+    return result;
+  }, [alignmentGraph, current, pinnedAlignment, timing]);
 
   useEffect(() => { onPlayingChangeRef.current = onPlayingChange; }, [onPlayingChange]);
   useEffect(() => { onStatusChangeRef.current = onStatusChange; }, [onStatusChange]);
@@ -322,6 +389,8 @@ export function SpeechClipPlayer({
     let primeTimer: number | undefined;
     setStatus("connecting");
     setPlayerError(null);
+    setHoveredAlignment(null);
+    setPinnedAlignment(null);
     setCurrent(clip.clip_start);
     replayRef.current = false;
     primingRef.current = false;
@@ -556,6 +625,11 @@ export function SpeechClipPlayer({
   }, [clip.clip_end, clip.clip_start, status]);
 
   const handleKeys = (event: KeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape" && pinnedAlignment) {
+      event.preventDefault();
+      setPinnedAlignment(null);
+      return;
+    }
     if (event.target !== event.currentTarget) return;
     if (event.code === "Space" || event.key.toLowerCase() === "k") {
       event.preventDefault();
@@ -631,9 +705,16 @@ export function SpeechClipPlayer({
       </div>
     </div>
 
-    <div className="sur-player__copy">
+    <div className="sur-player__copy" onClick={() => setPinnedAlignment(null)}>
       <p className="sur-player__source-text">
-        <ProgressiveSourceText text={text} match={match} timing={timing} currentTime={current} />
+        {alignmentGraph ? <GraphLine
+          text={text} tokens={alignmentGraph.source_tokens} side="source"
+          selected={graphSelection.source} playback={new Set()} timing={timing}
+          currentTime={current} match={match}
+          onEnter={(side, id) => setHoveredAlignment({ side, id })}
+          onLeave={() => setHoveredAlignment(null)}
+          onPin={(side, id) => setPinnedAlignment((value) => value?.side === side && value.id === id ? null : { side, id })}
+        /> : <ProgressiveSourceText text={text} match={match} timing={timing} currentTime={current} />}
       </p>
       {targetLanguage && (targetText || translationStatus !== "not_requested") && <div
         className="sur-player__translation"
@@ -642,13 +723,30 @@ export function SpeechClipPlayer({
         data-provenance={translationProvenance || undefined}
       >
         {targetText ? <p className="sur-player__target-text">
-          {translationProvenance !== "authored_track" && alignmentGroups?.length
-            ? <ProgressiveTargetText sourceText={text} text={targetText} groups={alignmentGroups} timing={timing} currentTime={current} />
-            : targetText}
+          {translationProvenance !== "authored_track" && alignmentGraph
+            ? <GraphLine
+              text={targetText} tokens={alignmentGraph.target_tokens} side="target"
+              selected={graphSelection.target} playback={playbackTargetIds} timing={timing}
+              currentTime={current} onEnter={(side, id) => setHoveredAlignment({ side, id })}
+              onLeave={() => setHoveredAlignment(null)}
+              onPin={(side, id) => setPinnedAlignment((value) => value?.side === side && value.id === id ? null : { side, id })}
+            />
+            : translationProvenance !== "authored_track" && alignmentGroups?.length
+              ? <ProgressiveTargetText sourceText={text} text={targetText} groups={alignmentGroups} timing={timing} currentTime={current} />
+              : targetText}
+          {translationStatus === "complete" && alignmentStatus === "failed" && onTranslationRetry && !alignmentGraph && translationProvenance !== "authored_track" && <button
+            type="button" className="sur-player__translation-retry"
+            onClick={(event) => { event.stopPropagation(); onTranslationRetry(targetLanguage); }}
+            aria-label="Retry translation links"
+          >↻</button>}
         </p> : (translationStatus === "queued" || translationStatus === "running") ? <p className="sur-player__translation-status">
           Translating… {onTranslationCancel && <button type="button" onClick={onTranslationCancel}>Cancel</button>}
         </p> : <p className="sur-player__translation-status">
-          {translationError || (translationStatus === "unavailable" ? "Translation is unavailable." : "Translation could not be loaded.")}
+          {translationStatus === "unavailable" ? "Translation is unavailable." : "Translation could not be loaded."}
+          {translationStatus === "failed" && onTranslationRetry && <button
+            type="button" className="sur-player__translation-retry"
+            onClick={() => onTranslationRetry(targetLanguage)} aria-label="Retry translation"
+          >↻</button>}
         </p>}
       </div>}
       <div className="sur-player__source-line">

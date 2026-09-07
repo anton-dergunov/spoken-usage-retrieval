@@ -87,7 +87,7 @@ owns Docker, systemd, or other process supervision.
 
 | Plan | Status | Depends on | Outcome |
 | --- | --- | --- | --- |
-| [08 · Target-language text](08-target-language-text.md) | Complete | 02, 05, 06 | Authored translation tracks plus optional one-call literal LLM translation, cache warming, and alignment groups. |
+| [08 · Target-language text](08-target-language-text.md) | Complete | 02, 05, 06 | Authored fallback plus independently cached sentence translation and fixed-token word-alignment graphs. |
 | [09 · Audio cache and caption-reliability benchmark](09-audio-and-caption-reliability.md) | Planned | 07 | Optional audio, an evidence-based caption-trust policy, and validated acoustic signals. |
 | [10 · Forced alignment](10-forced-alignment.md) | Planned | 09 | Confidence-bearing source-text timing with safe cue-level fallback. |
 
@@ -152,8 +152,8 @@ for it.
   a simple operator token when enabled. Statistics are shaped for an external health dashboard to
   read; the dashboard belongs to the host.
 - Translation is an asynchronous per-clip enrichment in a caller-chosen target language. It never
-  blocks source playback or corpus indexing and performs at most one LLM generation call for a cache
-  miss.
+  blocks source playback or corpus indexing. Complete translation and fixed-token alignment are
+  separate cacheable provider stages, so alignment can fail or retry without discarding the text.
 - `@spoken-usage-retrieval/react` exports a player, typed client, and styles. The host owns the
   modal, navigation, and persistence decisions. Optional target-language and alignment props exist
   from the first version and render source-only when absent.

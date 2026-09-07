@@ -93,6 +93,7 @@ export interface SpeechClip {
   boundary: { reason: string; confidence: number };
   quality_score: number;
   analyzer: AnalyzerProvenance;
+  token_analysis: AnalyzedToken[];
   video: VideoSource;
   target_language: string | null;
   target_text: string | null;
@@ -109,6 +110,25 @@ export interface AlignmentGroup {
   target_ranges: CharacterRange[];
 }
 
+export interface AlignmentToken {
+  id: string;
+  text: string;
+  range: CharacterRange;
+}
+
+export interface WordAlignmentEdge {
+  source_token_id: string;
+  target_token_id: string;
+}
+
+export interface WordAlignmentGraph {
+  source_tokens: AlignmentToken[];
+  target_tokens: AlignmentToken[];
+  edges: WordAlignmentEdge[];
+  unaligned_source_token_ids: string[];
+  unaligned_target_token_ids: string[];
+}
+
 export interface CharacterRange { start: number; end: number }
 
 export type TranslationState =
@@ -121,12 +141,21 @@ export interface TranslationResult {
   source_text_hash: string;
   target_text: string;
   alignment_groups: AlignmentGroup[];
+  alignment_graph: WordAlignmentGraph | null;
+  alignment_status: "complete" | "failed" | "unavailable";
+  alignment_error_code: string | null;
   alignment_quality: AlignmentQuality | null;
   provenance: "llm" | "authored_track";
   provider: string;
   model: string | null;
   prompt_version: string;
   schema_version: number;
+  alignment_prompt_version: string | null;
+  alignment_schema_version: number | null;
+  alignment_provider: string | null;
+  alignment_model: string | null;
+  source_tokenizer: Record<string, unknown> | null;
+  target_tokenizer: Record<string, unknown> | null;
   authored_track_language: string | null;
   authored_track_id: string | null;
   warnings: string[];
@@ -136,14 +165,11 @@ export interface TranslationResult {
 }
 
 export interface AlignmentQuality {
-  provider_groups: number;
-  display_groups: number;
-  suppressed_groups: number;
   source_character_coverage: number;
   target_character_coverage: number;
-  max_source_tokens_per_group: number;
-  coarse_group_ids: number[];
-  repeated_group_ids: number[];
+  edge_count: number;
+  source_token_coverage: number;
+  target_token_coverage: number;
 }
 
 export interface TranslationJob {
@@ -189,6 +215,15 @@ export interface TranslationCacheStatistics {
   active_jobs: number;
   database_bytes: number;
   concurrency: number;
+  translation_entries: number;
+  alignment_entries: number;
+  translation_failures: number;
+  alignment_failures: number;
+  translation_hits: number;
+  translation_misses: number;
+  alignment_hits: number;
+  alignment_misses: number;
+  provider_attempts: number;
 }
 
 export interface TranslationServiceStatus {

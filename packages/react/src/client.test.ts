@@ -50,15 +50,21 @@ describe("createSpeechRetrievalClient", () => {
   it("starts and inspects translation jobs and cache-warming batches", async () => {
     const fetchImplementation = vi.fn(() => Promise.resolve(json({ status: "queued" })));
     const client = createSpeechRetrievalClient({ baseUrl: "/api/v1", fetch: fetchImplementation });
-    await client.requestTranslation("segment/1", { targetLanguage: "ru" });
+    await client.requestTranslation("segment/1", { targetLanguage: "ru", retryFailed: true });
     await client.translation("job/1");
     await client.cancelTranslation("job/1");
-    await client.createTranslationBatch({ segmentIds: ["one", "two"], targetLanguage: "en" });
+    await client.createTranslationBatch({ segmentIds: ["one", "two"], targetLanguage: "en", retryFailed: true });
     expect(fetchImplementation.mock.calls.map(([url, init]) => [url, init.method])).toEqual([
       ["/api/v1/clips/segment%2F1/translations", "POST"],
       ["/api/v1/translations/job%2F1", undefined],
       ["/api/v1/translations/job%2F1", "DELETE"],
       ["/api/v1/translation-batches", "POST"],
     ]);
+    expect(JSON.parse(String(fetchImplementation.mock.calls[0][1].body))).toEqual({
+      target_language: "ru", retry_failed: true,
+    });
+    expect(JSON.parse(String(fetchImplementation.mock.calls[3][1].body))).toEqual({
+      segment_ids: ["one", "two"], target_language: "en", retry_failed: true,
+    });
   });
 });

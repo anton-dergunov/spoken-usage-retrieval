@@ -73,6 +73,7 @@ const clip: SpeechClip = {
   segments: [{ text: "Una frase de ejemplo.", start: 1, end: 3, char_start: 0, char_end: 21 }],
   boundary: { reason: "punctuation", confidence: 1 },
   quality_score: 1,
+  token_analysis: [],
   analyzer: { name: "unicode", language: "es", package_version: "1", model_version: null, settings: {}, identity: "check" },
   video: {
     video_key: "video-1", provider: "youtube", id: "abc123", url: "https://youtu.be/abc123",

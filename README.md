@@ -172,10 +172,11 @@ Raw acquisition files remain unchanged.
 
 ### Lazy translation and cache warming
 
-Opening a clip in the demo requests one literal, learner-facing translation and semantic alignment.
-Successful translations are stored in `data/derived/translations.sqlite3`, independently of the
-search index, and are reused across requests and reindexing. The API accepts any valid BCP-47 target;
-the configured language list only controls the demo selector.
+Opening a clip in the demo first requests a complete literal-leaning translation, then independently
+aligns stable lexical token IDs in the fixed source and target strings. Both stages are stored in
+`data/derived/translations.sqlite3`, independently of the search index, and reused across requests
+and reindexing. The API accepts any valid BCP-47 target; the configured language list only controls
+the demo selector.
 
 `POST /api/v1/clips/{segment_id}/translations` starts one job. A host can warm up to 50 explicitly
 selected clips with `POST /api/v1/translation-batches`; status and cancellation routes are in the
@@ -191,12 +192,13 @@ uv run speech-retrieval translation-cache prune --older-than-days 30
 Cache warming uses the same coalescing scheduler as interactive requests and never translates the
 whole corpus implicitly.
 
-Alignment output is quality-gated independently from translation text. Provider groups that are too
-coarse for cue-by-cue playback or combine adjacent repeated phrases are omitted from highlighting, while
-the complete translation stays visible. The result exposes aggregate `alignment_quality`
-diagnostics so hosts can distinguish provider groups from display-safe groups. The
-[live evaluation report](experiments/target-language-text/README.md) documents the thresholds,
-browser failure analysis, and English/Russian prompt iterations.
+The alignment result is a many-to-many token graph. Repeated spellings have different IDs, and
+one-to-many, many-to-one, reordered, and noncontiguous edges are legal. Hover or focus explores
+links in either direction; click/tap pins them. Playback highlights target neighbors of currently
+timed source tokens, but one whole-sentence timing unit produces no automatic target highlight. A
+valid translation stays visible when alignment fails, and its retry reuses the translation rather
+than generating it again. The [multilingual evaluation report](experiments/target-language-word-alignment/README.md)
+documents prompt selection, held-out AER/F1, full-pipeline translation review, failures, and prior work.
 
 The index stores each surface or lemma token once with its position inside a segment. Phrase lookup
 finds the first token and verifies successive positions in the same stream, deriving the occurrence

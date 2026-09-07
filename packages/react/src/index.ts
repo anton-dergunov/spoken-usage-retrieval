@@ -3,7 +3,7 @@ export {
   HighlightedSourceText,
   ProgressiveSourceText,
   ProgressiveTargetText,
-  isDisplaySafeAlignmentGroup,
+  hasGranularTiming,
   formatClock,
   type SpeechClipPlayerError,
   type SpeechClipPlayerProps,

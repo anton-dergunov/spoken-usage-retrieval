@@ -213,6 +213,12 @@ generated lazily only for clips someone actually opens, so a missing provider de
 source-language playback rather than to failure. Hosts may explicitly warm a bounded list of stable
 segment IDs through the same cache and scheduler; reindexing never removes completed translations.
 
+Generation has two independently cached stages. The first translates the whole sentence. The second
+aligns immutable, occurrence-labeled lexical tokens into a many-to-many graph; Unicode character
+ranges are derived locally. A failed graph never invalidates its translation. Caption cues and future
+forced-alignment timings are projections onto source graph nodes, not semantic-cache inputs, so
+timing refinement does not spend another provider call.
+
 ### Optional audio
 
 Audio is not required for lexical search, but it enables refined word timestamps, voice activity

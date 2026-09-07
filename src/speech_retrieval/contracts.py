@@ -160,6 +160,7 @@ class Clip(ContractModel):
     boundary: BoundaryInfo
     quality_score: float
     analyzer: AnalyzerInfo
+    token_analysis: list[TokenInfo] = Field(default_factory=list)
     video: VideoInfo
     target_language: str | None = Field(
         default=None, description="Reserved for the optional translation capability."
@@ -208,15 +209,31 @@ class SemanticAlignmentGroup(ContractModel):
     target_ranges: list[CharacterRange]
 
 
+class AlignmentToken(ContractModel):
+    id: str
+    text: str
+    range: CharacterRange
+
+
+class WordAlignmentEdge(ContractModel):
+    source_token_id: str
+    target_token_id: str
+
+
+class WordAlignmentGraph(ContractModel):
+    source_tokens: list[AlignmentToken]
+    target_tokens: list[AlignmentToken]
+    edges: list[WordAlignmentEdge]
+    unaligned_source_token_ids: list[str] = Field(default_factory=list)
+    unaligned_target_token_ids: list[str] = Field(default_factory=list)
+
+
 class AlignmentQuality(ContractModel):
-    provider_groups: int
-    display_groups: int
-    suppressed_groups: int
-    source_character_coverage: float = Field(ge=0, le=1)
-    target_character_coverage: float = Field(ge=0, le=1)
-    max_source_tokens_per_group: int = Field(ge=0)
-    coarse_group_ids: list[int] = Field(default_factory=list)
-    repeated_group_ids: list[int] = Field(default_factory=list)
+    source_character_coverage: float = Field(default=0, ge=0, le=1)
+    target_character_coverage: float = Field(default=0, ge=0, le=1)
+    edge_count: int = Field(default=0, ge=0)
+    source_token_coverage: float = Field(default=0, ge=0, le=1)
+    target_token_coverage: float = Field(default=0, ge=0, le=1)
 
 
 class TranslationResult(ContractModel):
@@ -225,12 +242,21 @@ class TranslationResult(ContractModel):
     source_text_hash: str
     target_text: str
     alignment_groups: list[SemanticAlignmentGroup]
+    alignment_graph: WordAlignmentGraph | None = None
+    alignment_status: Literal["complete", "failed", "unavailable"] = "unavailable"
+    alignment_error_code: str | None = None
     alignment_quality: AlignmentQuality | None = None
     provenance: Literal["llm", "authored_track"]
     provider: str
     model: str | None
     prompt_version: str
     schema_version: int
+    alignment_prompt_version: str | None = None
+    alignment_schema_version: int | None = None
+    alignment_provider: str | None = None
+    alignment_model: str | None = None
+    source_tokenizer: dict[str, Any] | None = None
+    target_tokenizer: dict[str, Any] | None = None
     authored_track_language: str | None = None
     authored_track_id: str | None = None
     warnings: list[str] = Field(default_factory=list)
@@ -247,6 +273,7 @@ class TranslationErrorInfo(ContractModel):
 
 class TranslationRequest(ContractModel):
     target_language: str
+    retry_failed: bool = False
 
 
 class TranslationJob(ContractModel):
@@ -264,6 +291,7 @@ class TranslationJob(ContractModel):
 class TranslationBatchRequest(ContractModel):
     segment_ids: list[str] = Field(min_length=1, max_length=50)
     target_language: str
+    retry_failed: bool = False
 
 
 class TranslationBatchItem(ContractModel):
@@ -304,6 +332,15 @@ class TranslationCacheStatistics(ContractModel):
     active_jobs: int = 0
     database_bytes: int = 0
     concurrency: int = 0
+    translation_entries: int = 0
+    alignment_entries: int = 0
+    translation_failures: int = 0
+    alignment_failures: int = 0
+    translation_hits: int = 0
+    translation_misses: int = 0
+    alignment_hits: int = 0
+    alignment_misses: int = 0
+    provider_attempts: int = 0
 
 
 class TranslationServiceStatus(ContractModel):

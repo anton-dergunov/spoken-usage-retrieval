@@ -61,6 +61,9 @@ lint = [
 typing = [
   "mypy>=1.20,<2",
 ]
+experiments = [
+  "sacrebleu>=2.5,<3",
+]
 dev = [
   "httpx>=0.28,<1",
   "mypy>=1.20,<2",
