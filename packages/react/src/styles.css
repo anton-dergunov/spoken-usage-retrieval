@@ -300,6 +300,7 @@
   appearance: auto;
   width: 68px;
   height: 26px;
+  margin-left: 4px;
   border: 1px solid var(--sur-player-border);
   border-radius: 4px;
   padding: 0 2px;
