@@ -6,6 +6,8 @@ Implemented on 2026-09-07: the first dependency-free cache-identity slice now ex
 
 Implemented next on 2026-09-07: `probe_audio()` and the frozen `AudioProbe` record now provide the local media-inspection primitive in `src/speech_retrieval/audio.py`. The helper invokes ffprobe with a narrow JSON field selection through an injectable runner, requires a nonempty regular non-symlink file with exactly one audio stream and no video stream, validates positive duration/sample rate/channel count, captures format/codec and optional bitrate, and streams the file through SHA-256. Tests exercise valid and malformed injected probe responses and use stdlib `wave` to verify a real one-second mono 16 kHz PCM file when ffprobe is installed. The focused audio suite has 27 passing cases. The full pytest suite passed with four optional skips, and full Ruff check/format and mypy passed. Acquisition still needs to compare probe data with provider/manifest expectations, record ffprobe version, and publish only after atomic staging; this helper deliberately does not write cache state.
 
+Implemented next on 2026-09-07: `validate_prepared_clip()` now enforces the post-conversion clip contract against an `AudioProbe`: WAV container, signed 16-bit PCM, mono, 16 kHz, and duration within a configurable integer-millisecond tolerance of the effective clamped range. Focused tests cover the valid contract and each mismatch independently; all 33 focused audio tests pass. The full pytest suite passed with four optional skips, and full Ruff check/format and mypy passed. This remains a pure validation seam; invoking ffmpeg and publishing or caching the validated artifact are still separate future steps.
+
 Initial repository shape: this is a Python 3.12+ `src/` package with an `argparse` CLI, Pydantic contracts, dataclass settings, `yt-dlp`-based subtitle acquisition, pytest tests, and experiment directories that keep executable scripts, versioned configurations/schemas, results, and narrative reports together. Audio should extend those conventions rather than become a separate application.
 
 Investigation order: trace acquisition/cache ownership and metadata first; then settings/CLI/status; caption provenance and segment identity; existing experiment/report formats; Plan 11/12 integration boundaries; finally dependencies and test seams. Findings below should turn into an implementation sequence once those paths are understood.
@@ -132,7 +134,7 @@ Keep the language acquisition limit defined as usable caption videos, as the REA
 
 Likely production code split:
 
-- `src/speech_retrieval/audio.py`: clip range/identity and the common ffprobe inspection record/helper are implemented; safe path helpers, format selection, yt-dlp media acquisition, manifest comparison/cached availability, clip preparation, storage scan and prune planning/execution remain. If this grows, split acquisition and cache operations after the public types are stable.
+- `src/speech_retrieval/audio.py`: clip range/identity, common ffprobe inspection, and derived-clip contract validation are implemented; safe path helpers, format selection, yt-dlp media acquisition, manifest comparison/cached availability, ffmpeg conversion and cache publication, storage scan and prune planning/execution remain. If this grows, split acquisition and cache operations after the public types are stable.
 - `src/speech_retrieval/audio_features.py`: dependency-light feature envelope/protocols and lazy adapters for ASR agreement, rate, Silero and SQUIM. Heavy imports must occur only when a feature is selected.
 - `src/speech_retrieval/identity.py`: `clip_id` is implemented; add a raw-audio identity only if multiple selected source representations become possible.
 - `src/speech_retrieval/settings.py`, `acquisition.py`, `service.py`, `cli.py`, and `contracts.py`: opt-in wiring and status/report contracts. `api.py` already enriches `CorpusStatus` with translation state via `model_copy`; audio cache state can be added similarly or computed inside `Corpus.status()` because it already owns `data_dir`.
@@ -144,7 +146,7 @@ If `CorpusStatus` receives an `audio` object, give it a default factory so error
 
 Suggested implementation order is deliberately dependency-first:
 
-1. Continue the partly completed dependency-free foundation: clip range/identity and common local-media probing are implemented; define media/clip schemas, paths, manifest-level validation, storage summary and prune plan with generated fixtures.
+1. Continue the partly completed dependency-free foundation: clip range/identity, common local-media probing, and prepared-clip validation are implemented; define media/clip schemas, paths, manifest-level validation, storage summary and prune plan with generated fixtures.
 2. Implement raw audio selection/acquisition with an injected runner, atomic staging, explicit retries and independent failure manifest/reporting.
 3. Thread `with_audio` through settings → CLI → indexer → acquisition, preserving and testing the default path byte-for-byte/no additional runner calls.
 4. Add status and `audio-cache status|prune`, then documentation/environment examples and optional doctor checks.

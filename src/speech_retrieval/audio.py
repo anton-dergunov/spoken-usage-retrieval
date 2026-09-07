@@ -224,3 +224,32 @@ class AudioClipRange:
             effective_end_ms=self.effective_end_ms,
             preparation_version=preparation_version,
         )
+
+
+def validate_prepared_clip(
+    probe: AudioProbe,
+    clip_range: AudioClipRange,
+    *,
+    duration_tolerance_ms: int = 50,
+) -> None:
+    if (
+        isinstance(duration_tolerance_ms, bool)
+        or not isinstance(duration_tolerance_ms, int)
+        or duration_tolerance_ms < 0
+    ):
+        raise ValueError("duration_tolerance_ms must be a nonnegative integer")
+    if probe.format_name != "wav":
+        raise AudioProbeError("prepared clip must use the WAV container")
+    if probe.codec_name != "pcm_s16le":
+        raise AudioProbeError("prepared clip must use signed 16-bit PCM")
+    if probe.sample_rate != 16000:
+        raise AudioProbeError("prepared clip must use a 16 kHz sample rate")
+    if probe.channels != 1:
+        raise AudioProbeError("prepared clip must be mono")
+    expected_ms = clip_range.effective_end_ms - clip_range.effective_start_ms
+    actual_ms = round(probe.duration * 1000)
+    if abs(actual_ms - expected_ms) > duration_tolerance_ms:
+        raise AudioProbeError(
+            f"prepared clip duration differs from the requested range: "
+            f"expected {expected_ms} ms, got {actual_ms} ms"
+        )

@@ -3,14 +3,18 @@ import json
 import math
 import shutil
 import wave
+from dataclasses import replace
+from pathlib import Path
 
 import pytest
 
 from speech_retrieval.audio import (
     AUDIO_PREPARATION_VERSION,
     AudioClipRange,
+    AudioProbe,
     AudioProbeError,
     probe_audio,
+    validate_prepared_clip,
 )
 
 SOURCE_SHA256 = "a" * 64
@@ -214,3 +218,40 @@ def test_probe_audio_inspects_a_generated_pcm_wave(tmp_path):
     assert probe.sample_rate == 16000
     assert probe.channels == 1
     assert probe.size_bytes == path.stat().st_size
+
+
+def prepared_probe():
+    return AudioProbe(
+        path=Path("clip.wav"),
+        duration=1.0,
+        size_bytes=32044,
+        content_sha256=SOURCE_SHA256,
+        format_name="wav",
+        codec_name="pcm_s16le",
+        sample_rate=16000,
+        channels=1,
+        bit_rate=256000,
+    )
+
+
+def test_validate_prepared_clip_accepts_the_versioned_output_contract():
+    clip_range = AudioClipRange.from_seconds(1, 2, source_duration=10)
+
+    assert validate_prepared_clip(prepared_probe(), clip_range) is None
+
+
+@pytest.mark.parametrize(
+    ("changes", "message"),
+    [
+        ({"format_name": "webm"}, "WAV container"),
+        ({"codec_name": "pcm_f32le"}, "signed 16-bit PCM"),
+        ({"sample_rate": 48000}, "16 kHz"),
+        ({"channels": 2}, "mono"),
+        ({"duration": 1.2}, "duration differs"),
+    ],
+)
+def test_validate_prepared_clip_rejects_contract_mismatches(changes, message):
+    clip_range = AudioClipRange.from_seconds(1, 2, source_duration=10)
+
+    with pytest.raises(AudioProbeError, match=message):
+        validate_prepared_clip(replace(prepared_probe(), **changes), clip_range)
