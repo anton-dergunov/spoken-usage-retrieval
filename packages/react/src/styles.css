@@ -208,7 +208,7 @@
 .sur-player__transport-primary svg { width: 20px; height: 20px; }
 .sur-player__transport-secondary { grid-area: secondary; width: 35px; height: 35px; background: var(--sur-player-surface-muted); color: var(--sur-player-text-muted); }
 .sur-player__transport-secondary svg { width: 17px; height: 17px; }
-.sur-player__timeline { grid-area: timeline; min-width: 0; padding-left: 4px; }
+.sur-player__timeline { grid-area: timeline; min-width: 0; }
 
 .sur-player__range {
   --sur-player-progress: 0%;
@@ -254,10 +254,10 @@
   gap: 8px;
   justify-content: space-between;
   color: var(--sur-player-text-muted);
-  font: 10px var(--sur-player-mono);
+  font: 12px var(--sur-player-mono);
   font-variant-numeric: tabular-nums;
 }
-.sur-player__time-row small { color: var(--sur-player-text-subtle); font-size: 9px; }
+.sur-player__time-row small { color: var(--sur-player-text-subtle); font-size: 11px; }
 .sur-player__transport-footer {
   grid-area: footer;
   display: flex;
@@ -274,14 +274,14 @@
   gap: 4px;
 }
 .sur-player__transport .sur-player__speed-preset {
-  min-width: 27px;
-  height: 21px;
+  min-width: 31px;
+  height: 24px;
   border: 1px solid transparent;
   border-radius: 4px;
-  padding: 0 4px;
+  padding: 0 5px;
   background: transparent;
   color: var(--sur-player-text-subtle);
-  font: 9px var(--sur-player-mono);
+  font: 11px var(--sur-player-mono);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
   transition: color .15s, background .15s, border-color .15s;
@@ -298,14 +298,14 @@
 }
 .sur-player .sur-player__speed-select {
   appearance: auto;
-  width: 60px;
-  height: 23px;
+  width: 68px;
+  height: 26px;
   border: 1px solid var(--sur-player-border);
   border-radius: 4px;
   padding: 0 2px;
   background: var(--sur-player-surface);
   color: var(--sur-player-text-muted);
-  font: 9px var(--sur-player-mono);
+  font: 11px var(--sur-player-mono);
   font-variant-numeric: tabular-nums;
   cursor: pointer;
 }
@@ -491,6 +491,7 @@
       "primary timeline"
       "footer footer";
   }
+  .sur-player__transport-footer { flex-wrap: wrap; }
   .sur-player__transport-primary { width: 39px; height: 39px; }
   .sur-player__transport-secondary { width: 31px; height: 31px; }
   .sur-player__copy { padding: 18px 17px; }

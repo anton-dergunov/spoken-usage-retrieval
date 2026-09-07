@@ -38,6 +38,11 @@ describe("package styles", () => {
   });
 
   it("gives the native speed selector a specific compact font and enough width", () => {
-    expect(css).toMatch(/\.sur-player \.sur-player__speed-select\s*\{[^}]*width: 60px;[^}]*font: 9px var\(--sur-player-mono\);/s);
+    expect(css).toMatch(/\.sur-player \.sur-player__speed-select\s*\{[^}]*width: 68px;[^}]*font: 11px var\(--sur-player-mono\);/s);
+  });
+
+  it("aligns readable timeline text with the left edge of the slider", () => {
+    expect(css).toMatch(/\.sur-player__time-row\s*\{[^}]*font: 12px var\(--sur-player-mono\);/s);
+    expect(css).toContain(".sur-player__timeline { grid-area: timeline; min-width: 0; }");
   });
 });
