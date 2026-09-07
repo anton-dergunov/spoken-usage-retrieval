@@ -177,11 +177,12 @@ by a different segment. `--retry-failed` re-attempts only the failed rows.
 embedded as a data URI, so it opens from disk with no server and no network. Judgements are held in
 browser local storage and exported as `review-worksheet.filled.json` for `review-import`.
 
-The page hides the automatic disagreement rate behind a per-item toggle. A reviewer who sees the
-metric first is anchored by it, and the entire purpose of this pass is an independent judgement of
-whether a disagreement is a real caption error. For the same reason acoustic tags must come from
-listening alone: the voice-activity and quality features are evaluated *against* those tags, so
-reading the features first would make their evaluation circular.
+The page enforces the order the rubric assumes. The ASR text, the ASR-comparison question, and the
+automatic disagreement rate are all withheld until the caption verdict is recorded, so the first
+judgement is made against the audio alone and cannot be anchored by a reference that is not itself
+truth. For the same reason acoustic tags must come from listening: the voice-activity and quality
+features are evaluated *against* those tags, so reading the features first would make their
+evaluation circular.
 
 Rows in the subset with no prepared clip are pipeline gaps, not review items; the page marks them
 non-reviewable and `review-import` ignores rows with no verdict.

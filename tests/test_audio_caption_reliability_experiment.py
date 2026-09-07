@@ -643,6 +643,16 @@ def test_the_review_page_is_one_self_contained_document_with_its_clips_embedded(
     assert "http://" not in document and "https://" not in document
 
 
+def test_the_reference_text_and_metric_are_withheld_until_the_caption_is_judged(tmp_path):
+    document = render_review_app(worksheet_fixture(tmp_path))
+
+    assert "ASR reference hidden" in document
+    assert "unlocks with your verdict so it cannot anchor it" in document
+    assert "gated.push(assessment, reveal)" in document
+    assert 'options(item, "caption_verdict", data.verdicts, false, gate)' in document
+    assert "for (const node of gated) node.hidden = !unlocked;" in document
+
+
 def test_a_row_without_a_prepared_clip_is_rendered_but_not_reviewable(tmp_path):
     document = render_review_app(worksheet_fixture(tmp_path, with_clip=False))
 

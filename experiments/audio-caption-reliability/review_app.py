@@ -126,15 +126,16 @@ GUIDE = """
       often as you need.</li>
   <li><strong>Judge the caption against the audio</strong>, never against the ASR text. The
       ASR is a declared comparison reference, not truth: it can be wrong in the same place
-      the caption is, or wrong where the caption is right.</li>
-  <li><strong>Then judge the ASR</strong> in the second question. This is what separates a
-      caption error from a reference error.</li>
+      the caption is, or wrong where the caption is right. The ASR text stays hidden until
+      you answer question 1, so your first judgement cannot be anchored by it.</li>
+  <li><strong>Then judge the ASR</strong> in the second question, which unlocks with it.
+      This is what separates a caption error from a reference error.</li>
   <li><strong>Tag only what applies.</strong> Empty tag lists are fine and common.</li>
   <li><strong>Assign acoustic tags from listening only.</strong> Never from the numbers: the
       voice-activity and quality features are being evaluated <em>against</em> these tags, so
       reading them first would make the evaluation circular.</li>
-  <li>The automatic disagreement rate is hidden. Reveal it only after you have recorded your
-      verdict, and only if you are curious.</li>
+  <li>The automatic disagreement rate unlocks with the ASR text, behind one more click. You
+      never need it: it is the number this review exists to check, not a hint.</li>
 </ol>
 <h2>Why these rows?</h2>
 <p id="subset-note"></p>
@@ -299,6 +300,11 @@ _TEMPLATE = r"""<!doctype html>
     background: transparent; color: inherit; cursor: pointer;
   }
   button.primary { background: var(--accent); border-color: var(--accent); color: var(--bg); }
+  .locked {
+    border: 1px dashed var(--line); border-radius: 8px; padding: 10px 12px;
+    color: var(--muted); font-size: 13px; background: transparent;
+  }
+  .locked b { color: var(--ink); }
   .reveal { margin-top: 10px; font-size: 13px; }
   .reveal summary { cursor: pointer; color: var(--muted); }
   pre.cmd {
@@ -379,7 +385,7 @@ _TEMPLATE = r"""<!doctype html>
     });
   }
 
-  function options(item, group, list, multiple) {
+  function options(item, group, list, multiple, onChange) {
     const wrap = document.createElement("div");
     wrap.className = "opts";
     for (const option of list) {
@@ -404,6 +410,7 @@ _TEMPLATE = r"""<!doctype html>
           record[group] = input.value;
         }
         save();
+        if (onChange) onChange();
       });
       const text = document.createElement("div");
       text.innerHTML = "<b>" + (option.label || option.id) + "</b> <span>" +
@@ -461,31 +468,41 @@ _TEMPLATE = r"""<!doctype html>
 
     const texts = document.createElement("div");
     texts.className = "texts";
-    texts.innerHTML =
-      '<div class="text"><h4>Caption (the thing being judged)</h4><p>' +
-      escapeHtml(item.caption_text || "") + "</p></div>" +
-      '<div class="text"><h4>ASR reference (not truth)</h4><p>' +
-      escapeHtml(item.asr_text || "—") + "</p></div>";
+    const caption = document.createElement("div");
+    caption.className = "text";
+    caption.innerHTML = "<h4>Caption (the thing being judged)</h4><p>" +
+      escapeHtml(item.caption_text || "") + "</p>";
+
+    const asrLocked = document.createElement("div");
+    asrLocked.className = "locked";
+    asrLocked.innerHTML = "<b>ASR reference hidden.</b> Listen, then answer question 1 " +
+      "below. The reference unlocks with your verdict so it cannot anchor it.";
+    const asrShown = document.createElement("div");
+    asrShown.className = "text";
+    asrShown.innerHTML = "<h4>ASR reference (not truth)</h4><p>" +
+      escapeHtml(item.asr_text || "—") + "</p>";
+    const asrPanel = document.createElement("div");
+    asrPanel.append(asrLocked, asrShown);
+    texts.append(caption, asrPanel);
     element.append(texts);
 
-    element.append(
-      wrapField("1. Is the caption an accurate transcript of this audio?",
-        options(item, "caption_verdict", data.verdicts, false)),
-      wrapField("2. How does the ASR reference compare with the caption?",
-        options(item, "reference_assessment", data.assessments, false)),
-      wrapField("3. What kinds of difference or problem apply? (none is fine)",
-        options(item, "tags", data.tags, true)),
-      wrapField("4. What does the audio sound like? (from listening only)",
-        options(item, "acoustic_tags", data.acoustics, true)),
-      field(item, "corrected_transcript", "5. Corrected transcript (only when it explains the discrepancy)",
-        "What is actually said"),
-      field(item, "note", "6. Note (optional)", "Anything a later reader would need"),
-    );
+    const gated = [];
+    const gate = () => {
+      // Rows with no clip are not review items, so nothing is withheld from them.
+      const unlocked = !reviewable(item) || Boolean(answer(item.segment_id).caption_verdict);
+      asrLocked.hidden = unlocked;
+      asrShown.hidden = !unlocked;
+      for (const node of gated) node.hidden = !unlocked;
+    };
 
+    const assessment = wrapField(
+      "2. How does the ASR reference compare with the caption?",
+      options(item, "reference_assessment", data.assessments, false),
+    );
     const reveal = document.createElement("details");
     reveal.className = "reveal";
     reveal.innerHTML =
-      "<summary>Reveal the automatic disagreement rate (after you decide)</summary>" +
+      "<summary>Reveal the automatic disagreement rate and clip provenance</summary>" +
       '<pre class="cmd">' + escapeHtml(JSON.stringify({
         error_rate: item.error_rate,
         effective_start: item.effective_start ?? null,
@@ -493,7 +510,22 @@ _TEMPLATE = r"""<!doctype html>
         video_key: item.video_key,
         clip: item.clip,
       }, null, 2)) + "</pre>";
-    element.append(reveal);
+    gated.push(assessment, reveal);
+
+    element.append(
+      wrapField("1. Is the caption an accurate transcript of this audio?",
+        options(item, "caption_verdict", data.verdicts, false, gate)),
+      assessment,
+      wrapField("3. What kinds of difference or problem apply? (none is fine)",
+        options(item, "tags", data.tags, true)),
+      wrapField("4. What does the audio sound like? (from listening only)",
+        options(item, "acoustic_tags", data.acoustics, true)),
+      field(item, "corrected_transcript", "5. Corrected transcript (only when it explains the discrepancy)",
+        "What is actually said"),
+      field(item, "note", "6. Note (optional)", "Anything a later reader would need"),
+      reveal,
+    );
+    gate();
     return element;
   }
 
