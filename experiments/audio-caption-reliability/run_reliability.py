@@ -37,6 +37,7 @@ from caption_reliability import (
     select_sample,
     stratum_of,
 )
+from review_app import render_review_app
 
 from speech_retrieval.audio import (
     AudioCacheError,
@@ -651,6 +652,14 @@ def command_review_export(args: argparse.Namespace, config: ExperimentConfig) ->
             "clip": str(clip_path_for(args.data_dir, row) or ""),
             "caption_text": row.caption_text,
             "asr_text": row.asr_text,
+            "effective_start": row.effective_start,
+            "effective_end": row.effective_end,
+            "duration": (
+                None
+                if row.effective_start is None or row.effective_end is None
+                else round(row.effective_end - row.effective_start, 3)
+            ),
+            "status": row.status,
             "error_rate": row.score.error_rate if row.score else None,
             "rubric_version": config.review.rubric_version,
             "caption_verdict": None,
@@ -660,6 +669,7 @@ def command_review_export(args: argparse.Namespace, config: ExperimentConfig) ->
             "reviewer": None,
             "reviewed_at": None,
             "note": None,
+            "corrected_transcript": None,
         }
         for row in rows
         if row.segment_id in subset
@@ -679,6 +689,33 @@ def command_review_export(args: argparse.Namespace, config: ExperimentConfig) ->
         },
     )
     print(json.dumps({"worksheet": str(path), "reviewed": len(worksheet), "total": len(rows)}))
+    return 0
+
+
+def command_review_html(args: argparse.Namespace, _config: ExperimentConfig) -> int:
+    """Render the worksheet as one standalone HTML page with the clips embedded."""
+    run_root = args.run_root / args.run_id
+    source = Path(args.worksheet) if args.worksheet else run_root / "review-worksheet.json"
+    if not source.is_file():
+        raise SystemExit(f"{source} is missing; run review-export first")
+    worksheet = json.loads(source.read_text(encoding="utf-8"))
+    document = render_review_app(worksheet, embed_audio=not args.no_embed_audio)
+    target = args.output or run_root / "review.html"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(document, encoding="utf-8")
+    reviewable = sum(1 for item in worksheet["items"] if Path(item.get("clip") or "").is_file())
+    print(
+        json.dumps(
+            {
+                "page": str(target),
+                "bytes": target.stat().st_size,
+                "items": len(worksheet["items"]),
+                "reviewable": reviewable,
+                "without_audio": len(worksheet["items"]) - reviewable,
+            },
+            ensure_ascii=False,
+        )
+    )
     return 0
 
 
@@ -797,6 +834,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
             "score",
             "features",
             "review-export",
+            "review-html",
             "review-import",
             "report",
         ),
@@ -808,6 +846,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
     parser.add_argument("--worksheet", type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--no-embed-audio", action="store_true")
     parser.add_argument("--force", action="store_true")
     parser.add_argument("--retry-failed", action="store_true")
     return parser.parse_args(list(argv) if argv is not None else None)
@@ -833,6 +872,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         "score": command_score,
         "features": command_features,
         "review-export": command_review_export,
+        "review-html": command_review_html,
         "review-import": command_review_import,
         "report": command_report,
     }

@@ -124,7 +124,9 @@ segment-level number rather than reporting means over correlated segments.
 ## Authorization gate
 
 `authorization.confirmed` is `false` in the committed configuration and the runner refuses to
-download media or transcribe until an operator sets it with a recorded `basis`. This is not
+download media or transcribe until an operator sets it **together with a non-empty `basis`** —
+confirming without recording why is rejected, because the report has to be able to state the grounds
+on which these sources were downloaded and retained. This is not
 boilerplate. YouTube's [Terms of Service](https://www.youtube.com/t/terms) restrict downloading and
 automated access except as the service permits or with prior permission, and the
 [API developer policies](https://developers.google.com/youtube/terms/developer-policies) prohibit
@@ -156,10 +158,12 @@ uv run python experiments/audio-caption-reliability/run_reliability.py transcrib
 uv run python experiments/audio-caption-reliability/run_reliability.py score     --run-id pilot-1
 uv run python experiments/audio-caption-reliability/run_reliability.py features  --run-id pilot-1
 
-# 3. Listen to the predeclared review subset, fill the worksheet, import it, then report.
+# 3. Listen to the predeclared review subset in a local page, then import the judgements.
 uv run python experiments/audio-caption-reliability/run_reliability.py review-export --run-id pilot-1
+uv run python experiments/audio-caption-reliability/run_reliability.py review-html   --run-id pilot-1
+open data/experiments/audio-caption-reliability/pilot-1/review.html
 uv run python experiments/audio-caption-reliability/run_reliability.py review-import --run-id pilot-1 \
-    --worksheet data/experiments/audio-caption-reliability/pilot-1/review-worksheet.json
+    --worksheet ~/Downloads/review-worksheet.filled.json
 uv run python experiments/audio-caption-reliability/run_reliability.py report --run-id pilot-1
 ```
 
@@ -167,14 +171,29 @@ uv run python experiments/audio-caption-reliability/run_reliability.py report --
 keeps its identity and records `missing_audio`, `clip_failed`, or `asr_failed`; it is never replaced
 by a different segment. `--retry-failed` re-attempts only the failed rows.
 
+## Reviewing
+
+`review-html` renders the exported worksheet as a single standalone page, with every prepared clip
+embedded as a data URI, so it opens from disk with no server and no network. Judgements are held in
+browser local storage and exported as `review-worksheet.filled.json` for `review-import`.
+
+The page hides the automatic disagreement rate behind a per-item toggle. A reviewer who sees the
+metric first is anchored by it, and the entire purpose of this pass is an independent judgement of
+whether a disagreement is a real caption error. For the same reason acoustic tags must come from
+listening alone: the voice-activity and quality features are evaluated *against* those tags, so
+reading the features first would make their evaluation circular.
+
+Rows in the subset with no prepared clip are pipeline gaps, not review items; the page marks them
+non-reviewable and `review-import` ignores rows with no verdict.
+
 ## Artifacts
 
 | Path | Committed? | Contents |
 | --- | --- | --- |
 | `config-v1.json`, `config-schema-v1.json`, `result-schema-v1.json` | yes | frozen configuration and validated schemas |
-| `caption_reliability.py`, `run_reliability.py` | yes | sampling, scoring aggregation, stage runner |
+| `caption_reliability.py`, `run_reliability.py`, `review_app.py` | yes | sampling, scoring aggregation, stage runner, review page |
 | `results.json` | on completion | run manifest, aggregates, denominators, policies — **no caption or ASR text** |
-| `data/experiments/audio-caption-reliability/<run-id>/` | no (gitignored) | `sample.json(l)`, `clips.jsonl`, `asr.jsonl`, `scored.jsonl`, `features.jsonl`, `reviewed.jsonl`, `review-worksheet.json` |
+| `data/experiments/audio-caption-reliability/<run-id>/` | no (gitignored) | `sample.json(l)`, `clips.jsonl`, `asr.jsonl`, `scored.jsonl`, `features.jsonl`, `reviewed.jsonl`, `review-worksheet.json`, `review.html` |
 | `data/raw/.../audio/`, `data/derived/audio/clips/` | no (gitignored) | source audio and derived clips |
 
 Per-item rows retain caption text, ASR text, ASR segment and word timings with their diagnostic

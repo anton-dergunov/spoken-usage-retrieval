@@ -1,11 +1,12 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import sys
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, get_args
 
 import pytest
 from audio_fixtures import install_caption_video, install_raw_audio, write_wave
@@ -13,9 +14,12 @@ from audio_fixtures import install_caption_video, install_raw_audio, write_wave
 EXPERIMENT = Path(__file__).parents[1] / "experiments/audio-caption-reliability"
 sys.path.insert(0, str(EXPERIMENT))
 
+import review_app  # noqa: E402
 import run_reliability  # noqa: E402
 from caption_reliability import (  # noqa: E402
+    ACOUSTIC_VOCABULARY,
     RECOMMENDATIONS,
+    REVIEW_TAGS,
     Candidate,
     ExperimentConfig,
     ResultRow,
@@ -29,6 +33,13 @@ from caption_reliability import (  # noqa: E402
     quantiles,
     review_subset,
     select_sample,
+)
+from review_app import (  # noqa: E402
+    ACOUSTIC_ANCHORS,
+    CAPTION_VERDICTS,
+    REFERENCE_ASSESSMENTS,
+    TAG_ANCHORS,
+    render_review_app,
 )
 
 
@@ -53,8 +64,45 @@ def test_the_committed_configuration_is_valid_and_freezes_the_reference_settings
     assert config.audio.padding_seconds == 0.0
     assert config.audio.use_segment_clip_range is True
     assert config.authorization.required is True
-    assert config.authorization.confirmed is False
     assert list(config.recommendations) == list(RECOMMENDATIONS)
+
+
+def test_confirming_authorization_without_recording_a_basis_is_rejected():
+    payload = json.loads((EXPERIMENT / "config-v1.json").read_text(encoding="utf-8"))
+    unrecorded = {
+        **payload,
+        "authorization": {
+            "required": True,
+            "confirmed": True,
+            "basis": None,
+            "allowlist_path": None,
+        },
+    }
+    with pytest.raises(ValueError, match="requires a recorded basis"):
+        ExperimentConfig.model_validate(unrecorded).validated()
+
+    recorded = {
+        **payload,
+        "authorization": {
+            "required": True,
+            "confirmed": True,
+            "basis": "operator assessment recorded 2026-09-07",
+            "allowlist_path": None,
+        },
+    }
+    assert ExperimentConfig.model_validate(recorded).validated().authorization.confirmed is True
+
+    ExperimentConfig.model_validate(
+        {
+            **payload,
+            "authorization": {
+                "required": True,
+                "confirmed": False,
+                "basis": None,
+                "allowlist_path": None,
+            },
+        }
+    ).validated()
 
 
 @pytest.mark.parametrize(
@@ -288,6 +336,7 @@ def experiment_args(tmp_path, **overrides):
         "output": None,
         "force": False,
         "retry_failed": False,
+        "no_embed_audio": False,
     }
     return SimpleNamespace(**{**defaults, **overrides})
 
@@ -517,3 +566,170 @@ def test_the_review_subset_is_predeclared_and_always_includes_failures():
     assert review_subset(rows, config.review.model_copy(update={"subset": "all"}), 1) == sorted(
         row.segment_id for row in rows
     )
+
+
+def embedded_payload(document: str) -> str:
+    match = re.search(
+        r'<script type="application/json" id="payload">(.*?)</script>', document, re.S
+    )
+    assert match is not None, "the review page must embed its worksheet payload"
+    return match.group(1)
+
+
+def worksheet_fixture(tmp_path, *, with_clip=True):
+    clip = write_wave(tmp_path / "clip.wav", seconds=0.5) if with_clip else tmp_path / "gone.wav"
+    return {
+        "run_id": "test-run",
+        "rubric_version": "caption-review-v1",
+        "review_tags": list(REVIEW_TAGS),
+        "acoustic_vocabulary": list(ACOUSTIC_VOCABULARY),
+        "reviewed": 1,
+        "total": 2,
+        "predeclared_subset": "failed_plus_stratified_bins",
+        "items": [
+            {
+                "segment_id": "seg_0001",
+                "stratum": "es/authored",
+                "video_key": "vid_a",
+                "channel": "channel-a",
+                "clip": str(clip),
+                "caption_text": "hola <b>qué</b> tal",
+                "asr_text": "hola que tal",
+                "error_rate": 0.33,
+                "status": "complete",
+                "caption_verdict": None,
+                "reference_assessment": None,
+                "tags": [],
+                "acoustic_tags": [],
+                "reviewer": None,
+                "reviewed_at": None,
+                "note": None,
+                "corrected_transcript": None,
+            }
+        ],
+    }
+
+
+def test_every_review_vocabulary_term_has_an_anchor_a_reviewer_can_act_on():
+    assert set(TAG_ANCHORS) == set(REVIEW_TAGS)
+    assert set(ACOUSTIC_ANCHORS) == set(ACOUSTIC_VOCABULARY)
+    assert all(len(anchor) > 30 for anchor in TAG_ANCHORS.values())
+    assert all(len(anchor) > 30 for anchor in ACOUSTIC_ANCHORS.values())
+
+
+def test_review_options_match_the_recorded_review_schema():
+    verdicts = get_args(ReviewRecord.model_fields["caption_verdict"].annotation)
+    assessments = get_args(ReviewRecord.model_fields["reference_assessment"].annotation)
+
+    assert [value for value, _label, _anchor in CAPTION_VERDICTS] == list(verdicts)
+    assert [value for value, _label, _anchor in REFERENCE_ASSESSMENTS] == list(assessments)
+    assert all(anchor for _value, _label, anchor in CAPTION_VERDICTS)
+    assert all(anchor for _value, _label, anchor in REFERENCE_ASSESSMENTS)
+
+
+def test_the_review_page_is_one_self_contained_document_with_its_clips_embedded(tmp_path):
+    worksheet = worksheet_fixture(tmp_path)
+
+    document = render_review_app(worksheet)
+
+    assert document.startswith("<!doctype html>")
+    assert document.rstrip().endswith("</html>")
+    payload = json.loads(embedded_payload(document))
+    assert payload["audio"]["seg_0001"].startswith("data:audio/wav;base64,")
+    assert payload["embeddedBytes"] == (tmp_path / "clip.wav").stat().st_size
+    assert [item["id"] for item in payload["tags"]] == list(REVIEW_TAGS)
+    assert [item["id"] for item in payload["acoustics"]] == list(ACOUSTIC_VOCABULARY)
+    assert "</script>" not in payload["worksheet"]["items"][0]["caption_text"]
+    assert "http://" not in document and "https://" not in document
+
+
+def test_a_row_without_a_prepared_clip_is_rendered_but_not_reviewable(tmp_path):
+    document = render_review_app(worksheet_fixture(tmp_path, with_clip=False))
+
+    payload = json.loads(embedded_payload(document))
+    assert payload["audio"] == {}
+    assert payload["embeddedBytes"] == 0
+    assert payload["worksheet"]["items"][0]["segment_id"] == "seg_0001"
+
+
+def test_embedding_stops_at_the_size_cap_instead_of_producing_an_unusable_page(
+    tmp_path, monkeypatch
+):
+    monkeypatch.setattr(review_app, "MAX_EMBEDDED_BYTES", 10)
+
+    audio, total = review_app.collect_audio(worksheet_fixture(tmp_path))
+
+    assert audio == {} and total == 0
+
+
+def test_the_review_page_round_trips_into_an_importable_worksheet(tmp_path, capsys):
+    build_corpus(tmp_path, videos=1, segments_per_video=2)
+    config_path = small_config(tmp_path)
+    config = run_reliability.load_config(config_path)
+    args = experiment_args(tmp_path, config=config_path)
+    run_root = tmp_path / "runs" / "test-run"
+    run_reliability.command_sample(args, config)
+    rows = run_reliability.read_rows(run_root / "sample.jsonl")
+    scored = [
+        row.model_copy(
+            update={
+                "status": "complete",
+                "asr_text": "esta es la frase",
+                "clip_key": "clp_" + "a" * 20,
+                "effective_start": 1.0,
+                "effective_end": 4.0,
+                "score": ScoreRecord(
+                    metric="wer",
+                    normalization_version="word-v1",
+                    error_rate=0.25,
+                    agreement=0.75,
+                    hits=3,
+                    substitutions=1,
+                    deletions=0,
+                    insertions=0,
+                    reference_length=4,
+                    hypothesis_length=4,
+                    normalized_reference="a",
+                    normalized_hypothesis="b",
+                ),
+            }
+        )
+        for row in rows
+    ]
+    run_reliability.write_rows(run_root / "scored.jsonl", scored)
+
+    assert run_reliability.command_review_export(args, config) == 0
+    assert run_reliability.command_review_html(args, config) == 0
+    capsys.readouterr()
+    assert (run_root / "review.html").is_file()
+
+    worksheet = json.loads((run_root / "review-worksheet.json").read_text())
+    assert worksheet["items"][0]["duration"] == 3.0
+    assert worksheet["items"][0]["status"] == "complete"
+    for item in worksheet["items"]:
+        item.update(
+            caption_verdict="incorrect",
+            reference_assessment="asr_better",
+            tags=["meaning_change"],
+            acoustic_tags=["fast_speech"],
+            reviewer="reviewer-1",
+            reviewed_at="2026-09-07T00:00:00+00:00",
+        )
+    filled = run_root / "filled.json"
+    filled.write_text(json.dumps(worksheet), encoding="utf-8")
+
+    assert (
+        run_reliability.command_review_import(
+            experiment_args(tmp_path, config=config_path, worksheet=filled), config
+        )
+        == 0
+    )
+    capsys.readouterr()
+
+    reviewed = run_reliability.read_rows(run_root / "reviewed.jsonl")
+    assert all(row.review is not None for row in reviewed)
+    assert {row.review.caption_verdict for row in reviewed if row.review} == {"incorrect"}
+    assert {tuple(row.acoustic_tags) for row in reviewed} == {("fast_speech",)}
+    summary = aggregate(reviewed, config)
+    assert summary["overall"]["confirmed_caption_errors"] == len(reviewed)
+    assert summary["by_acoustic_tag"]["fast_speech"]["segments"] == len(reviewed)

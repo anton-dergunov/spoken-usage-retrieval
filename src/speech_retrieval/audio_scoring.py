@@ -340,6 +340,7 @@ def jiwer_reference_counts(
         import jiwer
     except ImportError:
         return None
+    output: Any
     if unit == "character":
         output = jiwer.process_characters(["".join(reference_tokens)], ["".join(hypothesis_tokens)])
     else:

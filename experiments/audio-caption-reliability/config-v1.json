@@ -10,8 +10,13 @@
     "each predeclared source class receives exactly one recommendation with cited distributions and reviewed examples",
     "each optional acoustic feature is marked usable, not_usable, or insufficient_evidence against a predeclared human counterpart"
   ],
-  "source_languages": ["es"],
-  "source_classes": ["es/authored", "es/automatic"],
+  "source_languages": [
+    "es"
+  ],
+  "source_classes": [
+    "es/authored",
+    "es/automatic"
+  ],
   "recommendations": [
     "use_directly",
     "attach_score",
@@ -83,7 +88,9 @@
     "beam_size": 5,
     "best_of": 5,
     "patience": 1.0,
-    "temperature": [0.0],
+    "temperature": [
+      0.0
+    ],
     "condition_on_previous_text": false,
     "vad_filter": false,
     "word_timestamps": true,
@@ -91,8 +98,12 @@
   },
   "scoring": {
     "orientation": "reference=asr,hypothesis=caption",
-    "normalization": {"es": "word-v1"},
-    "sensitivity_normalization": {"es": "word-accent-folded-v1"}
+    "normalization": {
+      "es": "word-v1"
+    },
+    "sensitivity_normalization": {
+      "es": "word-accent-folded-v1"
+    }
   },
   "features": {
     "caption_agreement": true,
@@ -112,7 +123,20 @@
   "review": {
     "rubric_version": "caption-review-v1",
     "subset": "failed_plus_stratified_bins",
-    "disagreement_bins": [[0.0, 0.1], [0.1, 0.3], [0.3, 1000.0]],
+    "disagreement_bins": [
+      [
+        0.0,
+        0.1
+      ],
+      [
+        0.1,
+        0.3
+      ],
+      [
+        0.3,
+        1000.0
+      ]
+    ],
     "per_bin_per_stratum": 5,
     "duplicate_review_fraction": 0.1
   },

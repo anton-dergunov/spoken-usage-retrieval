@@ -119,6 +119,7 @@ def test_smoke_builds_and_queries_temporary_synthetic_corpus(capsys):
 
 
 def test_update_threads_the_audio_flag_through_settings_and_defaults_to_disabled(monkeypatch):
+    monkeypatch.setenv("SPEECH_RETRIEVAL_WITH_AUDIO", "false")
     received = {}
 
     def fake_indexer(settings):
@@ -219,6 +220,7 @@ def test_doctor_treats_media_tools_as_optional_until_audio_is_enabled(
     tmp_path, monkeypatch, capsys
 ):
     monkeypatch.setattr(cli.shutil, "which", lambda _name: None)
+    monkeypatch.setenv("SPEECH_RETRIEVAL_WITH_AUDIO", "false")
 
     assert cli.main(["doctor", "--data-dir", str(tmp_path), "--json"]) == 1
     disabled = {item["name"]: item for item in json.loads(capsys.readouterr().out)["checks"]}

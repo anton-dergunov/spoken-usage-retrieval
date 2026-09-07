@@ -170,6 +170,14 @@ class Authorization(Model):
     basis: str | None = None
     allowlist_path: str | None = None
 
+    def validated(self) -> Authorization:
+        if self.confirmed and not (self.basis or "").strip():
+            raise ValueError(
+                "authorization.confirmed requires a recorded basis: the report must be able "
+                "to state on what grounds these sources were downloaded and retained"
+            )
+        return self
+
 
 class ExperimentConfig(Model):
     config_version: Literal[1] = 1
@@ -206,6 +214,7 @@ class ExperimentConfig(Model):
                 raise ValueError(f"no normalization is configured for {language}")
         if set(self.recommendations) != set(RECOMMENDATIONS):
             raise ValueError("the recommendation vocabulary is fixed by the plan")
+        self.authorization.validated()
         return self
 
 
