@@ -46,6 +46,20 @@ class PreparedClipPaths:
     manifest: Path
 
 
+@dataclass(frozen=True, slots=True)
+class RawAudioPaths:
+    directory: Path
+    manifest: Path
+
+
+def raw_audio_paths(data_dir: Path, *, language: str, video_key: str) -> RawAudioPaths:
+    language = canonical_language(language)
+    if VIDEO_KEY_RE.fullmatch(video_key) is None:
+        raise ValueError("video_key must be a stable video ID")
+    directory = Path(data_dir) / "raw" / "corpora" / language / video_key / "audio"
+    return RawAudioPaths(directory=directory, manifest=directory / "manifest.json")
+
+
 def prepared_clip_paths(
     data_dir: Path,
     *,

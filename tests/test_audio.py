@@ -15,10 +15,19 @@ from speech_retrieval.audio import (
     AudioProbeError,
     prepared_clip_paths,
     probe_audio,
+    raw_audio_paths,
     validate_prepared_clip,
 )
 
 SOURCE_SHA256 = "a" * 64
+
+
+def test_raw_audio_paths_resolves_the_canonical_video_cache_layout(tmp_path):
+    paths = raw_audio_paths(tmp_path, language="ES-mx", video_key="vid_" + "a" * 20)
+
+    expected = tmp_path / "raw/corpora/es-MX" / ("vid_" + "a" * 20) / "audio"
+    assert paths.directory == expected
+    assert paths.manifest == expected / "manifest.json"
 
 
 def test_prepared_clip_paths_resolves_the_canonical_derived_layout(tmp_path):
