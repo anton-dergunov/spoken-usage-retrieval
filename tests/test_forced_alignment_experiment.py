@@ -19,12 +19,14 @@ from alignment_eval import (  # noqa: E402
     ReviewItem,
     Sampling,
     SystemResult,
+    TimedGroup,
     WordComparison,
     bootstrap_interval,
     choose_review_clips,
-    cue_interpolated_words,
-    cue_start_words,
+    cue_interpolated_groups,
+    cue_start_groups,
     engine_agreement,
+    group_starts,
     kendall_tau,
     match_words,
     quantile,
@@ -52,6 +54,15 @@ def row(
                 status="complete",
                 coverage=1.0,
                 mean_confidence=0.9,
+                groups=[
+                    TimedGroup(
+                        text=f"w{index}",
+                        char_start=index * 3,
+                        char_end=index * 3 + 2,
+                        start=1.0 + value,
+                    )
+                    for index, value in enumerate(values)
+                ],
                 comparisons=[
                     WordComparison(text=f"w{index}", aligned_start=1.0 + value, reference_start=1.0)
                     for index, value in enumerate(values)
@@ -113,19 +124,32 @@ def test_match_words_returns_nothing_when_no_word_agrees() -> None:
 
 
 def test_cue_start_gives_every_word_the_same_time() -> None:
-    assert cue_start_words("uno dos tres", 2.0) == [("uno", 2.0), ("dos", 2.0), ("tres", 2.0)]
+    groups = cue_start_groups("uno dos tres", 2.0)
+    assert group_starts(groups) == [("uno", 2.0), ("dos", 2.0), ("tres", 2.0)]
 
 
 def test_cue_interpolation_spreads_words_across_the_cue_in_order() -> None:
-    words = cue_interpolated_words("uno dos tres", 0.0, 3.0)
-    starts = [start for _, start in words]
+    groups = cue_interpolated_groups("uno dos tres", 0.0, 3.0)
+    starts = [group.start for group in groups]
     assert starts == sorted(starts)
     assert starts[0] == 0.0
     assert starts[-1] < 3.0
 
 
 def test_cue_interpolation_degrades_to_cue_start_for_a_zero_length_cue() -> None:
-    assert cue_interpolated_words("uno dos", 1.0, 1.0) == [("uno", 1.0), ("dos", 1.0)]
+    assert group_starts(cue_interpolated_groups("uno dos", 1.0, 1.0)) == [
+        ("uno", 1.0),
+        ("dos", 1.0),
+    ]
+
+
+def test_every_baseline_group_carries_the_character_range_of_its_word() -> None:
+    """Character ranges are what the review page highlights by; word position is not enough."""
+    text = "uno, dos tres"
+    for groups in (cue_start_groups(text, 0.0), cue_interpolated_groups(text, 0.0, 2.0)):
+        assert [group.text for group in groups] == ["uno", "dos", "tres"]
+        for group in groups:
+            assert text[group.char_start : group.char_end] == group.text
 
 
 # --- Statistics --------------------------------------------------------------------------
@@ -359,8 +383,15 @@ def test_the_review_page_is_self_contained_and_withholds_the_assignment() -> Non
         .split("</script>")[0]
         .replace("<\\/", "</")
     )
-    assert payload["timing"]["r01"]["A"] == [{"text": "w0", "start": 1.02}]
-    assert payload["timing"]["r01"]["B"] == [{"text": "w0", "start": 1.4}]
+    # Character ranges, not word positions: this is the fix for the defect that invalidated the
+    # first review pass, where a system timing fewer words than the text shows shifted every
+    # later highlight.
+    assert payload["timing"]["r01"]["A"] == [
+        {"text": "w0", "start": 1.02, "char_start": 0, "char_end": 2}
+    ]
+    assert payload["timing"]["r01"]["B"] == [
+        {"text": "w0", "start": 1.4, "char_start": 0, "char_end": 2}
+    ]
 
 
 def test_the_review_page_escapes_a_closing_script_tag_in_caption_text() -> None:

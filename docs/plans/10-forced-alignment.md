@@ -106,6 +106,34 @@ manual-caption material instead of requiring full-corpus alignment.
 - The ordinary test suite and the exact subtitle-only player continue to work without alignment
   extras installed.
 
+## Outstanding: multilingual validation
+
+**Required, not started.** Everything measured so far is Spanish. The code paths for other
+languages are wired and unit-tested — `tests/test_alignment_languages.py` proves model resolution,
+romanization, and vocabulary folding for `es`, `en` and `ru`, and its opt-in real-checkpoint tests
+(`SPEECH_RETRIEVAL_ALIGNMENT_MODEL_TESTS=1`) load all six language/profile combinations — but no
+language other than Spanish has been *measured* against audio.
+
+What is missing, in order:
+
+1. **Channel catalogues for `en` and `ru`** (`config/channels/en.json`, `config/channels/ru.json`).
+   This is the only hard blocker; everything downstream is already automated.
+2. **A measured run per language.** `config-v1.json` takes a `languages` list and the experiment
+   already produces one results table per language, so adding a language is a configuration change,
+   not code. `report --markdown` writes the per-language tables ready to paste.
+3. **At least one language the reviewer does not speak.** Judging synchronisation does not require
+   understanding the words — the reviewer hears speech and watches a highlight — so the listening
+   pass extends to unfamiliar languages, and it is the only way to separate "this timing is good"
+   from "I know what was said and filled in the gaps." What it cannot check in an unknown language
+   is whether the caption text itself is right, so those runs judge sync only.
+4. **Russian specifically, because it is the case Spanish cannot test.** MMS aligns through a
+   romanized vocabulary. In Spanish that is near-identity accent folding; in Cyrillic it is a real
+   transliteration where one source character can become several romanized ones. The character-range
+   mapping that keeps offsets pointing into the original text is exercised properly only there.
+
+Until those runs exist, the recommendation in the report — align authored tracks, skip automatic
+ones — is a **Spanish** finding, and the report says so.
+
 ## Non-goals
 
 - Phoneme-perfect timing, speaker diarization, or mandatory alignment of every indexed segment.

@@ -40,6 +40,9 @@ GUIDE = """
       mean the models are not earning their cost.</li>
   <li><strong>Tag what is wrong</strong> when a system is not in sync. Empty tags are fine
       for anything you rated in sync.</li>
+  <li><strong>A faintly shaded word</strong> is one no system timed independently; it is carried
+      along with the word before it. That is a gap in the alignment, not a sync error, so judge
+      the words that do carry their own highlight.</li>
   <li>Some clips repeat later with the systems shuffled differently. That is deliberate: it
       measures how consistent your own judgements are, which is the ceiling for every
       agreement number in the report. Just judge them as you find them.</li>
@@ -79,10 +82,14 @@ def collect_audio(worksheet: dict[str, Any]) -> tuple[dict[str, str], int]:
 
 
 def timing_payload(rows: dict[str, Any], worksheet: dict[str, Any]) -> dict[str, Any]:
-    """Per review item, the timed word groups for each blind label.
+    """Per review item, each blind label's timed groups with their source character ranges.
 
-    Only ``matched`` groups carry times; the page renders everything else as plain text, so
-    an unmatched word is visibly never highlighted rather than being quietly skipped.
+    This reads ``SystemResult.groups`` -- what the system actually produced -- and never
+    ``comparisons``, which holds only the subset that matched the scoring reference. The first
+    review pass used ``comparisons`` and positional indexing, so any caption word the reference
+    ASR heard differently shifted every later word's highlight and left the tail untimed. The
+    result was that the models appeared to jump between words while the smooth baseline did not,
+    which is a property of the renderer and not of the models.
     """
     payload: dict[str, Any] = {}
     for item in worksheet.get("items", []):
@@ -95,7 +102,13 @@ def timing_payload(rows: dict[str, Any], worksheet: dict[str, Any]) -> dict[str,
             if result is None:
                 continue
             per_label[label] = [
-                {"text": pair.text, "start": pair.aligned_start} for pair in result.comparisons
+                {
+                    "text": group.text,
+                    "start": group.start,
+                    "char_start": group.char_start,
+                    "char_end": group.char_end,
+                }
+                for group in result.groups
             ]
         payload[item["review_id"]] = per_label
     return payload
@@ -138,14 +151,14 @@ _TEMPLATE = r"""<!doctype html>
   :root {
     --bg: #f7f6f3; --card: #ffffff; --ink: #1c1b19; --muted: #6b6864;
     --line: #dedad3; --accent: #7a5c2e; --warn: #8a4b2a; --ok: #3f6b45;
-    --spoken: #2f5d8a; --spoken-bg: #dbe9f6;
+    --spoken: #2f5d8a; --spoken-bg: #dbe9f6; --carry-bg: #eceff2;
     color-scheme: light dark;
   }
   @media (prefers-color-scheme: dark) {
     :root {
       --bg: #171614; --card: #201f1c; --ink: #ece9e3; --muted: #a09b93;
       --line: #34322d; --accent: #d4b483; --warn: #e0a080; --ok: #8fc396;
-      --spoken: #9fc7ec; --spoken-bg: #22364a;
+      --spoken: #9fc7ec; --spoken-bg: #22364a; --carry-bg: #2b2f34;
     }
   }
   * { box-sizing: border-box; }
@@ -189,7 +202,8 @@ _TEMPLATE = r"""<!doctype html>
   .karaoke { margin: 0 0 10px; font-size: 17px; line-height: 1.7; }
   .karaoke .w { transition: color .08s linear, background-color .08s linear; border-radius: 3px; }
   .karaoke .w.on { color: var(--spoken); background: var(--spoken-bg); font-weight: 600; }
-  .karaoke .w.untimed { color: var(--muted); font-style: italic; }
+  /* Carried along with the previous word's highlight: visibly not independently timed. */
+  .karaoke .w.carried.on { background: var(--carry-bg); color: var(--ink); font-weight: 400; }
   .choices { display: flex; gap: 6px; flex-wrap: wrap; }
   label.opt {
     display: inline-flex; gap: 6px; align-items: center; padding: 5px 10px;
@@ -300,31 +314,44 @@ _TEMPLATE = r"""<!doctype html>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[character]);
   }
 
-  // Render the sentence once per system, splitting on whitespace so every word is a span.
-  // Words the system did not time are marked and never highlight, rather than being hidden:
-  // an alignment with gaps should look like one.
+  // Build spans from the systems' own character ranges, never by word position. Position-based
+  // matching breaks as soon as a system times a different number of words than the text shows.
+  // Words no system timed are carried along with the preceding timed word rather than left dark,
+  // so the highlight never blinks out -- but they are styled differently, because carrying a
+  // highlight across a word is not the same as knowing when that word was said.
   function karaoke(item, label) {
-    const timed = (data.timing[item.review_id] || {})[label] || [];
+    const groups = ((data.timing[item.review_id] || {})[label] || [])
+      .slice()
+      .sort((a, b) => a.char_start - b.char_start);
     const box = document.createElement("p");
     box.className = "karaoke";
-    const words = item.text.split(/(\s+)/);
-    let cursor = 0;
     const spans = [];
-    for (const chunk of words) {
-      if (!chunk.trim()) { box.append(document.createTextNode(chunk)); continue; }
+    let cursor = 0;
+
+    function addSpan(from, to, start) {
+      if (to <= from) return;
       const span = document.createElement("span");
-      span.className = "w";
-      span.textContent = chunk;
-      const entry = timed[cursor];
-      const bare = chunk.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, "");
-      if (entry && bare && entry.text && entry.text.replace(/[^\p{L}\p{N}]/gu, "").length) {
-        span.dataset.start = entry.start;
-        cursor += 1;
-      } else if (bare) {
-        span.classList.add("untimed");
-      }
+      span.className = "w" + (start === null ? " carried" : "");
+      span.textContent = item.text.slice(from, to);
+      if (start !== null) span.dataset.start = start;
       spans.push(span);
       box.append(span);
+    }
+
+    for (const group of groups) {
+      if (group.char_start < cursor) continue;  // defensive: ranges must not overlap
+      addSpan(cursor, group.char_start, null);
+      addSpan(group.char_start, group.char_end, group.start);
+      cursor = group.char_end;
+    }
+    addSpan(cursor, item.text.length, null);
+
+    // Give each untimed span the preceding timed span's time, for highlighting only. It inherits
+    // the highlight instead of being skipped; it never claims a time of its own.
+    let carried = null;
+    for (const span of spans) {
+      if (span.dataset.start !== undefined) carried = span.dataset.start;
+      else if (carried !== null) span.dataset.carry = carried;
     }
     return { box, spans };
   }
@@ -416,12 +443,15 @@ _TEMPLATE = r"""<!doctype html>
     player.addEventListener("timeupdate", () => {
       const at = player.currentTime;
       for (const spans of groups) {
-        let active = null;
+        let activeStart = null;
         for (const span of spans) {
-          if (span.dataset.start === undefined) continue;
-          if (parseFloat(span.dataset.start) <= at) active = span;
+          const own = span.dataset.start;
+          if (own !== undefined && parseFloat(own) <= at) activeStart = own;
         }
-        for (const span of spans) span.classList.toggle("on", span === active);
+        for (const span of spans) {
+          const mine = span.dataset.start !== undefined ? span.dataset.start : span.dataset.carry;
+          span.classList.toggle("on", activeStart !== null && mine === activeStart);
+        }
       }
     });
     player.addEventListener("ended", () => {

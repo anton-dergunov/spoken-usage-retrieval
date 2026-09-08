@@ -33,6 +33,13 @@
           "title": "Seconds",
           "type": "number"
         },
+        "groups": {
+          "items": {
+            "$ref": "#/$defs/TimedGroup"
+          },
+          "title": "Groups",
+          "type": "array"
+        },
         "comparisons": {
           "items": {
             "$ref": "#/$defs/WordComparison"
@@ -58,6 +65,48 @@
         "status"
       ],
       "title": "SystemResult",
+      "type": "object"
+    },
+    "TimedGroup": {
+      "additionalProperties": false,
+      "description": "One timed word, carrying its character range in the source text.\n\nThe review page highlights by character range rather than by word position. Position-based\nmatching silently breaks whenever a system times a different number of words than the text\ndisplays, which is exactly the defect that invalidated the first review pass.",
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "char_start": {
+          "title": "Char Start",
+          "type": "integer"
+        },
+        "char_end": {
+          "title": "Char End",
+          "type": "integer"
+        },
+        "start": {
+          "title": "Start",
+          "type": "number"
+        },
+        "end": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "End"
+        }
+      },
+      "required": [
+        "text",
+        "char_start",
+        "char_end",
+        "start"
+      ],
+      "title": "TimedGroup",
       "type": "object"
     },
     "WordComparison": {

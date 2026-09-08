@@ -1,9 +1,17 @@
 {
   "version": 1,
-  "languages": ["es"],
+  "languages": [
+    "es"
+  ],
   "models": [
-    { "name": "mms", "profile": "mms" },
-    { "name": "permissive", "profile": "permissive" }
+    {
+      "name": "mms",
+      "profile": "mms"
+    },
+    {
+      "name": "permissive",
+      "profile": "permissive"
+    }
   ],
   "sampling": {
     "target_per_cell": 100,
@@ -13,8 +21,12 @@
     "max_clip_seconds": 20.0,
     "review_clips": 20,
     "review_repeats": 3,
-    "seed": 20260908
+    "seed": 20260909
   },
-  "tolerances": [0.1, 0.2, 0.3],
+  "tolerances": [
+    0.1,
+    0.2,
+    0.3
+  ],
   "notes": "Languages list grows to en and ru once those channel catalogues exist. The reference is YouTube's automatic-caption word start times; end times are parser estimates and are never scored."
 }

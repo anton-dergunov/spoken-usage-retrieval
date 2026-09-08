@@ -37,9 +37,10 @@ from alignment_eval import (  # noqa: E402
     ReviewItem,
     SystemResult,
     choose_review_clips,
-    cue_interpolated_words,
-    cue_start_words,
+    cue_interpolated_groups,
+    cue_start_groups,
     engine_agreement,
+    group_starts,
     match_words,
     reference_starts,
     review_agreement,
@@ -449,7 +450,7 @@ def command_align(args: argparse.Namespace, config: ExperimentConfig) -> int:
                 )
             )
             # Timed words are attached at score time; store them on the row for reuse.
-            _stash_words(row, spec.name, result)
+            _record_groups(row, spec.name, result)
         write_rows(output, rows)
         if (index + 1) % 10 == 0:
             print(f"  {index + 1}/{len(rows)} aligned ({time.time() - started:.0f}s)")
@@ -467,28 +468,28 @@ def command_align(args: argparse.Namespace, config: ExperimentConfig) -> int:
     return 0
 
 
-_WORDS: dict[tuple[str, str], list[tuple[str, float]]] = {}
+def _record_groups(row: ResultRow, system: str, result: Any) -> None:
+    """Store what the aligner actually produced, with source character ranges.
 
-
-def _stash_words(row: ResultRow, system: str, result: Any) -> None:
-    """Keep timed words on the row as comparisons against a null reference for now.
-
-    ``score`` replaces the reference side once the automatic track is loaded; storing them
-    here avoids re-running the models when only the scoring changes.
+    Scoring later keeps only the words that match the reference, but the review page must show
+    every word the model timed. Conflating the two is what made the first review pass measure a
+    rendering defect instead of the models.
     """
-    words = [
-        (group.text, group.start)
-        for group in result.groups
-        if group.match_status == "matched" and group.start is not None
-    ]
     entry = row.system(system)
     if entry is None:
         return
-    from alignment_eval import WordComparison
+    from alignment_eval import TimedGroup
 
-    entry.comparisons = [
-        WordComparison(text=text, aligned_start=start, reference_start=start)
-        for text, start in words
+    entry.groups = [
+        TimedGroup(
+            text=group.text,
+            char_start=group.char_start,
+            char_end=group.char_end,
+            start=group.start,
+            end=group.end,
+        )
+        for group in result.groups
+        if group.match_status == "matched" and group.start is not None
     ]
 
 
@@ -527,24 +528,26 @@ def command_score(args: argparse.Namespace, config: ExperimentConfig) -> int:
         # keeping them in one place makes the comparison obviously like-for-like.
         duration = row.clip_end - row.clip_start
         baselines = {
-            CUE_START: cue_start_words(row.text, 0.0),
-            CUE_INTERPOLATED: cue_interpolated_words(row.text, 0.0, duration),
+            CUE_START: cue_start_groups(row.text, 0.0),
+            CUE_INTERPOLATED: cue_interpolated_groups(row.text, 0.0, duration),
         }
         row.systems = [item for item in row.systems if item.system not in BASELINES]
-        for name, words in baselines.items():
+        for name, groups in baselines.items():
             row.systems.append(
                 SystemResult(
                     system=name,
                     status="complete",
                     coverage=1.0,
-                    comparisons=match_words(words, reference) if reference else [],
+                    groups=groups,
+                    comparisons=(match_words(group_starts(groups), reference) if reference else []),
                 )
             )
         for entry in row.systems:
             if entry.system in BASELINES:
                 continue
-            aligned = [(item.text, item.aligned_start) for item in entry.comparisons]
-            entry.comparisons = match_words(aligned, reference) if reference else []
+            entry.comparisons = (
+                match_words(group_starts(entry.groups), reference) if reference else []
+            )
         row.stage = "scored"
     write_rows(root / "scored.jsonl", rows)
 
@@ -670,8 +673,49 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
         "review_agreement": _maybe_json(agreement_path),
     }
     write_json(Path(args.results), payload)
+    if args.markdown:
+        Path(args.markdown).write_text(_render_markdown(scores), encoding="utf-8")
+        print(f"wrote {args.markdown}")
     print(_render_table(scores))
     return 0
+
+
+def _render_markdown(scores: dict[str, Any]) -> str:
+    """One results table per language, ready to paste into the report.
+
+    Generated rather than hand-written so adding a language costs nothing: whatever languages the
+    run covered appear here, in the same shape, with the same caveats attached.
+    """
+    summaries = scores.get("summaries", [])
+    languages = sorted({row["language"] for row in summaries})
+    out: list[str] = []
+    for language in languages:
+        out.append(f"### {language}\n")
+        out.append(
+            "| Cell | System | Segments | Videos | Words | median &#124;Δ&#124; | p90 | "
+            "median signed | <200ms |"
+        )
+        out.append("| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |")
+        for row in summaries:
+            if row["language"] != language:
+                continue
+            flag = " *" if row.get("indicative_only") else ""
+            out.append(
+                f"| {row['language']} / {row['source_class']} | {row['system']} | "
+                f"{row['segments']}{flag} | {row['videos']} | {row['words']} | "
+                f"{row['median_abs']:.3f} | {row['p90_abs']:.3f} | "
+                f"{row['median_signed']:+.3f} | {row['within'].get('200ms', 0):.3f} |"
+            )
+        out.append("")
+    engine = scores.get("engine_agreement") or {}
+    if engine.get("pairs"):
+        out.append(
+            f"Engine-to-engine agreement over {engine['pairs']} shared word pairs: "
+            f"median |Δ| {engine['median_abs']:.3f} s, "
+            f"{engine['within_200ms']:.1%} within 200 ms.\n"
+        )
+    out.append("`*` cell below the configured minimum sample size; indicative only.")
+    return "\n".join(out) + "\n"
 
 
 def _maybe_json(path: Path) -> Any:
@@ -757,6 +801,11 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     review_import.set_defaults(handler=command_review_import)
 
     report = commands.add_parser("report", help="Write results.json and print the table.")
+    report.add_argument(
+        "--markdown",
+        default="",
+        help="Also write the per-language results tables as markdown to this path.",
+    )
     report.set_defaults(handler=command_report)
     return parser.parse_args(argv)
 

@@ -1,7 +1,7 @@
 {
   "result_schema_version": 1,
   "run_id": "run-1",
-  "generated_at": "2026-09-08T15:08:06.230586+00:00",
+  "generated_at": "2026-09-08T18:14:54.797260+00:00",
   "config": {
     "version": 1,
     "languages": [
@@ -25,7 +25,7 @@
       "max_clip_seconds": 20.0,
       "review_clips": 20,
       "review_repeats": 3,
-      "seed": 20260908
+      "seed": 20260909
     },
     "tolerances": [
       0.1,
@@ -36,7 +36,7 @@
   },
   "align_summary": {
     "rows": 200,
-    "wall_seconds": 90.4,
+    "wall_seconds": 58.9,
     "median_seconds_per_audio_second": 0.0232,
     "device": "auto"
   },
@@ -60,7 +60,7 @@
     }
   },
   "scores": {
-    "generated_at": "2026-09-08T14:56:38.924468+00:00",
+    "generated_at": "2026-09-08T18:06:50.069383+00:00",
     "summaries": [
       {
         "system": "mms",
@@ -87,7 +87,7 @@
         ],
         "coverage": 0.9883,
         "failures": 2,
-        "seconds_per_audio_second": 0.0295,
+        "seconds_per_audio_second": 0.0297,
         "indicative_only": false
       },
       {
@@ -115,7 +115,7 @@
         ],
         "coverage": 0.9883,
         "failures": 2,
-        "seconds_per_audio_second": 0.0213,
+        "seconds_per_audio_second": 0.0219,
         "indicative_only": false
       },
       {
@@ -199,7 +199,7 @@
         ],
         "coverage": 0.9983,
         "failures": 4,
-        "seconds_per_audio_second": 0.0262,
+        "seconds_per_audio_second": 0.026,
         "indicative_only": false
       },
       {
@@ -227,7 +227,7 @@
         ],
         "coverage": 0.9983,
         "failures": 0,
-        "seconds_per_audio_second": 0.0214,
+        "seconds_per_audio_second": 0.0218,
         "indicative_only": false
       },
       {
@@ -299,5 +299,13 @@
       "rows_with_reference": 200
     }
   },
-  "review_agreement": null
+  "review_agreement": {
+    "clips_judged": 20,
+    "clips_comparable": 20,
+    "rating_vs_error_tau": 0.2408,
+    "top_choice_hit_rate": 0.8,
+    "repeats": 3,
+    "self_consistent": 1,
+    "self_consistency_rate": 0.3333
+  }
 }

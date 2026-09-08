@@ -131,6 +131,23 @@ class WordComparison(BaseModel):
         return self.aligned_start - self.reference_start
 
 
+class TimedGroup(BaseModel):
+    """One timed word, carrying its character range in the source text.
+
+    The review page highlights by character range rather than by word position. Position-based
+    matching silently breaks whenever a system times a different number of words than the text
+    displays, which is exactly the defect that invalidated the first review pass.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    text: str
+    char_start: int
+    char_end: int
+    start: float
+    end: float | None = None
+
+
 class SystemResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -139,6 +156,9 @@ class SystemResult(BaseModel):
     coverage: float = 0.0
     mean_confidence: float | None = None
     seconds: float = 0.0
+    #: What this system actually produced, for rendering. Distinct from ``comparisons``, which is
+    #: only the subset that could be matched against the reference for scoring.
+    groups: list[TimedGroup] = Field(default_factory=list)
     comparisons: list[WordComparison] = Field(default_factory=list)
     reason: str | None = None
 
@@ -239,12 +259,15 @@ def match_words(
 # --- Baselines ---------------------------------------------------------------------------------
 
 
-def cue_start_words(text: str, cue_start: float) -> list[tuple[str, float]]:
+def cue_start_groups(text: str, cue_start: float) -> list[TimedGroup]:
     """Every word gets the cue's start: what a player does with one timing unit."""
-    return [(token.text, cue_start) for token in tokens_with_spans(text)]
+    return [
+        TimedGroup(text=token.text, char_start=token.start, char_end=token.end, start=cue_start)
+        for token in tokens_with_spans(text)
+    ]
 
 
-def cue_interpolated_words(text: str, cue_start: float, cue_end: float) -> list[tuple[str, float]]:
+def cue_interpolated_groups(text: str, cue_start: float, cue_end: float) -> list[TimedGroup]:
     """Spread words across the cue in proportion to their character position.
 
     This is the strongest timing achievable with no acoustic model at all, and therefore the
@@ -252,10 +275,23 @@ def cue_interpolated_words(text: str, cue_start: float, cue_end: float) -> list[
     """
     tokens = tokens_with_spans(text)
     if not tokens or cue_end <= cue_start:
-        return [(token.text, cue_start) for token in tokens]
+        return cue_start_groups(text, cue_start)
     span = len(text) or 1
     duration = cue_end - cue_start
-    return [(token.text, round(cue_start + duration * (token.start / span), 4)) for token in tokens]
+    return [
+        TimedGroup(
+            text=token.text,
+            char_start=token.start,
+            char_end=token.end,
+            start=round(cue_start + duration * (token.start / span), 4),
+        )
+        for token in tokens
+    ]
+
+
+def group_starts(groups: Sequence[TimedGroup]) -> list[tuple[str, float]]:
+    """The ``(text, start)`` pairs :func:`match_words` scores against the reference."""
+    return [(group.text, group.start) for group in groups]
 
 
 # --- Statistics -----------------------------------------------------------------------------------

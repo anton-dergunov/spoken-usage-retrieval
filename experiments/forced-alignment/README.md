@@ -1,7 +1,10 @@
 # Forced alignment against a recorded ASR timing reference
 
-**Status:** Spanish run complete, 2026-09-08 (`run-1`). English and Russian pending their channel
-catalogues. Human review pending.
+**Status:** Spanish complete and accepted, 2026-09-08 (`run-1`): metrics plus a 23-clip listening
+pass. A rendering defect found during that pass is fixed and the fix is verified, but Spanish was
+deliberately **not re-reviewed** — the reviewer judged the ranking stable and accepted the result.
+English, Russian, and at least one language the reviewer does not speak are **required and not
+started**; they need channel catalogues.
 
 Relates to [Plan 10](../../docs/plans/10-forced-alignment.md).
 
@@ -216,6 +219,93 @@ Two requirements carry over rather than being optional:
 These figures are extrapolations from one machine, not measurements on a NAS.
 [Plan 16](../../docs/plans/16-deployment-portability.md) carries the actual porting work.
 
+## Listening review (`run-1`)
+
+20 clips plus 3 hidden repeats, blind A/B/C, audio only, rated by the author on 2026-09-08.
+
+### The defect
+
+The page fed the karaoke renderer `SystemResult.comparisons` — the subset of words that matched
+the *scoring reference* — and then indexed it by display position. Any caption word the reference
+ASR heard differently was dropped from that list, so every later word inherited the following
+word's time and the tail of each sentence had no time at all. Concretely, for
+`Por ejemplo, nosotros vamos a ir al Nuar.`, the word `ejemplo,` was highlighted at `nosotros`'s
+time and the last two words never highlighted:
+
+| Displayed word | Time it was shown with |
+| --- | --- |
+| Por | Por, 0.40 |
+| ejemplo, | **nosotros, 0.75** |
+| nosotros | **vamos, 0.97** |
+| … | … |
+| al, Nuar. | **none** |
+
+Two consequences the reviewer reported independently and correctly: words with no time were never
+highlighted (they rendered in italic), and the highlight appeared to *jump* over them. The
+asymmetry in the tags follows directly — `jumps` was tagged 17/23 for MMS and 15/23 for the
+permissive model, but only 2/23 for `cue_interpolated`, which assigns every word a time by
+construction and so never skips one.
+
+**The measured numbers in this report are unaffected.** The defect was in the review page only;
+scoring reads the same `comparisons` list it always did, and the metrics are byte-identical after
+the fix.
+
+**The fix**, verified and in place for future runs: the page now renders from
+`SystemResult.groups` — what each system actually produced — and highlights by **source character
+range** rather than by word position, so a system timing a different number of words than the text
+displays can no longer shift anything. Words that genuinely have no time (13 of 195 rows have any,
+and never more than one or two) are carried along with the preceding word's highlight in a lighter
+shade, so the highlight never blinks out and a gap is visible as a gap rather than as a skip.
+
+### Why these ratings were accepted rather than re-collected
+
+The reviewer rated **pace** and deliberately ignored the jumps, mentally interpolating across them.
+The defect also applied *uniformly*: all three systems were rendered from the same matched subset
+and shifted by the same words, so no system was advantaged. The **ranking** is therefore sound,
+while the absolute sync quality is understated for every system. Read the ordering, not the levels.
+
+A corrected Spanish pass was prepared and then deliberately not run: the reviewer judged the
+ordering unlikely to move and accepted the result. The corrected renderer is instead carried into
+the outstanding multilingual runs, where it will be exercised on fresh data.
+
+| System | In sync | Slightly off | Broken | Mean (0–2) |
+| --- | ---: | ---: | ---: | ---: |
+| mms | 14 | 6 | 0 | **1.70** |
+| permissive | 12 | 8 | 0 | 1.60 |
+| cue_interpolated | 10 | 9 | 1 | 1.45 |
+
+Agreement statistics: rating-versus-error Kendall's τ **0.24**, top-choice hit rate **0.80**,
+reviewer self-consistency **1 of 3 repeats**. The self-consistency number is the one that matters
+and it is poor — but with three repeats and a broken renderer it is not yet evidence of anything.
+
+### The finding that survives, and it is the important one
+
+Split by source class:
+
+| Source class | cue_interpolated | mms | permissive |
+| --- | ---: | ---: | ---: |
+| authored | **1.20** | **1.70** | 1.60 |
+| automatic | **1.70** | **1.70** | 1.60 |
+
+**On authored clips the ear prefers alignment clearly. On automatic clips it cannot tell the
+difference at all.** That is the same conclusion the measurements reach, arrived at independently.
+
+The mechanism is worth stating because it explains why the baseline is not uniformly bad.
+Automatic-caption segments are assembled from YouTube's word-level units, so their cues are short
+and already tightly bounded — interpolating inside a short cue lands close. Authored cues are
+display lines of one or two rows, so interpolating inside them is guesswork. The baseline is not
+bad in general; it is bad exactly where authored captions are, which is exactly where alignment is
+being proposed.
+
+### The one number left open
+
+The perceptual *margin* on authored clips: 1.20 versus 1.70 on a coarse three-point scale, from a
+renderer that was understating all three systems. The measurement says 333 ms versus 59 ms, a
+5.6× difference. The ear agrees on the direction but reports a smaller gap than the milliseconds
+imply — which is the expected shape of the result, since perception of sync saturates well before
+millisecond precision does. Quantifying that margin is deferred to the multilingual runs rather
+than re-collected for Spanish.
+
 ## Recommendation
 
 **Run alignment on authored-caption clips. Do not run it on automatic-caption clips.**
@@ -323,8 +413,22 @@ has to be rebuilt on perceptual categories.
 
 ## What must still be reported before this is complete
 
-- The human review, imported, with the three agreement numbers and their intervals.
-- English and Russian cells, once those catalogues exist.
+**Multilingual validation is the outstanding requirement.** Everything above is Spanish. The code
+paths are wired and unit-tested for `es`, `en` and `ru` — `tests/test_alignment_languages.py` covers
+model resolution, romanization and vocabulary folding, and its opt-in real-checkpoint tests
+(`SPEECH_RETRIEVAL_ALIGNMENT_MODEL_TESTS=1`) load all six language/profile combinations — but no
+other language has been measured against audio.
+
+- **Channel catalogues for `en` and `ru`.** The only hard blocker. `config-v1.json` takes a
+  `languages` list, the experiment emits one results table per language automatically, and
+  `report --markdown` writes them ready to paste, so adding a language is configuration.
+- **At least one language the reviewer does not speak.** Judging synchronisation does not need
+  comprehension — you hear speech and watch a highlight — so this is feasible, and it is the only
+  way to separate "the timing is good" from "I knew what was said and filled in the gaps." Such a
+  run judges sync only; it cannot check whether the caption text itself is right.
+- **Russian specifically**, because it is the case Spanish cannot test: MMS aligns through a
+  romanized vocabulary, which in Spanish is near-identity accent folding but in Cyrillic is a real
+  transliteration where one source character can become several romanized ones.
 - Whether the constant offset should be corrected before rendering.
-- A CPU-only timing run for the deployment sizing in
-  [Plan 16](../../docs/plans/16-deployment-portability.md).
+- A measured CPU run on the actual target hardware for
+  [Plan 16](../../docs/plans/16-deployment-portability.md), replacing this report's extrapolation.

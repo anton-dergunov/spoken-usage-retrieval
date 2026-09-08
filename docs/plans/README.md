@@ -89,7 +89,7 @@ owns Docker, systemd, or other process supervision.
 | --- | --- | --- | --- |
 | [08 · Target-language text](08-target-language-text.md) | Complete | 02, 05, 06 | Authored fallback plus independently cached sentence translation and fixed-token word-alignment graphs. |
 | [09 · Audio cache and caption-reliability benchmark](09-audio-and-caption-reliability.md) | In progress | 07 | Optional audio, an evidence-based caption-trust policy, and validated acoustic signals. Cache and tooling are implemented; the benchmark run is pending authorization, media, and review. |
-| [10 · Forced alignment](10-forced-alignment.md) | In progress | 09 | Confidence-bearing source-text timing with safe cue-level fallback. Aligner, cache, contract and doctor are implemented; the Spanish benchmark recommends authored-only alignment, with the listening review and the English/Russian cells outstanding. |
+| [10 · Forced alignment](10-forced-alignment.md) | In progress | 09 | Confidence-bearing source-text timing with safe cue-level fallback. Aligner, cache, contract and doctor are implemented; the Spanish benchmark and its listening pass recommend authored-only alignment. **Multilingual validation is required and not started**: English and Russian need channel catalogues, and at least one language the reviewer does not speak should be measured. |
 
 ### Stage 4 · Retrieval science
 
