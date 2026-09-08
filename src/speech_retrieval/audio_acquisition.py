@@ -33,7 +33,7 @@ from .audio import (
 )
 from .catalogue import canonical_language
 
-AUDIO_FORMAT_POLICY_VERSION = "smallest-audio-only-v1"
+AUDIO_FORMAT_POLICY_VERSION = "original-language-smallest-audio-only-v2"
 MAX_RECORDED_ATTEMPTS = 5
 URL_RE = re.compile(r"https?://\S+")
 MediaRunner = Callable[[Sequence[str]], str]
@@ -76,6 +76,7 @@ class AudioFormatPolicy:
         "ec-3",
     )
     codec_preference: tuple[str, ...] = ("opus", "mp4a", "aac", "vorbis", "mp3")
+    require_source_language: bool = True
 
     def constraints(self) -> dict[str, Any]:
         return {
@@ -87,10 +88,14 @@ class AudioFormatPolicy:
             "allowed_codecs": list(self.allowed_codecs),
             "codec_preference": list(self.codec_preference),
             "prefer_progressive_download": True,
+            "require_source_language": self.require_source_language,
             "selection_rule": (
-                "smallest advertised or approximate file size among candidates meeting the "
-                "speech-quality floor; when no size is advertised, the lowest bitrate above "
-                "the floor with a deterministic codec and format-id tiebreak"
+                "the provider's original-language audio track for the corpus source language "
+                "first — dubbed tracks are rejected outright, because a smaller dub would "
+                "otherwise win on size and silently replace the speech being studied — then "
+                "the smallest advertised or approximate file size among candidates meeting "
+                "the speech-quality floor, and when no size is advertised the lowest bitrate "
+                "above the floor with a deterministic codec and format-id tiebreak"
             ),
         }
 
@@ -109,6 +114,8 @@ class AudioFormatCandidate:
     protocol: str | None
     fragmented: bool
     language: str | None
+    language_preference: int | None
+    is_original_language: bool
     format_note: str | None
     rejected: str | None = None
 
@@ -130,6 +137,8 @@ class AudioFormatCandidate:
             "protocol": self.protocol,
             "fragmented": self.fragmented,
             "language": self.language,
+            "language_preference": self.language_preference,
+            "is_original_language": self.is_original_language,
             "format_note": self.format_note,
             "rejected": self.rejected,
         }
@@ -176,17 +185,35 @@ def _codec_family(acodec: Any) -> str | None:
     return acodec.strip().lower().split(".", 1)[0]
 
 
+def _primary_subtag(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    return value.strip().split("-", 1)[0].casefold()
+
+
 def audio_format_candidates(
-    info: dict[str, Any], *, policy: AudioFormatPolicy | None = None
+    info: dict[str, Any],
+    *,
+    policy: AudioFormatPolicy | None = None,
+    source_language: str | None = None,
 ) -> list[AudioFormatCandidate]:
-    """Return every audio-only provider format with its policy verdict recorded."""
+    """Return every audio-only provider format with its policy verdict recorded.
+
+    Multi-language videos advertise one audio track per dubbed language. The provider marks
+    the original with a positive ``language_preference``; dubs carry a negative one. A dub is
+    often marginally smaller than the original, so a size-only rule silently downloads
+    speech that is not the speech being studied.
+    """
     policy = policy or AudioFormatPolicy()
+    wanted = _primary_subtag(source_language) or _primary_subtag(info.get("language"))
+    entries = [
+        item
+        for item in (info.get("formats") or [])
+        if isinstance(item, dict) and item.get("vcodec") == "none"
+    ]
+    tagged = {_primary_subtag(item.get("language")) for item in entries} - {None}
     candidates: list[AudioFormatCandidate] = []
-    for entry in info.get("formats") or []:
-        if not isinstance(entry, dict):
-            continue
-        if entry.get("vcodec") != "none":
-            continue
+    for entry in entries:
         format_id = entry.get("format_id")
         acodec = entry.get("acodec")
         family = _codec_family(acodec)
@@ -196,6 +223,11 @@ def audio_format_candidates(
         fragmented = isinstance(protocol, str) and (
             protocol.startswith("m3u8") or "dash_segments" in protocol
         )
+        language = entry.get("language") if isinstance(entry.get("language"), str) else None
+        language_preference = entry.get("language_preference")
+        if isinstance(language_preference, bool) or not isinstance(language_preference, int):
+            language_preference = None
+        is_original = language_preference is not None and language_preference >= 0
         rejected: str | None = None
         if not isinstance(format_id, str) or not format_id:
             rejected = "missing format_id"
@@ -209,6 +241,14 @@ def audio_format_candidates(
             rejected = f"bitrate {abr} kbps is below the {policy.minimum_bitrate_kbps} floor"
         elif asr is not None and asr < policy.minimum_sample_rate:
             rejected = f"sample rate {asr} Hz is below the {policy.minimum_sample_rate} floor"
+        elif (
+            policy.require_source_language
+            and tagged
+            and wanted is not None
+            and _primary_subtag(language) is not None
+            and _primary_subtag(language) != wanted
+        ):
+            rejected = f"dubbed {language} audio, not the {wanted} source language"
         candidates.append(
             AudioFormatCandidate(
                 format_id=str(format_id) if format_id else "",
@@ -226,7 +266,9 @@ def audio_format_candidates(
                 filesize_approx=_integer(entry.get("filesize_approx")),
                 protocol=protocol if isinstance(protocol, str) else None,
                 fragmented=fragmented,
-                language=entry.get("language") if isinstance(entry.get("language"), str) else None,
+                language=language,
+                language_preference=language_preference,
+                is_original_language=is_original,
                 format_note=(
                     entry.get("format_note") if isinstance(entry.get("format_note"), str) else None
                 ),
@@ -237,19 +279,28 @@ def audio_format_candidates(
 
 
 def select_audio_format(
-    info: dict[str, Any], *, policy: AudioFormatPolicy | None = None
+    info: dict[str, Any],
+    *,
+    policy: AudioFormatPolicy | None = None,
+    source_language: str | None = None,
 ) -> AudioFormatSelection:
     """Choose one audio-only representation under an explicit, recorded policy."""
     policy = policy or AudioFormatPolicy()
-    considered = audio_format_candidates(info, policy=policy)
+    considered = audio_format_candidates(info, policy=policy, source_language=source_language)
     eligible = [item for item in considered if item.rejected is None]
     if not eligible:
+        dubbed = [item for item in considered if item.rejected and "dubbed" in item.rejected]
         raise AudioAcquisitionError(
-            "no audio-only provider format satisfies the acquisition policy",
+            "no audio-only provider format carries the source language"
+            if dubbed
+            else "no audio-only provider format satisfies the acquisition policy",
             stage="selection",
-            code="no_audio_format",
+            code="no_audio_in_source_language" if dubbed else "no_audio_format",
             retryable=False,
         )
+    originals = [item for item in eligible if item.is_original_language]
+    if originals:
+        eligible = originals
     preference = {name: index for index, name in enumerate(policy.codec_preference)}
 
     def codec_rank(candidate: AudioFormatCandidate) -> int:
@@ -411,6 +462,19 @@ def _manifest_base(
     }
 
 
+def _selected_under(record: RawAudioRecord, policy_version: str) -> bool:
+    """Whether a cached payload was chosen by the policy version in force now.
+
+    A payload picked by a superseded policy is not reused. Version 1 ranked purely on file
+    size and therefore chose a dubbed track whenever one was marginally smaller than the
+    original, so its selections cannot be trusted even though the bytes are intact.
+    """
+    selection = (record.manifest or {}).get("format_selection")
+    if not isinstance(selection, dict):
+        return False
+    return selection.get("policy_version") == policy_version
+
+
 def _previous_attempts(record: RawAudioRecord) -> list[dict[str, Any]]:
     manifest = record.manifest or {}
     attempts = manifest.get("attempts")
@@ -456,10 +520,11 @@ def acquire_audio(
         raise ValueError("attempts must be at least 1")
     language = canonical_language(language)
     paths = raw_audio_paths(data_dir, language=language, video_key=video_key)
+    policy = policy or AudioFormatPolicy()
     cached = audio_availability(
         data_dir, language=language, video_key=video_key, verify_checksum=True
     )
-    if cached.ready:
+    if cached.ready and _selected_under(cached, policy.version):
         return AudioAcquisitionResult(
             language=language,
             video_key=video_key,
@@ -514,7 +579,7 @@ def acquire_audio(
         )
 
     try:
-        selection = select_audio_format(info, policy=policy)
+        selection = select_audio_format(info, policy=policy, source_language=language)
     except AudioAcquisitionError as error:
         return failure(str(error), stage=error.stage, code=error.code, retryable=error.retryable)
 
@@ -570,6 +635,10 @@ def acquire_audio(
                     "provider_abr": selection.candidate.abr,
                     "provider_asr": selection.candidate.asr,
                     "provider_audio_channels": selection.candidate.audio_channels,
+                    "provider_language": selection.candidate.language,
+                    "provider_language_preference": selection.candidate.language_preference,
+                    "provider_is_original_language": selection.candidate.is_original_language,
+                    "provider_format_note": selection.candidate.format_note,
                     "provider_filesize": selection.candidate.filesize,
                     "provider_filesize_approx": selection.candidate.filesize_approx,
                     "provider_protocol": selection.candidate.protocol,

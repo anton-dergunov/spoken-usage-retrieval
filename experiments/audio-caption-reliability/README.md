@@ -1,9 +1,11 @@
 # Caption reliability against a recorded ASR reference
 
-**Status: not run. The tooling, frozen configuration, and preflight are complete and verified; no
-empirical result exists yet.** This directory deliberately contains no `results.json`, and
-[`experiments/index.md`](../index.md) deliberately has no row for this experiment. Nothing here
-claims a measured finding.
+**Status: pilot run complete and invalidated as a measurement; no caption-reliability conclusion is
+claimed.** A pilot of 48 segments was sampled, transcribed, scored, and manually reviewed on
+2026-09-07. It found a defect in this project's own audio acquisition that corrupted part of the
+sample, so the caption-quality numbers it produced do not measure caption quality. The pilot
+succeeded at what a pilot is for. [`experiments/index.md`](../index.md) therefore still has no row
+for this experiment.
 
 Implements the benchmark half of
 [Plan 09](../../docs/plans/09-audio-and-caption-reliability.md).
@@ -80,6 +82,81 @@ The reference run must never prime the model with the caption under test; `initi
 as `None` so a future edit cannot quietly bias agreement upward. faster-whisper's decoding defaults
 differ from OpenAI Whisper's, so this is reported as a `large-v3`-*class* reference implementation
 with its exact settings recorded, not as backend-equivalent output.
+
+## Pilot run, 2026-09-07 (`pilot-1`)
+
+48 segments sampled, 38 with audio, 38 scored, 31 in the predeclared review subset, **21 reviewed**
+by one reviewer under rubric `caption-review-v1`. The 10 unreviewed subset rows are `missing_audio`
+pipeline gaps, not skipped judgements.
+
+### The pilot's finding is about this repository, not about captions
+
+Five reviewed rows, from three videos on one channel, had **audio in the wrong language** — one
+English, four Japanese — while their captions were correct Spanish `es-orig` automatic tracks. The
+reviewer identified this by listening; no metric flagged it.
+
+The cause was in [`audio_acquisition.py`](../../src/speech_retrieval/audio_acquisition.py). YouTube
+serves multi-language dubbed audio as one audio-only format per language, and the
+`smallest-audio-only-v1` policy ranked candidates on file size alone. On one sampled video the
+Japanese dub (`249-0`) was 7.7 MB and the Spanish original (`139-5`) was 7.8 MB, so the policy chose
+Japanese. Whisper, told to decode as Spanish, produced fluent Spanish from Japanese speech, which
+looked like a catastrophic caption failure rather than a wrong input.
+
+That single defect accounts for every severe result in the pilot:
+
+| Reviewed rows | n | `incorrect` | `both_wrong` | median disagreement |
+| --- | ---: | ---: | ---: | ---: |
+| Wrong-language audio | 5 | 5 | 5 | 1.000 |
+| Everything else | 16 | 1 | 0 | 0.118 |
+
+Fixed in `original-language-smallest-audio-only-v2`, which rejects dubbed tracks outright using the
+provider's `language_preference` marker, refuses a video with no track in the source language rather
+than substituting one, and records the chosen track's language in the manifest. A payload selected
+under a superseded policy is no longer reused, so all ten cached files are re-acquired on the next
+audio-enabled run.
+
+### What the surviving rows suggest, and why they decide nothing
+
+| Source class | Reviewed (excl. defect) | Videos | Channels | `correct` | `acceptable` | `incorrect` |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| `es/authored` | 13 | 3 | 1 | 4 | 8 | 1 |
+| `es/automatic` | 3 | 2 | 1 | 2 | 1 | 0 |
+
+Both classes are `collect_more_evidence`. Three authored videos on one channel cannot support a
+policy for authored captions, three automatic rows on one channel support nothing at all, and the
+whole sample must be re-measured on correct audio before any of it counts.
+
+### Boundary behaviour: an artefact, not a caption error
+
+Clips carry 0.35 s of lead-in and 0.65 s of trail-out. Across the 38 scored rows, **32 (84%)** had
+ASR words outside the caption span — 34 before, 23 after. The reviewer tagged `boundary_problem` on
+10 of 21 rows but judged nearly all of them acceptable: the caption correctly omits the neighbouring
+words, and a little context makes a clip *easier* to listen to, not harder. One row was a genuine
+failure, where the caption named words absent from the clip.
+
+Trimming the reference to the caption span using the ASR word timestamps was tested and **made
+agreement worse** — median disagreement rose from 0.183 to 0.310 — because caption cue timing is not
+precise enough to define the trim window. The measurement was left unchanged. `caption-review-v2`
+adds a `neighbouring_speech_in_clip` tag so the artefact is recordable instead of being scored as a
+caption error.
+
+### Reviewer observations that shaped the next steps
+
+- Punctuation is unpredictable in both directions: automatic captions and ASR both sometimes lack
+  it, and authored captions sometimes lack it too. Neither source is reliably better.
+- Where the ASR added filler words the caption omitted, the reviewer consistently preferred the
+  caption: it is cleaner and focused on the sentence being demonstrated.
+- No poor-sounding audio was encountered: 18 of 21 rows were tagged `clean_single_speaker` and 2
+  `background_music_or_noise`. The acoustic vocabulary is therefore untested, which is a statement
+  about sample size, not about the corpus.
+
+### Acoustic features in this run
+
+All four are `insufficient_evidence`. `caption_asr_agreement` and `speaking_rate` completed but were
+computed partly over wrong-language audio. `speech_ratio` failed on all 38 rows: the Silero adapter
+used TorchAudio audio I/O, which moved to TorchCodec in TorchAudio 2.9. It now reads the clip with
+the standard library, relying on the published mono 16 kHz PCM contract. `squim_objective` was
+`unavailable` because TorchAudio was not installed at the time.
 
 ## Preflight evidence (real, 2026-09-07)
 

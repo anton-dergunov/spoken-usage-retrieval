@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from speech_retrieval.audio import AUDIO_MANIFEST_SCHEMA_VERSION, raw_audio_paths
+from speech_retrieval.audio_acquisition import AUDIO_FORMAT_POLICY_VERSION
 from speech_retrieval.identity import CACHE_SCHEMA_VERSION, track_id, video_key
 
 
@@ -142,7 +143,11 @@ def install_raw_audio(
         "video_key": key,
         "video_id": provider_video_id,
         "status": status,
-        "format_selection": {"format_id": "251", "reason": "smallest_known_size"},
+        "format_selection": {
+            "format_id": "251",
+            "reason": "smallest_known_size",
+            "policy_version": AUDIO_FORMAT_POLICY_VERSION,
+        },
         "attempts": [],
     }
     target = paths.source(extension)

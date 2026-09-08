@@ -554,3 +554,123 @@ def test_source_audio_is_never_rewritten_by_a_later_audio_enabled_run(tmp_path):
     assert (stored.read_bytes(), stored.stat().st_mtime_ns) == before
     with wave.open(str(stored), "rb") as reader:
         assert reader.getnframes() > 0
+
+
+def dubbed(format_id, language, preference, **overrides):
+    return audio_format(
+        format_id,
+        language=language,
+        language_preference=preference,
+        format_note=f"{language}{' original (default)' if preference >= 0 else ''}",
+        **overrides,
+    )
+
+
+def multilingual_info():
+    """A video dubbed into several languages, with the original marginally larger."""
+    return formats(
+        dubbed("249-0", "ja", -1, filesize=7_700_000),
+        dubbed("139-0", "fr", -1, filesize=7_800_000),
+        dubbed("139-5", "es", 10, filesize=7_810_000),
+        dubbed("251-5", "es", 10, filesize=18_600_000),
+    )
+
+
+def test_a_smaller_dubbed_track_never_wins_over_the_original_language():
+    selection = select_audio_format(multilingual_info(), source_language="es")
+
+    assert selection.format_id == "139-5"
+    assert selection.candidate.language == "es"
+    assert selection.candidate.is_original_language is True
+    assert selection.candidate.language_preference == 10
+    rejected = {item.format_id: item.rejected for item in selection.considered}
+    assert "dubbed ja audio, not the es source language" == rejected["249-0"]
+    assert "dubbed fr audio, not the es source language" == rejected["139-0"]
+    assert selection.constraints["require_source_language"] is True
+    assert "dubbed tracks are rejected outright" in selection.constraints["selection_rule"]
+
+
+def test_the_source_language_falls_back_to_the_provider_declaration():
+    info = {**multilingual_info(), "language": "es"}
+
+    assert select_audio_format(info).format_id == "139-5"
+
+
+def test_a_video_with_no_track_in_the_source_language_is_refused_not_substituted():
+    info = formats(
+        dubbed("249-0", "ja", 10, filesize=1_000),
+        dubbed("139-0", "fr", -1, filesize=900),
+    )
+
+    with pytest.raises(AudioAcquisitionError, match="carries the source language") as raised:
+        select_audio_format(info, source_language="es")
+    assert raised.value.code == "no_audio_in_source_language"
+    assert raised.value.retryable is False
+
+
+def test_single_language_videos_are_unaffected_by_the_language_rule():
+    info = formats(audio_format("251", filesize=2_000), audio_format("140", filesize=1_000))
+
+    selection = select_audio_format(info, source_language="es")
+
+    assert selection.format_id == "140"
+    assert selection.candidate.language is None
+    assert all(item.rejected is None for item in selection.considered)
+
+
+def test_acquisition_records_which_language_track_it_downloaded(tmp_path):
+    key, result = acquire_one(tmp_path, runner=media_runner(), info=multilingual_info())
+
+    assert result.format_id == "139-5"
+    manifest = read_raw_audio_manifest(raw_audio_paths(tmp_path, language="es", video_key=key))
+    assert manifest is not None
+    raw = manifest["raw_audio"]
+    assert raw["provider_language"] == "es"
+    assert raw["provider_language_preference"] == 10
+    assert raw["provider_is_original_language"] is True
+    assert "original" in raw["provider_format_note"]
+
+
+def test_a_payload_chosen_by_a_superseded_policy_is_reacquired_not_reused(tmp_path):
+    key = install_caption_video(tmp_path)
+    source = write_wave(tmp_path / "old.wav", seconds=2.0)
+    install_raw_audio(
+        tmp_path,
+        key=key,
+        source=source,
+        duration=2.0,
+        overrides={
+            "format_selection": {
+                "format_id": "249-0",
+                "reason": "smallest_known_size",
+                "policy_version": "smallest-audio-only-v1",
+            }
+        },
+    )
+    assert audio_availability(tmp_path, language="es", video_key=key).ready
+    runner = media_runner(extension="wav", seconds=120.0)
+
+    _key, result = acquire_one(
+        tmp_path,
+        runner=runner,
+        key=key,
+        info=multilingual_info(),
+        probe=probe_runner(format_name="wav", duration=120.0),
+    )
+
+    assert result.status == "downloaded"
+    assert result.format_id == "139-5"
+    assert len(runner.calls) == 1
+    manifest = read_raw_audio_manifest(raw_audio_paths(tmp_path, language="es", video_key=key))
+    assert manifest is not None
+    assert manifest["format_selection"]["policy_version"] == AUDIO_FORMAT_POLICY_VERSION
+
+
+def test_a_payload_chosen_by_the_current_policy_is_still_reused_without_network(tmp_path):
+    key, first = acquire_one(tmp_path, runner=media_runner(), info=multilingual_info())
+    reuse = media_runner()
+
+    _key, second = acquire_one(tmp_path, runner=reuse, key=key, info=multilingual_info())
+
+    assert first.status == "downloaded" and second.status == "cached"
+    assert reuse.calls == []
