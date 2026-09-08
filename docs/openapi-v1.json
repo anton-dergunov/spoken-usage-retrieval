@@ -648,15 +648,14 @@
                 "type": "null"
               }
             ],
-            "description": "Reserved for the optional alignment capability.",
+            "description": "Share of matchable source characters that received a time, ignoring punctuation.",
             "title": "Alignment Coverage"
           },
           "alignment_groups": {
             "anyOf": [
               {
                 "items": {
-                  "additionalProperties": true,
-                  "type": "object"
+                  "$ref": "#/components/schemas/TimedText"
                 },
                 "type": "array"
               },
@@ -664,7 +663,7 @@
                 "type": "null"
               }
             ],
-            "description": "Reserved for the optional alignment capability.",
+            "description": "Timed source character groups, finer than 'segments'. Ordered and in bounds, but not necessarily contiguous: unmatched text is omitted rather than given a fabricated time. Renders through the player's sourceTiming prop.",
             "title": "Alignment Groups"
           },
           "alignment_provenance": {
@@ -677,13 +676,18 @@
                 "type": "null"
               }
             ],
-            "description": "Reserved for the optional alignment capability.",
+            "description": "Aligner, model, model license, device, and settings that produced the timing. The license is recorded so a host can tell whether stored timing came from a non-commercial model.",
             "title": "Alignment Provenance"
           },
           "alignment_status": {
-            "const": "unavailable",
             "default": "unavailable",
-            "description": "Unavailable until the optional alignment capability is installed.",
+            "description": "Whether progressive source timing is available for this clip. 'unavailable' means the capability is not installed or the language has no model; 'failed' means a model ran but its output did not meet the documented checks. Consumers fall back to the cue timing in 'segments' for anything but 'complete' or 'partial'.",
+            "enum": [
+              "complete",
+              "partial",
+              "unavailable",
+              "failed"
+            ],
             "title": "Alignment Status",
             "type": "string"
           },

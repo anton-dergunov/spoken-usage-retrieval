@@ -4,6 +4,7 @@ Small, reproducible investigations that inform product and pipeline decisions li
 
 | Experiment | Date | Status | Main finding |
 | --- | --- | --- | --- |
+| [Forced alignment timing](forced-alignment/README.md) | 2026-09-08 | Spanish complete, review pending | Alignment cuts authored-caption word error from 333 ms to 59 ms (98% within 200 ms); the Apache-2.0 model matches the non-commercial one to 4 ms; automatic captions already agree within the models' own noise, so alignment is recommended for authored tracks only. |
 | [Fixed-token translation and word alignment](target-language-word-alignment/README.md) | 2026-09-07 | Complete | Two-stage fixed-token alignment achieved 39/40 held-out structural validity and 0.879 end-to-end micro F1 across five source languages; valid translation now survives graph failure. |
 | [Target-language translation and alignment](target-language-text/README.md) | 2026-09-06 | Superseded | Historical free-chunk study identified coarse/repeated-group failures that motivated the fixed-token graph experiment. |
 | [Ten-language morphology and compact index](morphological-retrieval-multilingual/README.md) | 2026-09-06 | Complete | Stanza led coverage-adjusted quality in all ten languages; token positions preserved retrieval semantics while reducing measured storage by 85.1%. Plan 04a promotes both findings. |

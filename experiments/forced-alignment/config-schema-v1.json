@@ -1,0 +1,116 @@
+{
+  "$defs": {
+    "Model": {
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "title": "Name",
+          "type": "string"
+        },
+        "profile": {
+          "enum": [
+            "mms",
+            "permissive"
+          ],
+          "title": "Profile",
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "profile"
+      ],
+      "title": "Model",
+      "type": "object"
+    },
+    "Sampling": {
+      "additionalProperties": false,
+      "properties": {
+        "target_per_cell": {
+          "default": 100,
+          "title": "Target Per Cell",
+          "type": "integer"
+        },
+        "minimum_per_cell": {
+          "default": 50,
+          "title": "Minimum Per Cell",
+          "type": "integer"
+        },
+        "time_budget_seconds": {
+          "default": 600.0,
+          "title": "Time Budget Seconds",
+          "type": "number"
+        },
+        "min_tokens": {
+          "default": 4,
+          "title": "Min Tokens",
+          "type": "integer"
+        },
+        "max_clip_seconds": {
+          "default": 20.0,
+          "title": "Max Clip Seconds",
+          "type": "number"
+        },
+        "review_clips": {
+          "default": 20,
+          "title": "Review Clips",
+          "type": "integer"
+        },
+        "review_repeats": {
+          "default": 3,
+          "title": "Review Repeats",
+          "type": "integer"
+        },
+        "seed": {
+          "default": 20260908,
+          "title": "Seed",
+          "type": "integer"
+        }
+      },
+      "title": "Sampling",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "version": {
+      "default": 1,
+      "title": "Version",
+      "type": "integer"
+    },
+    "languages": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Languages",
+      "type": "array"
+    },
+    "models": {
+      "items": {
+        "$ref": "#/$defs/Model"
+      },
+      "title": "Models",
+      "type": "array"
+    },
+    "sampling": {
+      "$ref": "#/$defs/Sampling"
+    },
+    "tolerances": {
+      "items": {
+        "type": "number"
+      },
+      "title": "Tolerances",
+      "type": "array"
+    },
+    "notes": {
+      "default": "",
+      "title": "Notes",
+      "type": "string"
+    }
+  },
+  "required": [
+    "models"
+  ],
+  "title": "ExperimentConfig",
+  "type": "object"
+}

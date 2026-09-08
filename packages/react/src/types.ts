@@ -98,10 +98,21 @@ export interface SpeechClip {
   target_language: string | null;
   target_text: string | null;
   translation_provenance: Record<string, unknown> | null;
-  alignment_status: "unavailable" | string;
+  /**
+   * Whether progressive source timing is available. Anything but "complete" or "partial"
+   * means the consumer should fall back to the cue timing in `segments`.
+   */
+  alignment_status: "complete" | "partial" | "unavailable" | "failed";
+  /** Share of matchable source characters that received a time, ignoring punctuation. */
   alignment_coverage: number | null;
+  /** Aligner, model, model license, device, and settings that produced the timing. */
   alignment_provenance: Record<string, unknown> | null;
-  alignment_groups: AlignmentGroup[] | null;
+  /**
+   * Timed source character groups, finer than `segments`. Pass these to the player as
+   * `sourceTiming`. Not necessarily contiguous: unmatched text is omitted rather than given
+   * a fabricated time. Unrelated to `AlignmentGroup`, which is the translation graph.
+   */
+  alignment_groups: TimedText[] | null;
 }
 
 export interface AlignmentGroup {

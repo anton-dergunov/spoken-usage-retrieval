@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from .acquisition import acquire
+from .alignment import PERMISSIVE_MODELS, resolve_model
 from .analysis import download_models, list_models
 from .api import create_app
 from .audio import (
@@ -213,6 +214,51 @@ def _models_list(args: argparse.Namespace) -> int:
     return 0
 
 
+def _alignment_check(settings: Settings) -> DoctorCheck:
+    """Report whether forced alignment can run, and under which license.
+
+    The license is part of the message rather than buried in provenance: the default model is
+    non-commercial, and an operator should be able to see that from one command.
+    """
+    installed = importlib.util.find_spec("torch") is not None and (
+        importlib.util.find_spec("transformers") is not None
+    )
+    languages = sorted(PERMISSIVE_MODELS) if settings.alignment_profile == "permissive" else []
+    scope = (
+        f"languages {', '.join(languages)}"
+        if languages
+        else "every language"
+        if settings.alignment_profile == "mms"
+        else "no language"
+    )
+    probe = resolve_model(
+        languages[0] if languages else "es",
+        profile=settings.alignment_profile,
+        allow_non_commercial=settings.alignment_allow_non_commercial,
+    )
+    if probe is None:
+        return DoctorCheck(
+            name="alignment",
+            status="warning",
+            message=(
+                f"profile '{settings.alignment_profile}' resolves no model while "
+                "non-commercial models are refused; clips fall back to cue timing"
+            ),
+        )
+    identity = f"{probe.model_id} ({probe.license}), {scope}"
+    if not installed:
+        return DoctorCheck(
+            name="alignment",
+            status="warning",
+            message=(
+                f"alignment extra not installed; would use {identity}. "
+                "Clips fall back to cue timing."
+            ),
+        )
+    device = settings.alignment_device or "auto"
+    return DoctorCheck(name="alignment", status="ok", message=f"{identity}, device {device}")
+
+
 def _doctor(args: argparse.Namespace) -> int:
     settings = _settings(args)
     checks: list[DoctorCheck] = []
@@ -277,6 +323,7 @@ def _doctor(args: argparse.Namespace) -> int:
                     message=f"{executable} not found; optional audio remains disabled",
                 )
             )
+    checks.append(_alignment_check(settings))
     if settings.web_dist is not None:
         exists = (settings.web_dist / "index.html").is_file()
         checks.append(

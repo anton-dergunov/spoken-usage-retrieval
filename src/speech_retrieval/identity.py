@@ -62,3 +62,30 @@ def segment_id(
         f"{end:.3f}",
         text_hash,
     )
+
+
+def alignment_id(
+    *,
+    source_text: str,
+    source_language: str,
+    clip_content_sha256: str,
+    aligner: str,
+    model_id: str,
+    settings_hash: str,
+) -> str:
+    """Identify one forced-alignment result by everything that could change it.
+
+    Includes the model and its settings, so switching profiles produces a different row
+    rather than silently reusing timing produced by another model -- which also makes rows
+    from a non-commercial model findable and purgeable later.
+    """
+    text_hash = hashlib.sha256(source_text.encode("utf-8")).hexdigest()
+    return _stable_id(
+        "aln",
+        text_hash,
+        source_language,
+        clip_content_sha256,
+        aligner,
+        model_id,
+        settings_hash,
+    )

@@ -89,7 +89,7 @@ owns Docker, systemd, or other process supervision.
 | --- | --- | --- | --- |
 | [08 · Target-language text](08-target-language-text.md) | Complete | 02, 05, 06 | Authored fallback plus independently cached sentence translation and fixed-token word-alignment graphs. |
 | [09 · Audio cache and caption-reliability benchmark](09-audio-and-caption-reliability.md) | In progress | 07 | Optional audio, an evidence-based caption-trust policy, and validated acoustic signals. Cache and tooling are implemented; the benchmark run is pending authorization, media, and review. |
-| [10 · Forced alignment](10-forced-alignment.md) | Planned | 09 | Confidence-bearing source-text timing with safe cue-level fallback. |
+| [10 · Forced alignment](10-forced-alignment.md) | In progress | 09 | Confidence-bearing source-text timing with safe cue-level fallback. Aligner, cache, contract and doctor are implemented; the Spanish benchmark recommends authored-only alignment, with the listening review and the English/Russian cells outstanding. |
 
 ### Stage 4 · Retrieval science
 
@@ -111,6 +111,7 @@ remains the headline evaluation even when judge or distant labels are used for t
 | --- | --- | --- | --- |
 | [14 · Incremental background indexing](14-incremental-background-indexing.md) | Planned | 05, 08–10 | Idempotent scheduled ingestion and prioritized derived work. |
 | [15 · Release and public evidence](15-release-and-public-evidence.md) | Planned | 07, 14 | Package smoke tests, reconciled documentation, and final public release evidence. |
+| [16 · Deployment portability](16-deployment-portability.md) | Planned | 10, 14 | Containerized service and a resource-capped derived-work worker for a NAS or small server, with an ONNX backend measured against the PyTorch path. |
 
 Plan 14 is late on purpose: a scheduled `speech-retrieval update --once` keeps a small corpus fresh,
 so job scheduling is a scaling improvement rather than a prerequisite. Start it when full rebuilds

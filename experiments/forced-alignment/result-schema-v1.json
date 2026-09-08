@@ -1,0 +1,194 @@
+{
+  "$defs": {
+    "SystemResult": {
+      "additionalProperties": false,
+      "properties": {
+        "system": {
+          "title": "System",
+          "type": "string"
+        },
+        "status": {
+          "title": "Status",
+          "type": "string"
+        },
+        "coverage": {
+          "default": 0.0,
+          "title": "Coverage",
+          "type": "number"
+        },
+        "mean_confidence": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Mean Confidence"
+        },
+        "seconds": {
+          "default": 0.0,
+          "title": "Seconds",
+          "type": "number"
+        },
+        "comparisons": {
+          "items": {
+            "$ref": "#/$defs/WordComparison"
+          },
+          "title": "Comparisons",
+          "type": "array"
+        },
+        "reason": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Reason"
+        }
+      },
+      "required": [
+        "system",
+        "status"
+      ],
+      "title": "SystemResult",
+      "type": "object"
+    },
+    "WordComparison": {
+      "additionalProperties": false,
+      "description": "One matched word pair: the aligner's start against the reference start.",
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "aligned_start": {
+          "title": "Aligned Start",
+          "type": "number"
+        },
+        "reference_start": {
+          "title": "Reference Start",
+          "type": "number"
+        }
+      },
+      "required": [
+        "text",
+        "aligned_start",
+        "reference_start"
+      ],
+      "title": "WordComparison",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One sampled segment, with every system's attempt at it.",
+  "properties": {
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "segment_id": {
+      "title": "Segment Id",
+      "type": "string"
+    },
+    "video_key": {
+      "title": "Video Key",
+      "type": "string"
+    },
+    "channel": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Channel"
+    },
+    "language": {
+      "title": "Language",
+      "type": "string"
+    },
+    "source_class": {
+      "enum": [
+        "authored",
+        "automatic"
+      ],
+      "title": "Source Class",
+      "type": "string"
+    },
+    "text": {
+      "title": "Text",
+      "type": "string"
+    },
+    "clip": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Clip"
+    },
+    "clip_start": {
+      "default": 0.0,
+      "title": "Clip Start",
+      "type": "number"
+    },
+    "clip_end": {
+      "default": 0.0,
+      "title": "Clip End",
+      "type": "number"
+    },
+    "reference_words": {
+      "default": 0,
+      "title": "Reference Words",
+      "type": "integer"
+    },
+    "systems": {
+      "items": {
+        "$ref": "#/$defs/SystemResult"
+      },
+      "title": "Systems",
+      "type": "array"
+    },
+    "stage": {
+      "default": "sampled",
+      "title": "Stage",
+      "type": "string"
+    },
+    "error": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Error"
+    }
+  },
+  "required": [
+    "run_id",
+    "segment_id",
+    "video_key",
+    "language",
+    "source_class",
+    "text"
+  ],
+  "title": "ResultRow",
+  "type": "object"
+}

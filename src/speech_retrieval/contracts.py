@@ -171,18 +171,37 @@ class Clip(ContractModel):
     translation_provenance: dict[str, Any] | None = Field(
         default=None, description="Reserved for the optional translation capability."
     )
-    alignment_status: Literal["unavailable"] = Field(
+    alignment_status: Literal["complete", "partial", "unavailable", "failed"] = Field(
         default="unavailable",
-        description="Unavailable until the optional alignment capability is installed.",
+        description=(
+            "Whether progressive source timing is available for this clip. 'unavailable' "
+            "means the capability is not installed or the language has no model; 'failed' "
+            "means a model ran but its output did not meet the documented checks. Consumers "
+            "fall back to the cue timing in 'segments' for anything but 'complete' or "
+            "'partial'."
+        ),
     )
     alignment_coverage: float | None = Field(
-        default=None, description="Reserved for the optional alignment capability."
+        default=None,
+        description=(
+            "Share of matchable source characters that received a time, ignoring punctuation."
+        ),
     )
     alignment_provenance: dict[str, Any] | None = Field(
-        default=None, description="Reserved for the optional alignment capability."
+        default=None,
+        description=(
+            "Aligner, model, model license, device, and settings that produced the timing. "
+            "The license is recorded so a host can tell whether stored timing came from a "
+            "non-commercial model."
+        ),
     )
-    alignment_groups: list[dict[str, Any]] | None = Field(
-        default=None, description="Reserved for the optional alignment capability."
+    alignment_groups: list[TimedText] | None = Field(
+        default=None,
+        description=(
+            "Timed source character groups, finer than 'segments'. Ordered and in bounds, but "
+            "not necessarily contiguous: unmatched text is omitted rather than given a "
+            "fabricated time. Renders through the player's sourceTiming prop."
+        ),
     )
 
 

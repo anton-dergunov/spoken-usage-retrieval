@@ -61,6 +61,7 @@ class Corpus:
         self.catalogue_dir = self.settings.catalogue_dir
         self.models_dir = self.settings.resolved_models_dir
         self.database = self.data_dir / "index" / "corpus.sqlite3"
+        self.alignment_database = self.data_dir / "derived" / "alignments.sqlite3"
         self._closed = False
 
     def __enter__(self) -> Corpus:
@@ -780,8 +781,62 @@ class Corpus:
                     "caption_provider_track_id": row["caption_language"],
                     "caption_is_source": True,
                 },
+                **self._alignment_fields(
+                    segment_id,
+                    row["source_language"],
+                    row["text"],
+                    row["clip_start"],
+                    row["clip_end"],
+                ),
             }
         )
+
+    def _alignment_fields(
+        self,
+        segment_id: str,
+        source_language: str,
+        text: str,
+        clip_start: float,
+        clip_end: float,
+    ) -> dict[str, Any]:
+        """Cached progressive timing for this clip, or the honest unavailable state.
+
+        Never computes an alignment: producing one needs the optional extra and takes real time,
+        so a clip lookup only ever reads what is already cached. Cue-level timing stays in
+        ``segments`` regardless, so a consumer always has something to render.
+        """
+        unavailable: dict[str, Any] = {"alignment_status": "unavailable"}
+        if not self.alignment_database.is_file():
+            return unavailable
+        try:
+            from .alignment import resolve_model
+            from .alignment_store import AlignmentStore
+        except ImportError:  # pragma: no cover - the core package always provides these
+            return unavailable
+
+        model = resolve_model(
+            source_language,
+            profile=self.settings.alignment_profile,
+            allow_non_commercial=self.settings.alignment_allow_non_commercial,
+        )
+        if model is None:
+            return unavailable
+        try:
+            store = AlignmentStore(self.alignment_database)
+            record = store.find(
+                segment_id=segment_id, source_language=source_language, model_id=model.model_id
+            )
+        except sqlite3.Error:
+            return unavailable
+        if record is None or not record.result.usable:
+            return unavailable
+        result = record.result
+        return {
+            "alignment_status": result.status,
+            "alignment_coverage": result.coverage,
+            "alignment_provenance": (result.provenance.as_dict() if result.provenance else None),
+            "alignment_groups": result.timed_text(),
+        }
 
     def statistics(self) -> CorpusStatistics:
         catalogues = load_catalogue_directory(self.catalogue_dir)

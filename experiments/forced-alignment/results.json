@@ -1,0 +1,303 @@
+{
+  "result_schema_version": 1,
+  "run_id": "run-1",
+  "generated_at": "2026-09-08T15:08:06.230586+00:00",
+  "config": {
+    "version": 1,
+    "languages": [
+      "es"
+    ],
+    "models": [
+      {
+        "name": "mms",
+        "profile": "mms"
+      },
+      {
+        "name": "permissive",
+        "profile": "permissive"
+      }
+    ],
+    "sampling": {
+      "target_per_cell": 100,
+      "minimum_per_cell": 50,
+      "time_budget_seconds": 600.0,
+      "min_tokens": 4,
+      "max_clip_seconds": 20.0,
+      "review_clips": 20,
+      "review_repeats": 3,
+      "seed": 20260908
+    },
+    "tolerances": [
+      0.1,
+      0.2,
+      0.3
+    ],
+    "notes": "Languages list grows to en and ru once those channel catalogues exist. The reference is YouTube's automatic-caption word start times; end times are parser estimates and are never scored."
+  },
+  "align_summary": {
+    "rows": 200,
+    "wall_seconds": 90.4,
+    "median_seconds_per_audio_second": 0.0232,
+    "device": "auto"
+  },
+  "preflight": {
+    "generated_at": "2026-09-08T14:53:42.422272+00:00",
+    "languages": {
+      "es": {
+        "indexed_segments": 6614,
+        "videos": 20,
+        "authored_videos": 10,
+        "automatic_videos": 10,
+        "authored_with_reference": 5,
+        "audio_ready": 20,
+        "audio_missing": 0,
+        "authored_segments": 3243,
+        "automatic_segments": 3371
+      }
+    },
+    "budget": {
+      "note": "pass --seconds-per-clip from an align run to size the sample"
+    }
+  },
+  "scores": {
+    "generated_at": "2026-09-08T14:56:38.924468+00:00",
+    "summaries": [
+      {
+        "system": "mms",
+        "language": "es",
+        "source_class": "authored",
+        "segments": 98,
+        "videos": 10,
+        "words": 871,
+        "median_abs": 0.059,
+        "p90_abs": 0.119,
+        "median_signed": 0.056,
+        "within": {
+          "100ms": 0.8266,
+          "200ms": 0.9839,
+          "300ms": 0.992
+        },
+        "median_abs_ci": [
+          0.05,
+          0.063
+        ],
+        "within_200ms_ci": [
+          0.9665,
+          0.9955
+        ],
+        "coverage": 0.9883,
+        "failures": 2,
+        "seconds_per_audio_second": 0.0295,
+        "indicative_only": false
+      },
+      {
+        "system": "permissive",
+        "language": "es",
+        "source_class": "authored",
+        "segments": 98,
+        "videos": 10,
+        "words": 871,
+        "median_abs": 0.063,
+        "p90_abs": 0.125,
+        "median_signed": 0.061,
+        "within": {
+          "100ms": 0.8025,
+          "200ms": 0.9724,
+          "300ms": 0.9816
+        },
+        "median_abs_ci": [
+          0.056,
+          0.0725
+        ],
+        "within_200ms_ci": [
+          0.9575,
+          0.985
+        ],
+        "coverage": 0.9883,
+        "failures": 2,
+        "seconds_per_audio_second": 0.0213,
+        "indicative_only": false
+      },
+      {
+        "system": "cue_start",
+        "language": "es",
+        "source_class": "authored",
+        "segments": 98,
+        "videos": 10,
+        "words": 879,
+        "median_abs": 2.029,
+        "p90_abs": 6.65,
+        "median_signed": -2.029,
+        "within": {
+          "100ms": 0.0,
+          "200ms": 0.0,
+          "300ms": 0.0
+        },
+        "median_abs_ci": [
+          1.7329,
+          2.4095
+        ],
+        "within_200ms_ci": [
+          0.0,
+          0.0
+        ],
+        "coverage": 1.0,
+        "failures": 2,
+        "seconds_per_audio_second": 0.0,
+        "indicative_only": false
+      },
+      {
+        "system": "cue_interpolated",
+        "language": "es",
+        "source_class": "authored",
+        "segments": 98,
+        "videos": 10,
+        "words": 879,
+        "median_abs": 0.3325,
+        "p90_abs": 0.8618,
+        "median_signed": 0.0755,
+        "within": {
+          "100ms": 0.1763,
+          "200ms": 0.3185,
+          "300ms": 0.4608
+        },
+        "median_abs_ci": [
+          0.2711,
+          0.3598
+        ],
+        "within_200ms_ci": [
+          0.2655,
+          0.3697
+        ],
+        "coverage": 1.0,
+        "failures": 2,
+        "seconds_per_audio_second": 0.0,
+        "indicative_only": false
+      },
+      {
+        "system": "mms",
+        "language": "es",
+        "source_class": "automatic",
+        "segments": 96,
+        "videos": 10,
+        "words": 820,
+        "median_abs": 0.077,
+        "p90_abs": 0.1791,
+        "median_signed": 0.075,
+        "within": {
+          "100ms": 0.6707,
+          "200ms": 0.928,
+          "300ms": 0.9878
+        },
+        "median_abs_ci": [
+          0.065,
+          0.104
+        ],
+        "within_200ms_ci": [
+          0.8228,
+          0.9807
+        ],
+        "coverage": 0.9983,
+        "failures": 4,
+        "seconds_per_audio_second": 0.0262,
+        "indicative_only": false
+      },
+      {
+        "system": "permissive",
+        "language": "es",
+        "source_class": "automatic",
+        "segments": 100,
+        "videos": 10,
+        "words": 839,
+        "median_abs": 0.081,
+        "p90_abs": 0.1982,
+        "median_signed": 0.078,
+        "within": {
+          "100ms": 0.6341,
+          "200ms": 0.9094,
+          "300ms": 0.9678
+        },
+        "median_abs_ci": [
+          0.074,
+          0.113
+        ],
+        "within_200ms_ci": [
+          0.8065,
+          0.9691
+        ],
+        "coverage": 0.9983,
+        "failures": 0,
+        "seconds_per_audio_second": 0.0214,
+        "indicative_only": false
+      },
+      {
+        "system": "cue_start",
+        "language": "es",
+        "source_class": "automatic",
+        "segments": 100,
+        "videos": 10,
+        "words": 840,
+        "median_abs": 1.91,
+        "p90_abs": 6.31,
+        "median_signed": -1.91,
+        "within": {
+          "100ms": 0.0,
+          "200ms": 0.0,
+          "300ms": 0.0
+        },
+        "median_abs_ci": [
+          1.39,
+          2.43
+        ],
+        "within_200ms_ci": [
+          0.0,
+          0.0
+        ],
+        "coverage": 1.0,
+        "failures": 0,
+        "seconds_per_audio_second": 0.0,
+        "indicative_only": false
+      },
+      {
+        "system": "cue_interpolated",
+        "language": "es",
+        "source_class": "automatic",
+        "segments": 100,
+        "videos": 10,
+        "words": 840,
+        "median_abs": 0.3167,
+        "p90_abs": 0.7131,
+        "median_signed": 0.0207,
+        "within": {
+          "100ms": 0.1679,
+          "200ms": 0.3179,
+          "300ms": 0.4738
+        },
+        "median_abs_ci": [
+          0.2695,
+          0.35
+        ],
+        "within_200ms_ci": [
+          0.2791,
+          0.3581
+        ],
+        "coverage": 1.0,
+        "failures": 0,
+        "seconds_per_audio_second": 0.0,
+        "indicative_only": false
+      }
+    ],
+    "engine_agreement": {
+      "pairs": 1691,
+      "median_abs": 0.0,
+      "p90_abs": 0.342,
+      "median_signed": 0.0,
+      "within_200ms": 0.8894
+    },
+    "reference_coverage": {
+      "rows": 200,
+      "rows_with_reference": 200
+    }
+  },
+  "review_agreement": null
+}

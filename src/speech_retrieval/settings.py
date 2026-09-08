@@ -5,6 +5,8 @@ from dataclasses import dataclass, field, fields, replace
 from pathlib import Path
 from typing import Any
 
+from .alignment import ALIGNMENT_PROFILES
+
 
 def _boolean(value: str) -> bool:
     normalized = value.strip().casefold()
@@ -49,6 +51,18 @@ class Settings:
     translation_concurrency: int = 4
     translation_target_languages: tuple[str, ...] = ("en", "ru")
     default_target_language: str = "en"
+    #: Which family of alignment checkpoints to use. "mms" is one non-commercial model that
+    #: covers every language; "permissive" is a per-language Apache-2.0 checkpoint and is
+    #: unavailable for languages with no mapping.
+    alignment_profile: str = "mms"
+    #: Refusing non-commercial models makes the permissive profile the only usable one. A host
+    #: that must stay commercially clean sets this to false and gets an explicit unavailable
+    #: state for uncovered languages rather than a silent fallback.
+    alignment_allow_non_commercial: bool = True
+    #: "" selects MPS, CUDA, or CPU automatically.
+    alignment_device: str = ""
+    #: Cap the thread count when aligning, so background work leaves the machine usable.
+    alignment_threads: int = 0
 
     def __post_init__(self) -> None:
         for name in ("data_dir", "catalogue_dir"):
@@ -87,6 +101,8 @@ class Settings:
         if not languages or len(set(languages)) != len(languages):
             raise ValueError("translation_target_languages must contain unique language tags")
         object.__setattr__(self, "translation_target_languages", languages)
+        if self.alignment_profile not in ALIGNMENT_PROFILES:
+            raise ValueError(f"alignment_profile must be one of {', '.join(ALIGNMENT_PROFILES)}")
         default_language = canonical_language(self.default_target_language)
         if default_language not in languages:
             raise ValueError("default_target_language must be advertised")
@@ -130,6 +146,10 @@ class Settings:
                 item.strip() for item in value.split(",") if item.strip()
             ),
             "default_target_language": str,
+            "alignment_profile": str,
+            "alignment_allow_non_commercial": _boolean,
+            "alignment_device": str,
+            "alignment_threads": int,
         }
         values: dict[str, Any] = {}
         for item in fields(cls):

@@ -1,6 +1,6 @@
 # Plan 10: Forced alignment
 
-**Status:** Planned
+**Status:** In progress
 
 **Depends on:** Plan 09
 
@@ -24,20 +24,29 @@ manual-caption material instead of requiring full-corpus alignment.
 - Define a narrow `Aligner` protocol around known source text, prepared audio, and language. Aligning
   known text to audio is a CTC forced-alignment task, not a transcription task, and should not be
   approached by re-running ASR.
-- Evaluate two families, and treat licensing as a first-class selection criterion because the host
-  application is not a research artifact:
-  - `torchaudio.functional.forced_align` with the
-    [MMS_FA bundle](https://docs.pytorch.org/audio/stable/tutorials/forced_alignment_for_multilingual_data_tutorial.html),
-    which covers 1100+ languages with a single model through uroman romanization. This is the best
-    technical fit by a wide margin, but the MMS weights are **CC-BY-NC-4.0**, so it cannot be the
-    default shipped path for a commercial host.
-  - a permissively licensed path: per-language Apache-2.0 wav2vec2 CTC models with the same
-    torchaudio alignment function, which is also how [WhisperX](https://github.com/m-bain/whisperX)
-    aligns, or the Montreal Forced Aligner where its acoustic model license permits.
-- Therefore: use MMS for the research numbers and the upper bound, and require the default
-  configuration to be a permissively licensed model. Record every model's license in the report and
-  in `doctor` output. Confirm the current license terms at implementation time rather than trusting
-  this note.
+- Build **one algorithm over a swappable CTC-emissions backend**, not two aligners. Both candidates
+  are wav2vec2-family CTC models and `torchaudio.functional.forced_align` is the same Viterbi step
+  for both. Load checkpoints through `transformers` rather than `torchaudio.pipelines`, whose
+  surface has been moving, and keep only `forced_align` from torchaudio. This also makes an ONNX
+  backend (Plan 16) a backend change rather than a rewrite.
+- Two model profiles, licensing recorded as first-class provenance:
+  - `mms` — `MahmoudAshraf/mms-300m-1130-forced-aligner`, the HuggingFace port of the
+    [MMS_FA bundle](https://docs.pytorch.org/audio/stable/tutorials/forced_alignment_for_multilingual_data_tutorial.html).
+    1130 languages through uroman romanization. **CC-BY-NC-4.0.**
+  - `permissive` — per-language Apache-2.0 wav2vec2 CTC checkpoints
+    (`jonatasgrosman/wav2vec2-large-xlsr-53-*`).
+- **Correction to an earlier assumption in this plan.** Aligning "the way WhisperX aligns" is *not*
+  the permissive route: WhisperX's default torch models for `es`/`fr`/`de`/`it` are the VoxPopuli
+  bundles, which are themselves **CC-BY-NC-4.0**. Verified against the HuggingFace model API on
+  2026-09-08.
+- **Default to `mms`, and keep `permissive` a fully exercised, config-selectable path.** This host
+  is a personal research project, not a commercial product, so the earlier "the default must be
+  permissive" rule is inverted. What makes that safe is that every cached alignment records its
+  model's license, so non-commercial rows can be found and purged with one query if that ever
+  changes. The measured cost of switching is 4 ms of median error in Spanish, so nothing depends on
+  the default.
+- Model selection resolves per language. An unmapped language returns `unavailable` rather than
+  falling back to another language's checkpoint, which would produce confident nonsense.
 - Align the bounded clip around a segment before considering full-video work. Return timed source
   character ranges, unmatched ranges, coverage, confidence, and provenance.
 - Use this priority order: a clip the user opens, then remaining manual-caption videos, then
@@ -85,6 +94,13 @@ manual-caption material instead of requiring full-corpus alignment.
   breaking playback.
 - A dated experiment report compares candidates against reviewed examples and records why one was
   promoted, limited to certain source classes, or left experimental.
+  Done for Spanish: [`experiments/forced-alignment`](../../experiments/forced-alignment/README.md),
+  2026-09-08. Authored captions improve from 333 ms to 59 ms median word-start error (98% within
+  200 ms); the Apache-2.0 model matches MMS to 4 ms; automatic captions already agree within the
+  models' own inter-model noise. The recommendation is therefore **align authored tracks, skip
+  automatic ones**, and the rule is the source class rather than a confidence threshold — mean CTC
+  confidence was measured and does *not* predict timing error. The listening review and the
+  English/Russian cells are outstanding.
 - Configuration tests prove the default model selection is the permissively licensed one and that
   selecting a non-commercial model is a deliberate, recorded choice.
 - The ordinary test suite and the exact subtitle-only player continue to work without alignment
