@@ -98,12 +98,18 @@ owns Docker, systemd, or other process supervision.
 | [11 · Evaluation, labeling, and LLM judge](11-evaluation-labeling-and-llm-judge.md) | Planned | 06, 07 | Human gold judgments, a review tool, a calibrated offline judge, and a distant-supervision set. |
 | [12 · Ranking features and diversification](12-ranking-features-and-diversification.md) | Planned | 03, 11 | Reproducible features, logistic ranking, explanations, and diversity metrics. |
 | [13 · Learned multilingual reranker](13-learned-multilingual-reranker.md) | Planned | 11, 12 | A zero-shot and fine-tuned neural comparison with a promotion gate and model card. |
+| [17 · Passage extraction comparison](17-passage-extraction-comparison.md) | Planned | 02, 03 | A pluggable segmentation strategy, blind side-by-side human comparison of extraction methods, and a per-language promotion gate. |
 
 The remaining work in Stages 3 and 4 forms parallel tracks after Plan 07; Plan 08 is the deliberate
 host-independent exception. Plan 11's labeling should begin as soon as Plan 07 lands. Plan 12 ships with text and metadata
 features alone — Plan 09's acoustic features and Plan 10's alignment coverage are optional later
 inputs, used only where Plan 09's sample review found them trustworthy. The human-only held-out set
 remains the headline evaluation even when judge or distant labels are used for training.
+
+Plan 17 is numbered after Plan 16 but belongs in Stage 4, and it is runnable now: it depends only on
+cached captions and the analyzers. It is deliberately orthogonal to Plans 11 and 12 — those decide
+*which* occurrence to show, while Plan 17 decides *where the shown passage starts and ends*, holding
+the occurrence fixed. Its per-arm cost measurements are an input to Plan 16's resource caps.
 
 ### Stage 5 · Scale and release
 
@@ -174,6 +180,7 @@ for it.
 | Language-neutral source handling and query-selected translation language | 02, 05, 08, 06 |
 | Singular/plural, gender, conjugation, and base-form retrieval in both directions | 03, 04 |
 | Candidate limits, random samples, quality ranking, and result diversity | 05, 11–13 |
+| Sentence and phrase boundaries in the passages shown to the learner | 17 |
 | Public/hand-labeled data, labeling UI, logistic baseline, small-model fine-tuning | 11–13 |
 | Creator-authored subtitles in every available language, excluding auto-translation | 08 |
 | Audio download, clarity features, subtitle validation, and ASR fallback | 09, 12 |
