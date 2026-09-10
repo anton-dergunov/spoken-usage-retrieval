@@ -354,6 +354,7 @@ def _acquire_video_audio(
     runner: Runner,
     media_runner: Runner,
     ffprobe: str,
+    probe_runner: Any,
     policy: AudioFormatPolicy | None,
     tool_version: str | None,
 ) -> dict[str, Any]:
@@ -405,6 +406,7 @@ def _acquire_video_audio(
         runner=media_runner,
         policy=policy,
         ffprobe=ffprobe,
+        probe_runner=probe_runner,
         yt_dlp_version=tool_version,
     )
     return {
@@ -428,6 +430,7 @@ def _download_one(
     with_audio: bool = False,
     media_runner: Runner | None = None,
     ffprobe: str = "ffprobe",
+    probe_runner: Any = None,
     audio_policy: AudioFormatPolicy | None = None,
     tool_version: str | None = None,
 ) -> dict[str, Any]:
@@ -454,6 +457,7 @@ def _download_one(
                 runner=runner,
                 media_runner=media_runner or runner,
                 ffprobe=ffprobe,
+                probe_runner=probe_runner,
                 policy=audio_policy,
                 tool_version=tool_version,
             )
@@ -658,6 +662,7 @@ def _download_one(
             runner=runner,
             media_runner=media_runner or runner,
             ffprobe=ffprobe,
+            probe_runner=probe_runner,
             policy=audio_policy,
             tool_version=tool_version,
         )
@@ -681,6 +686,10 @@ def acquire(
     with_audio: bool = False,
     media_runner: Runner | None = None,
     ffprobe: str = "ffprobe",
+    #: Injected in tests so the audio path does not depend on a real ffprobe being installed.
+    #: `runner` and `media_runner` exist for the same reason; this was the missing third, which is
+    #: why one test had to reach the real binary and failed wherever ffmpeg is absent.
+    probe_runner: Any = None,
     audio_policy: AudioFormatPolicy | None = None,
 ) -> dict[str, Any]:
     if limit < 1:
@@ -759,6 +768,7 @@ def acquire(
                     with_audio=with_audio,
                     media_runner=media_runner,
                     ffprobe=ffprobe,
+                    probe_runner=probe_runner,
                     audio_policy=audio_policy,
                     tool_version=tool_version,
                 )

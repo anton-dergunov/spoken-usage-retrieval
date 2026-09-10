@@ -493,7 +493,11 @@ def test_audio_enabled_acquisition_adds_audio_without_redownloading_captions(tmp
         limit=1,
         runner=caption_runner(tmp_path, audio_calls=audio_calls),
         with_audio=True,
-        ffprobe="ffprobe",
+        # Injected, like every other test in this file. It used to reach the real ffprobe, which
+        # made the test pass only where ffmpeg happens to be installed — green on a developer's
+        # machine and red on CI, which has no ffmpeg. What this test is about is that adding audio
+        # does not re-download captions; the probe is scaffolding, not the subject.
+        probe_runner=probe_runner(format_name="wav", duration=120.0),
     )
 
     assert first["videos"][0]["status"] == "downloaded"
