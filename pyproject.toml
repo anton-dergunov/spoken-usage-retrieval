@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spoken-usage-retrieval"
-version = "0.1.0"
+version = "0.2.0"
 description = "A multilingual prototype for retrieving real usage from timestamped video captions"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -86,6 +86,15 @@ dev = [
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/speech_retrieval"]
+
+# The default channel catalogues travel inside the wheel. Without this the wheel carries no
+# catalogue at all and `config/channels/es.json` resolves only because it happens to sit in this
+# repository's working tree next to the default relative `catalogue_dir`. A container installing
+# the wheel would then start with an empty catalogue directory, and an empty one cannot be
+# bootstrapped through the API: `ChannelRepository` only edits a `<language>.json` that already
+# exists, and the schema forbids a catalogue with no sections. `channels seed` copies these out.
+[tool.hatch.build.targets.wheel.force-include]
+"config/channels" = "speech_retrieval/catalogues"
 
 [tool.hatch.build.targets.sdist]
 exclude = ["/AGENTS.md"]

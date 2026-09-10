@@ -1,0 +1,86 @@
+name: Release
+
+# A host pins one version of this project and fetches its artifacts by digest, so a release has to
+# be a real, immutable thing rather than a local `uv build` someone remembered to run. CI already
+# builds both artifacts on every push and throws them away; this keeps them.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v6
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@c771a70e6277c0a99b617c7a806ffedaca235ff9 # v9.0.0
+        with:
+          version: "0.11.14"
+          enable-cache: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/react/package-lock.json
+
+      - name: Install locked dependencies
+        run: |
+          uv sync --locked --extra dev
+          npm ci --prefix packages/react
+
+      # The tag is the release's identity and `pyproject.toml` is the version's single source, so a
+      # tag that disagrees with the metadata would publish artifacts under a name that is not
+      # theirs. `tests/test_packaging.py` already holds the npm package to the same version.
+      - name: Check the tag matches the packaged version
+        run: |
+          tagged="${GITHUB_REF_NAME#v}"
+          packaged="$(uv run python -c 'import speech_retrieval; print(speech_retrieval.__version__)')"
+          if [ "$tagged" != "$packaged" ]; then
+            echo "tag $GITHUB_REF_NAME does not match packaged version $packaged" >&2
+            exit 1
+          fi
+
+      - name: Verify
+        run: |
+          uv run pytest
+          npm --prefix packages/react test
+          npm --prefix packages/react run verify:pack
+
+      # `npm pack` reads package.json from the working directory: `--prefix` does not retarget it,
+      # so this must run from the package rather than the repository root.
+      - name: Build artifacts
+        run: |
+          uv build
+          (cd packages/react && npm pack --pack-destination ../../dist)
+
+      # A consumer verifies what it downloaded against a digest it has written down, so publish the
+      # digests beside the files rather than making every host compute them from a download it
+      # cannot yet trust.
+      - name: Record digests
+        run: |
+          cd dist
+          sha256sum ./* | tee SHA256SUMS
+
+      - name: Publish the release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.whl
+            dist/*.tar.gz
+            dist/*.tgz
+            dist/SHA256SUMS
+          fail_on_unmatched_files: true
+          generate_release_notes: true

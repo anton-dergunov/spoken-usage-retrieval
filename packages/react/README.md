@@ -5,14 +5,23 @@ A reusable React player and typed HTTP client for
 renders one source-language speech clip. Its host owns modals, routing, result navigation, and
 persistence.
 
-## Install locally
+## Install
 
-Build and pack the package, then install the resulting tarball in a React application:
+Every tagged release attaches this package as a tarball, alongside the Python wheel and a
+`SHA256SUMS` file. A host pins one version and installs that tarball, which is the supported path:
+
+```bash
+npm install ./spoken-usage-retrieval-react-<version>.tgz
+```
+
+To build one from a checkout instead, pack it from the package directory. `npm pack` reads
+`package.json` from the working directory, so `--prefix` does not retarget it, and `prepack` needs
+the dev dependencies already installed:
 
 ```bash
 npm ci --prefix packages/react
-npm --prefix packages/react pack
-npm install ./packages/react/spoken-usage-retrieval-react-0.1.0.tgz
+(cd packages/react && npm pack)
+npm install ./packages/react/spoken-usage-retrieval-react-<version>.tgz
 ```
 
 React and React DOM are peer dependencies, so the host's React instance is reused.

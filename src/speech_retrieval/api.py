@@ -19,7 +19,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
-from . import __version__
+from ._version import __version__
 from .analysis import InvalidAnalysisError, UnsupportedAnalysisError
 from .audio import audio_cache_status
 from .catalogue import CatalogueError, canonical_language, load_catalogue_directory

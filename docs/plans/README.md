@@ -78,7 +78,7 @@ Plan 04 was optional and blocks nothing; its production recommendations require 
 | --- | --- | --- | --- |
 | [05 · Library, CLI, and service API](05-library-cli-and-service-api.md) | Complete | 02, 03 | Stable Python, command-line, and versioned HTTP contracts. |
 | [06 · Reusable React player](06-reusable-react-player.md) | Complete | 05 | A locally packable host-independent player and typed client used by the demo. |
-| [07 · Acervo integration slice](07-acervo-integration.md) | Planned | 05, 06 | The service in real use behind article examples, source playback only. |
+| [07 · Acervo integration slice](07-acervo-integration.md) | In progress | 05, 06 | The service in real use behind article examples, source playback only. Packaging, seeding and tagged releases are done; the host-side integration is in the Acervo repository. |
 
 Completing Plan 07 is the integration checkpoint. The service remains a foreground process; its host
 owns Docker, systemd, or other process supervision.

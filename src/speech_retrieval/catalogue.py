@@ -275,6 +275,43 @@ def load_catalogue(path: Path) -> Catalogue:
     )
 
 
+def packaged_catalogues() -> Path:
+    """The default catalogues that travel inside the distribution.
+
+    A deployment mounts an empty directory for the operator's own catalogue and has nowhere to copy
+    a starting point from, because an empty directory cannot be filled through the API:
+    `ChannelRepository` only rewrites a `<language>.json` that already exists, and `load_catalogue`
+    rejects a catalogue with no sections. So the wheel carries these and `seed_catalogues` copies
+    them out once.
+    """
+    return Path(__file__).resolve().parent / "catalogues"
+
+
+def seed_catalogues(destination: Path, source: Path | None = None) -> tuple[Path, ...]:
+    """Copy the packaged catalogues into `destination`, and never overwrite one that is there.
+
+    Per file rather than per directory, so a directory holding `es.json` still receives a `fr.json`
+    a later version added — while a channel the operator added to `es.json` is left alone. That
+    asymmetry is the point: the operator's list is the operator's, but a language they have never
+    seen is not a list they have edited.
+    """
+    origin = packaged_catalogues() if source is None else source
+    if not origin.is_dir():
+        return ()
+    destination.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for candidate in sorted(origin.glob("*.json")):
+        target = destination / candidate.name
+        if target.exists():
+            continue
+        # Validated before it lands, so a corrupt seed fails here rather than at the next readiness
+        # check, which reads the whole directory and would blame the operator's own file.
+        load_catalogue(candidate)
+        target.write_bytes(candidate.read_bytes())
+        written.append(target)
+    return tuple(written)
+
+
 def load_catalogue_directory(path: Path) -> tuple[Catalogue, ...]:
     if not path.exists():
         return ()

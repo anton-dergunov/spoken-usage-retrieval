@@ -1,7 +1,6 @@
 """Public library surface for spoken usage retrieval."""
 
-__version__ = "0.1.0"
-
+from ._version import __version__
 from .analysis import InvalidAnalysisError, UnsupportedAnalysisError
 from .api import create_app
 from .audio import (
@@ -20,6 +19,7 @@ from .audio import (
     plan_audio_prune,
     prepare_clip,
 )
+from .catalogue import packaged_catalogues, seed_catalogues
 from .channels import (
     ChannelConflictError,
     ChannelNotFoundError,
@@ -83,6 +83,7 @@ from .translations import (
 )
 
 __all__ = [
+    "__version__",
     "AUDIO_PREPARATION_VERSION",
     "AlignmentQuality",
     "AlignmentToken",
@@ -151,9 +152,11 @@ __all__ = [
     "audio_availability",
     "audio_storage",
     "create_app",
+    "packaged_catalogues",
     "execute_audio_prune",
     "plan_audio_prune",
     "prepare_clip",
+    "seed_catalogues",
     "alignment_tokens",
     "validate_alignment_output",
     "validate_translation_output",

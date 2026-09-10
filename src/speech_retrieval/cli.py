@@ -27,7 +27,7 @@ from .audio import (
     plan_audio_prune,
     tool_version,
 )
-from .catalogue import load_catalogue_directory
+from .catalogue import load_catalogue_directory, seed_catalogues
 from .channels import ChannelRepository
 from .contracts import ChannelCreate, ChannelUpdate, DoctorCheck, DoctorReport
 from .identity import CACHE_SCHEMA_VERSION, track_id, video_key
@@ -138,6 +138,19 @@ def _search(args: argparse.Namespace) -> int:
 
 def _channels_list(args: argparse.Namespace) -> int:
     _emit(ChannelRepository(_settings(args).catalogue_dir).list(args.language), args.json)
+    return 0
+
+
+def _channels_seed(args: argparse.Namespace) -> int:
+    """Put the packaged catalogues into an empty catalogue directory.
+
+    What a container entry point calls on first start. It is deliberately idempotent and never
+    overwrites, so it can run unconditionally on every boot rather than behind a test the caller
+    would have to get right.
+    """
+    destination = args.into or _settings(args).catalogue_dir
+    written = seed_catalogues(Path(destination))
+    _emit([str(path) for path in written], json_output=True)
     return 0
 
 
@@ -491,6 +504,13 @@ def _parser() -> argparse.ArgumentParser:
     channel_list.add_argument("--language")
     channel_list.add_argument("--json", action="store_true")
     channel_list.set_defaults(handler=_channels_list)
+
+    channel_seed = channel_commands.add_parser(
+        "seed", help="Copy the packaged catalogues into the catalogue directory, never overwriting."
+    )
+    _common(channel_seed)
+    channel_seed.add_argument("--into", type=Path)
+    channel_seed.set_defaults(handler=_channels_seed)
 
     channel_add = channel_commands.add_parser("add")
     _common(channel_add)

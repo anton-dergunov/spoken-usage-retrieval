@@ -11,7 +11,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TextIO
 
-from . import __version__
+from ._version import __version__
 from .analysis import Analysis, AnalyzedToken, get_analyzer
 from .captions import segments_from_files
 from .identity import (

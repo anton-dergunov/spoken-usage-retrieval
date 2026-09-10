@@ -1,6 +1,6 @@
 # Plan 07: Acervo integration slice
 
-**Status:** Planned
+**Status:** In progress
 
 **Depends on:** Plans 05 and 06
 
@@ -40,17 +40,36 @@ system that is already carrying real traffic, which is the point of doing it her
 - Acervo owns the modal and article navigation; `SpeechClipPlayer` owns clip playback.
 - Service health presentation is Acervo's concern. This plan only guarantees that
   `/api/v1/status` and `/api/v1/statistics` expose what such a page needs.
+- **The container is the host's, not this repository's.** That follows from the standing contract
+  that the package never self-daemonizes and that process, volumes, URL and credentials are host
+  configuration; it also leaves Plan 16 free to arrive on its own schedule.
+- **A host's translation adapter is injected, not vendored here.** `TranslationProvider` and
+  `WordAlignmentProvider` already allow it through `create_app`, so a host that wants its own
+  provider chain serves the app itself rather than this repository growing a second provider
+  implementation.
 
 ## Implementation work
 
 ### Retrieval repository
 
 1. Build the wheel/sdist and npm tarball, inspect their contents, and install both into clean
-   temporary consumers using only documented dependencies.
+   temporary consumers using only documented dependencies. **Done**, and it turned up three things
+   that had to be fixed before a host could pin anything:
+   - The version was three independent literals — `pyproject.toml`, `__version__`, and the npm
+     package — and `__version__` is what `/health/live` reports and what the index stores as
+     `meta.package_version`. It is now read from the installed distribution in `_version.py`, with
+     `tests/test_packaging.py` holding the npm package to the same number.
+   - The wheel carried no catalogue at all: `config/channels/es.json` resolved only because it sits
+     in this working tree beside the default relative `catalogue_dir`. It is now packaged, and
+     `speech-retrieval channels seed` copies it into a host's mount without ever overwriting.
+   - There was no release automation and no tag. `.github/workflows/release.yml` builds both
+     artifacts on a `v*` tag, refuses a tag that disagrees with the packaged version, and publishes
+     them with a `SHA256SUMS` file so a host can pin by digest.
 2. Add a minimal cross-package compatibility fixture that exercises search and clip lookup against
    the checked-in OpenAPI contract and the packaged TypeScript client.
 3. Document the integration path: service configuration, environment variables, volume layout,
    `update --once` scheduling, and the exact candidate-request shape a host should use.
+   **Done** — [`docs/hosting.md`](../hosting.md).
 
 ### Companion Acervo checklist
 
@@ -90,6 +109,17 @@ system that is already carrying real traffic, which is the point of doing it her
   service.
 - An article generated end to end cites a clip whose channel attribution and timing match the
   service's current data.
+
+## Limitations this milestone surfaced
+
+Recorded here rather than worked around in the host.
+
+- **`channels add` cannot bootstrap a language.** `ChannelRepository._path` raises when
+  `<language>.json` does not already exist, and `load_catalogue` rejects a catalogue with no
+  sections, so a language the packaged seed does not cover cannot be added through the API at all.
+  A host's channel-management surface is therefore limited to seeded languages.
+- **Only SIGINT shutdown is covered.** `tests/test_serve_subprocess.py` asserts a clean exit on
+  SIGINT; Docker sends SIGTERM, which nothing exercises.
 
 ## Non-goals
 
