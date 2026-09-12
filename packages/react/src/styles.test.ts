@@ -41,6 +41,37 @@ describe("package styles", () => {
     expect(css).toMatch(/\.sur-player \.sur-player__speed-select\s*\{[^}]*width: 68px;[^}]*margin-left: 12px;[^}]*font: 11px var\(--sur-player-mono\);/s);
   });
 
+  it("carries fewer controls on a phone rather than folding the same ones onto more rows", () => {
+    const phone = css.slice(css.indexOf("@media (max-width: 540px)"));
+    // The presets go and the select stays: it already offers those four rates and four more, in the
+    // width of one of them. The base rule's margin has nothing left to separate it from.
+    expect(phone).toContain(".sur-player__transport .sur-player__speed-preset { display: none; }");
+    expect(phone).toContain(".sur-player .sur-player__speed-select { margin-left: 0; }");
+    // The replay goes too, so the slider gets the width. `r` and dragging back still reach it.
+    expect(phone).toContain(".sur-player__transport-secondary { display: none; }");
+    // And so the transport is one row, not two, with nothing left to wrap.
+    expect(phone).toContain(".sur-player__transport-footer { flex-wrap: nowrap; }");
+    expect(phone).toMatch(/grid-template-areas:\s*\n\s*"primary timeline"\s*\n\s*"primary footer";/);
+  });
+
+  it("keeps the source link beside the channel at every width", () => {
+    const phone = css.slice(css.indexOf("@media (max-width: 540px)"));
+    // It used to take a line of its own on a phone — a whole row spent on six words.
+    expect(phone).not.toMatch(/\.sur-player__source-line a\s*\{[^}]*width: 100%/);
+    expect(phone).toContain(".sur-player__source-line a { flex: 0 0 auto; }");
+    expect(phone).toMatch(/\.sur-player__source-line\s*\{[^}]*flex-wrap: nowrap;/s);
+    // Which only works if the channel beside it is allowed to give way.
+    expect(phone).toMatch(/text-overflow: ellipsis;/);
+  });
+
+  it("sizes the passage and its translation to fit a phone together", () => {
+    const phone = css.slice(css.indexOf("@media (max-width: 540px)"));
+    expect(phone).toContain(".sur-player__source-text { font-size: 17px; }");
+    expect(phone).toContain(".sur-player__target-text { font-size: 15px; }");
+    // Wider screens keep the sizes they had; only the narrow case was ever cramped.
+    expect(css).toContain("font: 400 clamp(18px, 2vw, 23px)/1.52 var(--sur-player-serif)");
+  });
+
   it("aligns readable timeline text with the left edge of the slider", () => {
     expect(css).toMatch(/\.sur-player__time-row\s*\{[^}]*font: 12px var\(--sur-player-mono\);/s);
     expect(css).toContain(".sur-player__timeline { grid-area: timeline; min-width: 0; }");

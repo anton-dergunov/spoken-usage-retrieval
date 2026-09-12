@@ -475,29 +475,54 @@
 }
 .sur-player__source-line a:hover { text-decoration: underline; }
 
+/* A phone, where the constraint is width and the answer is to carry fewer controls rather than to
+   fold the same ones onto more rows. A *viewport* query, deliberately: the question is genuinely
+   how much screen there is, which is why a tablet at 768 or 834 px keeps the full set. Three things
+   go, and each has somewhere else to be reached:
+
+   - the four rate presets, because the select beside them already offers those four and four more,
+     in the width of one of them;
+   - the replay button, because `r` and dragging the slider back both still do it, and the slider is
+     what a thumb actually wants the width for;
+   - the second transport row, which only existed to hold what has just gone.
+
+   What is left is one row — play, slider, clock, speed — and a source line that reads across rather
+   than down. */
 @media (max-width: 540px) {
   .sur-player__chrome { border-radius: 6px 6px 0 0; }
-  .sur-player__transport {
-    grid-template-columns: 41px 33px minmax(0, 1fr);
-    grid-template-areas:
-      "primary secondary timeline"
-      "footer footer footer";
-    column-gap: 6px;
-    row-gap: 6px;
-    padding: 11px 10px;
-  }
+  .sur-player__transport,
   .sur-player__transport--no-replay {
     grid-template-columns: 41px minmax(0, 1fr);
     grid-template-areas:
       "primary timeline"
-      "footer footer";
+      "primary footer";
+    column-gap: 9px;
+    row-gap: 1px;
+    padding: 11px 12px;
   }
-  .sur-player__transport-footer { flex-wrap: wrap; }
+  .sur-player__transport-secondary { display: none; }
   .sur-player__transport-primary { width: 39px; height: 39px; }
-  .sur-player__transport-secondary { width: 31px; height: 31px; }
-  .sur-player__copy { padding: 18px 17px; }
-  .sur-player__source-text { font-size: 18px; }
-  .sur-player__source-line a { width: 100%; margin: 5px 0 0; }
+  .sur-player__transport .sur-player__speed-preset { display: none; }
+  /* The gap that separated the select from the presets has nothing left to separate it from. */
+  .sur-player .sur-player__speed-select { margin-left: 0; }
+  .sur-player__transport-footer { flex-wrap: nowrap; }
+  .sur-player__copy { padding: 17px 16px; }
+  /* Down a notch, so a long passage and its translation both fit above the fold on a phone. The
+     sentence is the point of this player — it stays the largest thing on the page. */
+  .sur-player__source-text { font-size: 17px; }
+  .sur-player__target-text { font-size: 15px; }
+  /* On the row with the channel and hard right, exactly as at every other width. The link used to
+     take a line of its own here, which is a whole row spent on six words. */
+  .sur-player__source-line { flex-wrap: nowrap; gap: 7px 10px; }
+  /* Every span, not just the channel: the evaluation row carries a second one, and a line that
+     will not wrap needs everything on it able to give way. The link is the one fixed thing. */
+  .sur-player__source-line > span {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .sur-player__source-line a { flex: 0 0 auto; }
 }
 
 @media (prefers-reduced-motion: reduce) {
