@@ -42,6 +42,15 @@ export interface SuggestionOptions extends RequestOptions {
 export interface TranslationRequestOptions extends RequestOptions {
   targetLanguage: string;
   retryFailed?: boolean;
+  /**
+   * A translation you already hold, to be aligned rather than replaced.
+   *
+   * Supplying it skips translation entirely: one provider call instead of two, no translation
+   * provider needed, and the word alignment comes back for *your* sentence. A host that already
+   * shows its own translation of a passage wants that one aligned — asking for a fresh one gives
+   * it a second, different sentence for the same clip and no honest way to show both.
+   */
+  targetText?: string;
 }
 
 export interface TranslationBatchOptions extends TranslationRequestOptions {
@@ -138,9 +147,15 @@ export function createSpeechRetrievalClient(options: SpeechRetrievalClientOption
     clip(segmentId, requestOptions) {
       return request<SpeechClip>(`/clips/${part(segmentId)}`, { signal: requestOptions?.signal });
     },
-    requestTranslation(segmentId, { targetLanguage, retryFailed = false, signal }) {
+    requestTranslation(segmentId, { targetLanguage, retryFailed = false, targetText, signal }) {
       return request<TranslationJob>(`/clips/${part(segmentId)}/translations`, {
-        method: "POST", body: JSON.stringify({ target_language: targetLanguage, retry_failed: retryFailed }), signal,
+        method: "POST",
+        body: JSON.stringify({
+          target_language: targetLanguage,
+          retry_failed: retryFailed,
+          ...(targetText === undefined ? {} : { target_text: targetText }),
+        }),
+        signal,
       });
     },
     translation(jobId, requestOptions) {

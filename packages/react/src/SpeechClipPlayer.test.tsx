@@ -8,6 +8,7 @@ import {
   SpeechClipPlayer,
 } from "./SpeechClipPlayer.js";
 import { fixtureResult as clip } from "./fixtures.js";
+import type { SpeechClipPlayerClip } from "./types.js";
 import type { YouTubeNamespace, YouTubePlayer } from "./youtube.js";
 
 class MockPlayer implements YouTubePlayer {
@@ -218,6 +219,24 @@ it("uses Unicode character offsets for highlights", () => {
   expect(container.querySelector("mark")).toHaveTextContent("casas");
   rerender(<ProgressiveSourceText text={text} match={match} timing={timing} currentTime={1.5} />);
   expect(container.textContent).toBe(text);
+});
+
+it("marks a supplied span when the clip carries none, and prefers the clip's own", () => {
+  // `GET /clips/{id}` returns a Clip, which has no `match` and structurally cannot: a segment id
+  // does not know which word was searched for. A host that fetched by id knows the word anyway, so
+  // it can say — otherwise the one thing the learner opened the passage for goes unmarked.
+  const byId = { ...clip, match: undefined } as unknown as SpeechClipPlayerClip;
+  const supplied = { text: "bronca", char_start: 17, char_end: 23, accent_exact: true };
+
+  const { container, rerender } = render(
+    <SpeechClipPlayer clip={byId} match={supplied} youtubeApiLoader={loader} />
+  );
+  expect(container.querySelector(".sur-player__match")).toHaveTextContent("bronca");
+
+  // A search result brought its own, and that one wins: it came from the search that found this.
+  const other = { text: "mucha", char_start: 11, char_end: 16, accent_exact: true };
+  rerender(<SpeechClipPlayer clip={clip} match={other} youtubeApiLoader={loader} />);
+  expect(container.querySelector(".sur-player__match")).toHaveTextContent("bronca");
 });
 
 it("highlights target ranges aligned to the source group active now", () => {

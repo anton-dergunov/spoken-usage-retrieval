@@ -533,8 +533,34 @@ class TranslationService:
         return clip, target
 
     def translation_key(
-        self, clip: Clip, target: str, authored: tuple[str, dict[str, str]] | None
+        self,
+        clip: Clip,
+        target: str,
+        authored: tuple[str, dict[str, str]] | None,
+        supplied: str | None = None,
     ) -> str:
+        """What identifies this translation for caching.
+
+        `supplied` is the caller's own target text, which is not this service's output at all: it
+        keys the *alignment* work done for a sentence somebody else wrote. It has to be part of the
+        key or two callers aligning different translations of one segment would collide, and the
+        second would silently be handed the first one's word graph over its own text.
+
+        With a supplied text no translation provider is involved, so its identity is not in the key
+        either — there is nothing of ours in the answer to attribute.
+        """
+        if supplied is not None:
+            return _hash(
+                "\0".join(
+                    (
+                        _hash(clip.source_text),
+                        clip.source_language,
+                        target,
+                        "supplied",
+                        _hash(supplied),
+                    )
+                )
+            )
         assert self.translation_provider is not None
         return _hash(
             "\0".join(
@@ -638,10 +664,31 @@ class TranslationService:
         )
 
     async def request(
-        self, segment_id: str, target_language: str, *, retry_failed: bool = False
+        self,
+        segment_id: str,
+        target_language: str,
+        *,
+        retry_failed: bool = False,
+        target_text: str | None = None,
     ) -> TranslationJob:
+        """Translate this clip, or align a translation the caller already has.
+
+        `target_text` is the second of those, and it exists because a host may already hold a
+        translation of this passage that it wants aligned rather than replaced. Translating afresh
+        would give it a *different* sentence for the same clip, and there is no honest way to show
+        two — so a host that has one supplies it, the translate stage is skipped entirely, and what
+        comes back is the word alignment of the sentence it sent.
+
+        Half the cost, and the halves that remain are the right ones: one provider call instead of
+        two, no translation provider needed at all, and the result carries the caller's own text.
+        """
         clip, target = self.validate(segment_id, target_language)
         authored = _authored_reference(self.settings, clip, target)
+        if target_text is not None:
+            supplied = target_text.strip()
+            if not supplied:
+                raise ValueError("target_text must not be empty")
+            return await self._align_supplied(clip, target, supplied, retry_failed=retry_failed)
         if self.translation_provider is None:
             return self._authored_or_unavailable(clip, target, authored)
         translation_key = self.translation_key(clip, target, authored)
@@ -686,6 +733,46 @@ class TranslationService:
                     translation_value,
                     alignment_cache_checked,
                 )
+            )
+            self._operations[operation_key] = _SharedOperation(task, {job.job_id})
+        return job
+
+    async def _align_supplied(
+        self, clip: Clip, target: str, supplied: str, *, retry_failed: bool
+    ) -> TranslationJob:
+        """The caller's own translation, aligned and handed straight back.
+
+        Shaped like `_translate`'s return so `_run` cannot tell the difference: it already skips the
+        translate stage when it is handed a translation, so this needs no new branch there. Nothing
+        is written to the translation cache — there is nothing of ours to cache, and the alignment
+        stage keys itself on both texts already.
+        """
+        value: dict[str, Any] = {
+            "target_text": supplied,
+            "warnings": [],
+            "latency_ms": 0.0,
+            "usage": None,
+            "provider_metadata": {"source": "supplied"},
+        }
+        key = self.translation_key(clip, target, None, supplied=supplied)
+        if self.alignment_provider is None:
+            # A perfectly good answer: the caller gets its own sentence back and knows there is no
+            # word graph for it. Deliberately not an error — the text was never ours to fail at.
+            return self.store.create_job(
+                clip.segment_id,
+                target,
+                "complete",
+                cache_key=None,
+                result=self._compose(clip, target, value, None, alignment_status="unavailable"),
+            )
+        job = self.store.create_job(clip.segment_id, target, "queued", cache_key=key)
+        operation_key = self._operation_key(clip, key)
+        self._job_keys[job.job_id] = operation_key
+        if operation := self._operations.get(operation_key):
+            operation.subscribers.add(job.job_id)
+        else:
+            task = asyncio.create_task(
+                self._run(operation_key, key, clip, target, None, retry_failed, value, False)
             )
             self._operations[operation_key] = _SharedOperation(task, {job.job_id})
         return job

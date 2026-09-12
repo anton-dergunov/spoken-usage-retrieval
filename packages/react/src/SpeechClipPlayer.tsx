@@ -61,6 +61,13 @@ export interface SpeechClipPlayerProps {
   onTimeChange?: (absoluteSeconds: number) => void;
   onError?: (error: SpeechClipPlayerError) => void;
   blind?: boolean;
+  /**
+   * Which characters of the source text to mark, when the clip does not say.
+   *
+   * A search result carries its own `match` and ignores this. A clip fetched by id carries none, so
+   * a host that knows the word it was looking for supplies the span here.
+   */
+  match?: MatchSpan;
   showReplayControl?: boolean;
   onReplay?: () => void;
   targetText?: string | null;
@@ -95,8 +102,16 @@ function clipText(clip: SpeechClipPlayerClip): string {
   return "sentence" in clip ? clip.sentence : clip.source_text;
 }
 
-function clipMatch(clip: SpeechClipPlayerClip): MatchSpan | undefined {
-  return "match" in clip ? clip.match : undefined;
+function clipMatch(clip: SpeechClipPlayerClip, supplied?: MatchSpan): MatchSpan | undefined {
+  // The clip's own span wins: it came from the search that found this passage. `supplied` is for a
+  // host that did not arrive through search — `GET /clips/{id}` carries no match and structurally
+  // cannot, because a segment id does not know which word was being looked for. Without this such a
+  // host can mark nothing, and the searched word is the one thing a learner is looking at the
+  // passage *for*.
+  // A *value* check, not a key check: `{...clip, match: undefined}` still has the key, and `in`
+  // alone would take the undefined and ignore what the host supplied.
+  const own = "match" in clip ? clip.match : undefined;
+  return own ?? supplied;
 }
 
 function directSourceUrl(clip: SpeechClipPlayerClip): string {
@@ -325,6 +340,7 @@ export function SpeechClipPlayer({
   onTimeChange,
   onError,
   blind = false,
+  match: matchSpan,
   showReplayControl = true,
   onReplay,
   accessibleName,
@@ -363,7 +379,7 @@ export function SpeechClipPlayer({
   const [hoveredAlignment, setHoveredAlignment] = useState<{ side: "source" | "target"; id: string } | null>(null);
   const [pinnedAlignment, setPinnedAlignment] = useState<{ side: "source" | "target"; id: string } | null>(null);
   const text = clipText(clip);
-  const match = clipMatch(clip);
+  const match = clipMatch(clip, matchSpan);
   const timing = sourceTiming ?? clip.segments;
   const duration = Math.max(0.1, clip.clip_end - clip.clip_start);
   const sourceUrl = useMemo(() => directSourceUrl(clip), [clip]);

@@ -302,7 +302,10 @@ def create_app(
     ) -> TranslationJob:
         try:
             return await service.request(
-                segment_id, body.target_language, retry_failed=body.retry_failed
+                segment_id,
+                body.target_language,
+                retry_failed=body.retry_failed,
+                target_text=body.target_text,
             )
         except KeyError as error:
             raise ServiceError(404, "segment_not_found", "Segment was not found") from error

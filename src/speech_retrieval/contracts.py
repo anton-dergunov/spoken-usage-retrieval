@@ -293,6 +293,14 @@ class TranslationErrorInfo(ContractModel):
 class TranslationRequest(ContractModel):
     target_language: str
     retry_failed: bool = False
+    target_text: str | None = Field(
+        default=None,
+        description=(
+            "A translation the caller already holds. Supply it to skip translation entirely and "
+            "receive only the word alignment of this text. A host that already shows its own "
+            "translation of a passage wants that sentence aligned, not replaced by a second one."
+        ),
+    )
 
 
 class TranslationJob(ContractModel):

@@ -38,6 +38,10 @@ CREATE TABLE videos (
     channel TEXT NOT NULL,
     channel_config_id TEXT NOT NULL,
     duration REAL,
+    -- The uploader's embedding setting, as yt-dlp reported it at harvest. NULL means unknown:
+    -- either yt-dlp did not say or this row was harvested before the field existed. Unknown counts
+    -- as playable, so shipping this does not empty a corpus gathered before it.
+    playable_in_embed INTEGER,
     upload_date TEXT,
     thumbnail TEXT,
     varieties_json TEXT NOT NULL,
@@ -174,13 +178,19 @@ def _metadata_rows(raw_root: Path) -> list[tuple[Path, Path, dict[str, Any]]]:
     return rows
 
 
+def _embeddable(reported: Any) -> int | None:
+    """yt-dlp's `playable_in_embed`, as a column. `None` stays `None` — unknown is not false."""
+    return None if reported is None else int(bool(reported))
+
+
 def _insert_video(connection: sqlite3.Connection, metadata: dict[str, Any]) -> None:
     connection.execute(
         """
         INSERT OR IGNORE INTO videos(
             video_key, source_language, provider, video_id, url, title, channel_id, channel,
-            channel_config_id, duration, upload_date, thumbnail, varieties_json, speech_style_json
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            channel_config_id, duration, playable_in_embed, upload_date, thumbnail,
+            varieties_json, speech_style_json
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             metadata["video_key"],
@@ -193,6 +203,7 @@ def _insert_video(connection: sqlite3.Connection, metadata: dict[str, Any]) -> N
             metadata.get("channel") or metadata["channel_config_id"],
             metadata["channel_config_id"],
             metadata.get("duration"),
+            _embeddable(metadata.get("playable_in_embed")),
             metadata.get("upload_date"),
             metadata.get("thumbnail"),
             json.dumps(metadata.get("varieties", []), ensure_ascii=False),

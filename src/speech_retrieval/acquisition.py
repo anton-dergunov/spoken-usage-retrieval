@@ -311,6 +311,14 @@ def _download_track(
             "channel": info.get("channel") or channel.name,
             "channel_config_id": channel.id,
             "duration": info.get("duration"),
+            # Whether this video may be played inside an embedded player, which is the uploader's
+            # setting and nothing a consumer can configure around. A host that offers a clip from a
+            # video with this off shows a dead frame and an apology — so it is recorded here, at the
+            # only moment anybody asks YouTube about the video, and filtered on at search time.
+            # `None` means unknown: yt-dlp did not say, or this row predates the field. Unknown is
+            # treated as playable, because refusing everything harvested before today would empty
+            # the corpus on the day this shipped.
+            "playable_in_embed": info.get("playable_in_embed"),
             "upload_date": info.get("upload_date"),
             "thumbnail": info.get("thumbnail"),
             "varieties": list(channel.varieties or ()),

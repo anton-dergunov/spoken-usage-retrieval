@@ -382,6 +382,12 @@ class Corpus:
                 FROM segments s
                 JOIN videos v ON v.video_key = s.video_key
                 WHERE s.segment_id IN (SELECT value FROM json_each(?))
+                  -- A video its uploader will not let anyone embed cannot be shown in a player, so
+                  -- offering a passage from one wastes the result on a dead frame and an apology.
+                  -- Filtered here, before ranking, so the ranked set is made only of clips that can
+                  -- actually be watched. `IS NULL` is kept deliberately: unknown means harvested
+                  -- before this was recorded, and refusing those would empty a corpus overnight.
+                  AND (v.playable_in_embed IS NULL OR v.playable_in_embed = 1)
                 """,
                 (json.dumps(segment_ids),),
             ).fetchall()

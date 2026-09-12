@@ -539,3 +539,73 @@ def test_api_batch_and_authored_fallback(tmp_path):
             f"/api/v1/clips/{segment_ids[0]}/translations", json={"target_language": "de"}
         ).json()
         assert unavailable["status"] == "unavailable"
+
+
+def test_a_supplied_translation_is_aligned_and_never_replaced(tmp_path):
+    """The caller's own sentence comes back, with only the alignment stage paid for.
+
+    A host that already shows its own translation of a passage wants *that* one aligned. Translating
+    afresh hands it a second, different sentence for the same clip and no honest way to show both.
+    """
+
+    async def exercise():
+        provider = FakeProvider()
+        settings, corpus, segment_id, service = service_fixture(tmp_path, provider)
+        mine = "Go ahead, open the door and come in."
+
+        job = await service.request(segment_id, "en", target_text=mine)
+        done = await wait_for_job(service, job.job_id)
+
+        assert done.status == "complete"
+        assert done.result is not None
+        assert done.result.target_text == mine  # verbatim, not a retranslation
+        assert done.result.alignment_status == "complete"
+        # One stage, not two: the whole point of supplying it.
+        assert provider.translation_calls == 0
+        assert provider.alignment_calls == 1
+
+        await service.aclose()
+        corpus.close()
+
+    asyncio.run(exercise())
+
+
+def test_two_callers_aligning_different_sentences_do_not_collide(tmp_path):
+    """The supplied text is part of the key, or the second caller silently receives the first
+    caller's word graph laid over its own, different, translation."""
+
+    async def exercise():
+        provider = FakeProvider()
+        settings, corpus, segment_id, service = service_fixture(tmp_path, provider)
+
+        first = await wait_for_job(
+            service, (await service.request(segment_id, "en", target_text="One wording.")).job_id
+        )
+        second = await wait_for_job(
+            service,
+            (await service.request(segment_id, "en", target_text="Another wording.")).job_id,
+        )
+        assert first.result.target_text == "One wording."
+        assert second.result.target_text == "Another wording."
+        assert provider.alignment_calls == 2
+
+        await service.aclose()
+        corpus.close()
+
+    asyncio.run(exercise())
+
+
+def test_a_supplied_translation_needs_no_translation_provider_at_all(tmp_path):
+    """There is nothing to translate, so a deployment credentialed for neither stage still gets its
+    own sentence back — with `alignment_status` saying plainly that there is no word graph."""
+
+    async def exercise():
+        settings, corpus, segment_id, service = service_fixture(tmp_path, None)
+        job = await service.request(segment_id, "en", target_text="My own sentence.")
+        assert job.status == "complete"
+        assert job.result.target_text == "My own sentence."
+        assert job.result.alignment_status == "unavailable"
+        await service.aclose()
+        corpus.close()
+
+    asyncio.run(exercise())

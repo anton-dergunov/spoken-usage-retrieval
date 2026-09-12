@@ -2181,6 +2181,18 @@
           "target_language": {
             "title": "Target Language",
             "type": "string"
+          },
+          "target_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "A translation the caller already holds. Supply it to skip translation entirely and receive only the word alignment of this text. A host that already shows its own translation of a passage wants that sentence aligned, not replaced by a second one.",
+            "title": "Target Text"
           }
         },
         "required": [
@@ -2712,7 +2724,7 @@
   },
   "info": {
     "title": "Spoken Usage Retrieval API",
-    "version": "0.2.1"
+    "version": "0.3.0"
   },
   "openapi": "3.1.0",
   "paths": {

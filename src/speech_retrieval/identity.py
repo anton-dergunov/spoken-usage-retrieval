@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 
 CACHE_SCHEMA_VERSION = 1
-DATABASE_SCHEMA_VERSION = 3
+DATABASE_SCHEMA_VERSION = 4  # videos.playable_in_embed
 REPORT_SCHEMA_VERSION = 1
 ANALYZER_ID = "unicode-regex-v1"
 
