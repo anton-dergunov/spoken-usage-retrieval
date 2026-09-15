@@ -72,6 +72,29 @@ describe("package styles", () => {
     expect(css).toContain("font: 400 clamp(18px, 2vw, 23px)/1.52 var(--sur-player-serif)");
   });
 
+  it("lets an alignment token inherit the spacing of the line it replaces", () => {
+    // A token is a <button>, and every UA stylesheet gives one `letter-spacing: normal` and
+    // `word-spacing: normal` — which `font: inherit` does not override. The source line sets
+    // `letter-spacing: -.015em`, so without these the whole passage was re-tracked and re-wrapped
+    // the moment the alignment graph arrived: the same characters, visibly re-spaced under the
+    // reader. jsdom does no layout, so this can only be asserted on the stylesheet text.
+    const token = css.slice(css.indexOf(".sur-player__alignment-token {"));
+    const rule = token.slice(0, token.indexOf("}"));
+    expect(rule).toContain("letter-spacing: inherit;");
+    expect(rule).toContain("word-spacing: inherit;");
+    expect(css).toMatch(/\.sur-player__source-text\s*\{[^}]*letter-spacing: -\.015em;/s);
+  });
+
+  it("gives a token no horizontal geometry of its own", () => {
+    // The highlight keeps its padding; the margin cancels it exactly, so a line is the same width
+    // whether or not its words have become tokens. Both halves have to move together, which is why
+    // the numbers are asserted as a pair rather than individually.
+    const token = css.slice(css.indexOf(".sur-player__alignment-token {"));
+    expect(token.slice(0, token.indexOf("}"))).toMatch(/padding: \.04em \.06em;[\s\S]*margin: 0 -\.06em;/);
+    const active = css.slice(css.indexOf(".sur-player__target-fragment--active {"));
+    expect(active.slice(0, active.indexOf("}"))).toMatch(/padding: \.04em \.12em;[\s\S]*margin: 0 -\.12em;/);
+  });
+
   it("aligns readable timeline text with the left edge of the slider", () => {
     expect(css).toMatch(/\.sur-player__time-row\s*\{[^}]*font: 12px var\(--sur-player-mono\);/s);
     expect(css).toContain(".sur-player__timeline { grid-area: timeline; min-width: 0; }");

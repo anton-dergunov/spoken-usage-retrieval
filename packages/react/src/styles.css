@@ -352,23 +352,41 @@
   transition: color .12s ease, background .12s ease;
 }
 
+/* Cancelled the same way, and for the same reason: this one is applied and removed as the clip
+   plays, so an uncompensated .12em a side made the translation re-flow under the reader on every
+   fragment change. */
 .sur-player__target-fragment--active {
   padding: .04em .12em;
-  margin: 0 -.01em;
+  margin: 0 -.12em;
   background: color-mix(in srgb, var(--sur-player-accent) 17%, transparent);
   color: var(--sur-player-text);
   box-shadow: inset 0 -2px color-mix(in srgb, var(--sur-player-accent) 55%, transparent);
 }
 
+/* A token is a real <button>, and a button carries a user-agent stylesheet that `font: inherit`
+   does not reach: `letter-spacing: normal` and `word-spacing: normal` survive it. The line these sit
+   in sets `letter-spacing: -.015em`, so the moment the alignment graph arrived and the sentence
+   re-rendered as tokens, every word in it was re-tracked — the same characters, re-spaced and
+   re-wrapped a beat after the reader had started on them, which reads as the font having changed.
+   The horizontal padding compounded it: `.06em` a side against a `-.01em` margin is a tenth of an em
+   of growth per token, which is a whole line over a long passage.
+
+   So the geometry is neutralised rather than removed. The padding stays, because it is what gives a
+   highlighted word room, and the margin now cancels it exactly, so a token advances the line by what
+   its glyphs advance it by and nothing else. Vertical padding on an inline box does not affect
+   layout, so the highlight itself is unchanged. */
 .sur-player__alignment-token {
   display: inline;
   border: 0;
   border-radius: 3px;
   padding: .04em .06em;
-  margin: 0 -.01em;
+  margin: 0 -.06em;
   background: transparent;
   font: inherit;
   line-height: inherit;
+  letter-spacing: inherit;
+  word-spacing: inherit;
+  text-indent: 0;
   cursor: pointer;
   transition: color .12s ease, background .12s ease, box-shadow .12s ease;
 }

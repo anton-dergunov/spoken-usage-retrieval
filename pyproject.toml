@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "spoken-usage-retrieval"
-version = "0.3.0"
+version = "0.3.1"
 description = "A multilingual prototype for retrieving real usage from timestamped video captions"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -68,6 +68,14 @@ audio-experiments = [
   "faster-whisper>=1.1,<2",
   "jiwer>=4,<5",
   "silero-vad>=5.1,<7",
+  "torch>=2.6,<3",
+  "torchaudio>=2.6,<3",
+]
+speech-span-experiments = [
+  "faster-whisper>=1.1,<2",
+  "lingua-language-detector>=2.1,<3",
+  "silero-vad>=5.1,<7",
+  "speechbrain>=1.0,<2",
   "torch>=2.6,<3",
   "torchaudio>=2.6,<3",
 ]

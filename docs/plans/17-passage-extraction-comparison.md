@@ -3,7 +3,10 @@
 **Status:** Planned
 
 **Depends on:** Plans 02 and 03. Uses Plan 09's audio cache, which is authorized below. Independent
-of Plans 10, 11 and 16; its measured per-arm costs are an input to Plan 16's resource caps.
+of Plans 10, 11 and 16; its measured per-arm costs are an input to Plan 16's resource caps. For
+videos with no target-language captions, or whose speech interleaves the target language with a
+lesson language, passages can only be cut after [Plan 18](18-target-language-speech-spans.md) has
+found the target-language speech.
 
 ## Outcome
 

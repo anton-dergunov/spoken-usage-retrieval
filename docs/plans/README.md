@@ -99,6 +99,7 @@ owns Docker, systemd, or other process supervision.
 | [12 · Ranking features and diversification](12-ranking-features-and-diversification.md) | Planned | 03, 11 | Reproducible features, logistic ranking, explanations, and diversity metrics. |
 | [13 · Learned multilingual reranker](13-learned-multilingual-reranker.md) | Planned | 11, 12 | A zero-shot and fine-tuned neural comparison with a promotion gate and model card. |
 | [17 · Passage extraction comparison](17-passage-extraction-comparison.md) | Planned | 02, 03 | A pluggable segmentation strategy, blind side-by-side human comparison of extraction methods, and a per-language promotion gate. |
+| [18 · Target-language speech spans](18-target-language-speech-spans.md) | In progress | 09 | Audio-only detection of target-language speech in mixed-language videos, with transcripts; spike evidence collected, human labels pending. |
 
 The remaining work in Stages 3 and 4 forms parallel tracks after Plan 07; Plan 08 is the deliberate
 host-independent exception. Plan 11's labeling should begin as soon as Plan 07 lands. Plan 12 ships with text and metadata
