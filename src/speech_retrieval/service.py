@@ -131,6 +131,7 @@ class Indexer:
                 max_ngram=self.settings.max_ngram,
                 analyzer=self.settings.analyzer,
                 models_dir=self.settings.resolved_models_dir,
+                catalogue_dir=self.settings.catalogue_dir,
             )
         except Exception as error:
             failures.append(
@@ -263,6 +264,7 @@ class Indexer:
                 max_ngram=self.settings.max_ngram,
                 analyzer=self.settings.analyzer,
                 models_dir=self.settings.resolved_models_dir,
+                catalogue_dir=self.settings.catalogue_dir,
             )
         except Exception as error:
             failures.append(

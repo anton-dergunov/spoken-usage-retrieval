@@ -801,6 +801,129 @@
         "title": "Clip",
         "type": "object"
       },
+      "CorpusOperation": {
+        "additionalProperties": false,
+        "description": "One acquisition-and-index run, or one rebuild of the index, started over HTTP.\n\n`completed` means the operation ran to its end; whether everything in it succeeded is\n`successful`, because an update that fetched four channels and failed on a fifth has still\nrebuilt the index. `interrupted` is an operation the serving process stopped before it ended.",
+        "properties": {
+          "completed_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "title": "Created At",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "operation": {
+            "enum": [
+              "update",
+              "reindex"
+            ],
+            "title": "Operation",
+            "type": "string"
+          },
+          "operation_id": {
+            "title": "Operation Id",
+            "type": "string"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          },
+          "status": {
+            "enum": [
+              "queued",
+              "running",
+              "completed",
+              "failed",
+              "interrupted"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "successful": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Successful"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UpdateSummary"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "operation_id",
+          "operation",
+          "status",
+          "created_at"
+        ],
+        "title": "CorpusOperation",
+        "type": "object"
+      },
+      "CorpusOperationRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "operation": {
+            "default": "update",
+            "enum": [
+              "update",
+              "reindex"
+            ],
+            "title": "Operation",
+            "type": "string"
+          }
+        },
+        "title": "CorpusOperationRequest",
+        "type": "object"
+      },
       "CorpusStatistics": {
         "additionalProperties": false,
         "properties": {
@@ -1269,6 +1392,65 @@
           "morphology_available"
         ],
         "title": "LanguageStatus",
+        "type": "object"
+      },
+      "LanguageUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_cached": {
+            "default": 0,
+            "title": "Audio Cached",
+            "type": "integer"
+          },
+          "audio_complete": {
+            "default": true,
+            "title": "Audio Complete",
+            "type": "boolean"
+          },
+          "audio_downloaded": {
+            "default": 0,
+            "title": "Audio Downloaded",
+            "type": "integer"
+          },
+          "audio_failed": {
+            "default": 0,
+            "title": "Audio Failed",
+            "type": "integer"
+          },
+          "audio_requested": {
+            "default": 0,
+            "title": "Audio Requested",
+            "type": "integer"
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "integer"
+          },
+          "complete": {
+            "title": "Complete",
+            "type": "boolean"
+          },
+          "downloaded": {
+            "title": "Downloaded",
+            "type": "integer"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "source_language": {
+            "title": "Source Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source_language",
+          "downloaded",
+          "cached",
+          "failures",
+          "complete"
+        ],
+        "title": "LanguageUpdate",
         "type": "object"
       },
       "LemmaCandidate": {
@@ -2506,6 +2688,96 @@
         "title": "TranslationServiceStatus",
         "type": "object"
       },
+      "UpdateSummary": {
+        "additionalProperties": false,
+        "properties": {
+          "audio_cached": {
+            "default": 0,
+            "title": "Audio Cached",
+            "type": "integer"
+          },
+          "audio_complete": {
+            "default": true,
+            "title": "Audio Complete",
+            "type": "boolean"
+          },
+          "audio_downloaded": {
+            "default": 0,
+            "title": "Audio Downloaded",
+            "type": "integer"
+          },
+          "audio_failed": {
+            "default": 0,
+            "title": "Audio Failed",
+            "type": "integer"
+          },
+          "audio_requested": {
+            "default": 0,
+            "title": "Audio Requested",
+            "type": "integer"
+          },
+          "cached": {
+            "title": "Cached",
+            "type": "integer"
+          },
+          "completed_at": {
+            "title": "Completed At",
+            "type": "string"
+          },
+          "downloaded": {
+            "title": "Downloaded",
+            "type": "integer"
+          },
+          "failures": {
+            "title": "Failures",
+            "type": "integer"
+          },
+          "index": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Index"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/LanguageUpdate"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "started_at": {
+            "title": "Started At",
+            "type": "string"
+          },
+          "successful": {
+            "title": "Successful",
+            "type": "boolean"
+          },
+          "with_audio": {
+            "default": false,
+            "title": "With Audio",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started_at",
+          "completed_at",
+          "successful",
+          "downloaded",
+          "cached",
+          "failures",
+          "languages",
+          "index"
+        ],
+        "title": "UpdateSummary",
+        "type": "object"
+      },
       "VideoInfo": {
         "additionalProperties": false,
         "properties": {
@@ -2724,7 +2996,7 @@
   },
   "info": {
     "title": "Spoken Usage Retrieval API",
-    "version": "0.3.1"
+    "version": "0.4.0"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -3494,6 +3766,333 @@
           }
         },
         "summary": "Request Translation"
+      }
+    },
+    "/api/v1/corpus/operations": {
+      "get": {
+        "operationId": "list_corpus_operations_api_v1_corpus_operations_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 50,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CorpusOperation"
+                  },
+                  "title": "Response List Corpus Operations Api V1 Corpus Operations Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "List Corpus Operations"
+      },
+      "post": {
+        "description": "Start an update or a rebuild of the index, or return the one already active.\n\nThe same work as `update --once` and `reindex`, run by the serving process. Follow it with\n`GET /api/v1/corpus/operations/{operation_id}`; the corpus keeps answering throughout.",
+        "operationId": "start_corpus_operation_api_v1_corpus_operations_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CorpusOperationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusOperation"
+                }
+              }
+            },
+            "description": "Already active"
+          },
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Start Corpus Operation"
+      }
+    },
+    "/api/v1/corpus/operations/{operation_id}": {
+      "get": {
+        "operationId": "get_corpus_operation_api_v1_corpus_operations__operation_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "operation_id",
+            "required": true,
+            "schema": {
+              "title": "Operation Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CorpusOperation"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Bad Request"
+          },
+          "401": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unauthorized"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "413": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Content Too Large"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Service Unavailable"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Get Corpus Operation"
       }
     },
     "/api/v1/health/live": {

@@ -117,6 +117,24 @@ refuses an index built by a different analyzer version, so one image that both b
 cannot drift while two can. `docker compose exec <service> speech-retrieval update --once` is the
 straightforward way to guarantee that.
 
+**Or ask the serving process to do it.** `POST /api/v1/corpus/operations` with
+`{"operation": "update"}` (or `"reindex"`) runs the same work in a worker thread of `serve` and
+answers 202 with a `CorpusOperation`; follow it with `GET /api/v1/corpus/operations/{operation_id}`
+until its `status` is `completed`, `failed` or `interrupted`. It is gated exactly like channel
+management — enabled mutations and the operator token — because it spends the host's bandwidth.
+One operation runs at a time: a request while one is active is answered 200 with the active one,
+so a scheduled update and a person pressing a button cannot start two. `completed` says the
+operation ran to its end; `successful` says whether every language in it did. An operation still
+active when the service stops is recorded as `interrupted` at the next start, and nothing resumes.
+This is the way to keep the corpus fresh without a shell into the container, and it satisfies the
+same-image rule by construction.
+
+**Disabling a channel takes its clips out of search at the next build.** Both `update` and
+`reindex` leave out cached videos of a channel its catalogue marks `enabled: false`; the captions
+stay cached, so enabling it again brings them back without a download. A channel removed from the
+catalogue altogether keeps its clips. The build report lists what it left out under
+`excluded_disabled_channels`.
+
 ## Querying it
 
 `GET /api/v1/search?language=<bcp47>&q=<query>` with optional `match_mode` (`auto`, `exact`,

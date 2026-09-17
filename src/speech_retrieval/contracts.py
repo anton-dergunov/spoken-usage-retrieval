@@ -586,6 +586,34 @@ class UpdateSummary(ContractModel):
     audio_complete: bool = True
 
 
+CorpusOperationKind = Literal["update", "reindex"]
+CorpusOperationState = Literal["queued", "running", "completed", "failed", "interrupted"]
+
+
+class CorpusOperationRequest(ContractModel):
+    operation: CorpusOperationKind = "update"
+
+
+class CorpusOperation(ContractModel):
+    """One acquisition-and-index run, or one rebuild of the index, started over HTTP.
+
+    `completed` means the operation ran to its end; whether everything in it succeeded is
+    `successful`, because an update that fetched four channels and failed on a fifth has still
+    rebuilt the index. `interrupted` is an operation the serving process stopped before it ended.
+    """
+
+    operation_id: str
+    operation: CorpusOperationKind
+    status: CorpusOperationState
+    successful: bool | None = None
+    summary: UpdateSummary | None = None
+    index: dict[str, Any] | None = None
+    error: str | None = None
+    created_at: str
+    started_at: str | None = None
+    completed_at: str | None = None
+
+
 class DoctorCheck(ContractModel):
     name: str
     status: Literal["ok", "warning", "error"]

@@ -10,7 +10,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request, Response
 from fastapi.encoders import jsonable_encoder
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +34,8 @@ from .contracts import (
     ChannelRecord,
     ChannelUpdate,
     Clip,
+    CorpusOperation,
+    CorpusOperationRequest,
     CorpusStatistics,
     CorpusStatus,
     ErrorResponse,
@@ -44,6 +46,7 @@ from .contracts import (
     TranslationJob,
     TranslationRequest,
 )
+from .operations import CorpusOperations
 from .search import Corpus, IncompatibleIndexError, SearchError
 from .settings import Settings
 from .translations import TranslationProvider, TranslationService, WordAlignmentProvider
@@ -115,9 +118,11 @@ def create_app(
         app.state.translations = TranslationService.configured(
             settings, app.state.corpus, translation_provider, alignment_provider
         )
+        app.state.operations = CorpusOperations(settings)
         try:
             yield
         finally:
+            await app.state.operations.aclose()
             await app.state.translations.aclose()
             app.state.corpus.close()
 
@@ -219,6 +224,9 @@ def create_app(
 
     def translations(request: Request) -> TranslationService:
         return request.app.state.translations
+
+    def operations(request: Request) -> CorpusOperations:
+        return request.app.state.operations
 
     def management(
         credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
@@ -446,6 +454,49 @@ def create_app(
         repository: ChannelRepository = Depends(channels),
     ) -> ChannelRecord:
         return set_channel_enabled(language, channel_id, False, repository)
+
+    @app.post(
+        "/api/v1/corpus/operations",
+        response_model=CorpusOperation,
+        status_code=202,
+        responses={200: {"model": CorpusOperation, "description": "Already active"}},
+    )
+    async def start_corpus_operation(
+        body: CorpusOperationRequest,
+        response: Response,
+        _allowed: None = Depends(management),
+        service: CorpusOperations = Depends(operations),
+    ) -> CorpusOperation:
+        """Start an update or a rebuild of the index, or return the one already active.
+
+        The same work as `update --once` and `reindex`, run by the serving process. Follow it with
+        `GET /api/v1/corpus/operations/{operation_id}`; the corpus keeps answering throughout.
+        """
+        operation, started = await service.start(body.operation)
+        if not started:
+            response.status_code = 200
+        return operation
+
+    @app.get("/api/v1/corpus/operations", response_model=list[CorpusOperation])
+    def list_corpus_operations(
+        limit: int = Query(20, ge=1, le=50),
+        _allowed: None = Depends(management),
+        service: CorpusOperations = Depends(operations),
+    ) -> list[CorpusOperation]:
+        return service.list(limit)
+
+    @app.get("/api/v1/corpus/operations/{operation_id}", response_model=CorpusOperation)
+    def get_corpus_operation(
+        operation_id: str,
+        _allowed: None = Depends(management),
+        service: CorpusOperations = Depends(operations),
+    ) -> CorpusOperation:
+        try:
+            return service.get(operation_id)
+        except KeyError as error:
+            raise ServiceError(
+                404, "corpus_operation_not_found", "Corpus operation was not found"
+            ) from error
 
     @app.get("/api/v1/statistics", response_model=CorpusStatistics)
     def statistics(

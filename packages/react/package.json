@@ -1,6 +1,6 @@
 {
   "name": "@spoken-usage-retrieval/react",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Reusable React player and typed client for spoken-usage-retrieval clips",
   "type": "module",
   "sideEffects": [

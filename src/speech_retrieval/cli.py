@@ -686,6 +686,11 @@ def build_index_main(argv: Sequence[str] | None = None) -> int:
     )
     parser.add_argument("--models-dir", type=Path)
     parser.add_argument("--data-dir", type=Path, default=Path("data"))
+    parser.add_argument(
+        "--catalogue-dir",
+        type=Path,
+        help="leave out videos from channels these catalogues have disabled",
+    )
     args = parser.parse_args(argv)
     _emit(
         build_index(
@@ -693,6 +698,7 @@ def build_index_main(argv: Sequence[str] | None = None) -> int:
             max_ngram=args.max_ngram,
             analyzer=args.analyzer,
             models_dir=args.models_dir,
+            catalogue_dir=args.catalogue_dir,
         ),
         True,
     )

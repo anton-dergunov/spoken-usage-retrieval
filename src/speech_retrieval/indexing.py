@@ -14,6 +14,7 @@ from typing import Any, TextIO
 from ._version import __version__
 from .analysis import Analysis, AnalyzedToken, get_analyzer
 from .captions import segments_from_files
+from .catalogue import load_catalogue_directory
 from .identity import (
     CACHE_SCHEMA_VERSION,
     DATABASE_SCHEMA_VERSION,
@@ -323,15 +324,56 @@ def _insert_token_streams(
     return len(spans)
 
 
+def _disabled_channels(catalogue_dir: Path | None) -> set[tuple[str, str]]:
+    """(language, channel id) for every channel a catalogue lists and has switched off.
+
+    Only an explicit `enabled: false` excludes: a channel a catalogue no longer lists at all keeps
+    its cached videos, because removing a line from a file is not a decision about what was already
+    fetched.
+    """
+    if catalogue_dir is None or not catalogue_dir.exists():
+        return set()
+    return {
+        (catalogue.language, channel.id)
+        for catalogue in load_catalogue_directory(catalogue_dir)
+        for channel in catalogue.channels
+        if not channel.enabled
+    }
+
+
 def build_index(
-    *, data_dir: Path, max_ngram: int = 5, analyzer: str = "auto", models_dir: Path | None = None
+    *,
+    data_dir: Path,
+    max_ngram: int = 5,
+    analyzer: str = "auto",
+    models_dir: Path | None = None,
+    catalogue_dir: Path | None = None,
 ) -> dict[str, Any]:
+    """Rebuild the index from the caption cache.
+
+    With `catalogue_dir`, a video from a channel its catalogue has disabled is left out: disabling a
+    channel stops new downloads *and* takes its clips out of search at the next build. The cached
+    captions stay on disk, so enabling it again brings them back without a download.
+    """
     if not 1 <= max_ngram <= 8:
         raise ValueError("max_ngram must be between 1 and 8")
-    raw_rows = _metadata_rows(data_dir / "raw" / "corpora")
-    if not raw_rows:
+    cached_rows = _metadata_rows(data_dir / "raw" / "corpora")
+    if not cached_rows:
         location = data_dir / "raw" / "corpora"
         raise ValueError(f"no versioned cached transcripts found under {location}")
+    disabled = _disabled_channels(catalogue_dir)
+    raw_rows = [
+        row
+        for row in cached_rows
+        if (row[2]["source_language"], row[2]["channel_config_id"]) not in disabled
+    ]
+    excluded: Counter[str] = Counter(
+        f"{row[2]['source_language']}/{row[2]['channel_config_id']}"
+        for row in cached_rows
+        if (row[2]["source_language"], row[2]["channel_config_id"]) in disabled
+    )
+    if not raw_rows:
+        raise ValueError("every cached transcript belongs to a disabled channel")
 
     models_dir = (models_dir or data_dir / "models" / "stanza").resolve()
     analyzers = {
@@ -541,6 +583,7 @@ def build_index(
         "segment_count": segment_count,
         "occurrence_count": occurrence_count,
         "caption_kinds": dict(sorted(caption_counts.items())),
+        "excluded_disabled_channels": dict(sorted(excluded.items())),
         "boundaries": dict(sorted(boundary_counts.items())),
         "languages": languages,
         "database": str(index_dir / "corpus.sqlite3"),
