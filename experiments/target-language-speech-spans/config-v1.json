@@ -1,0 +1,82 @@
+{
+  "config_version": 1,
+  "run_id": "2026-09-14-spike",
+  "clips": [
+    {
+      "id": "TUJBWALllbo",
+      "file_pattern": "*[[]TUJBWALllbo[]]*",
+      "target_language": "zh",
+      "evaluation_only": {"other_languages": ["en"], "kind": "zh lesson taught in English"}
+    },
+    {
+      "id": "IniuZsvMTBM",
+      "file_pattern": "*[[]IniuZsvMTBM[]]*",
+      "target_language": "zh",
+      "evaluation_only": {"other_languages": ["en"], "kind": "zh lesson taught in English"}
+    },
+    {
+      "id": "RubvgfZEVus",
+      "file_pattern": "*[[]RubvgfZEVus[]]*",
+      "target_language": "es",
+      "evaluation_only": {"other_languages": ["en"], "kind": "es lesson taught in English"}
+    },
+    {
+      "id": "xglEjH0Ue8o",
+      "file_pattern": "*[[]xglEjH0Ue8o[]]*",
+      "target_language": "es",
+      "evaluation_only": {"other_languages": ["en"], "kind": "es lesson taught in English"}
+    }
+  ],
+  "vad": {"threshold": 0.5, "min_silence_ms": 300, "speech_pad_ms": 100, "min_speech_ms": 250},
+  "chunks": {"merge_gap_seconds": 0.3, "max_chunk_seconds": 20.0},
+  "review_units": {"merge_gap_seconds": 0.0, "max_unit_seconds": 6.0},
+  "whisper": {"model": "small", "compute_type": "int8", "cpu_threads": 4, "beam_size": 1},
+  "whisper_reference": {"model": "medium", "compute_type": "int8", "cpu_threads": 4, "beam_size": 1},
+  "voxlingua_model": "speechbrain/lang-id-voxlingua107-ecapa",
+  "closed_set_languages": ["en", "es", "fr", "de", "ja", "ko", "it", "hi", "zh", "pt", "ru"],
+  "refine": {
+    "window_seconds": 2.0,
+    "hop_seconds": 0.5,
+    "min_chunk_seconds": 4.0,
+    "switch_penalty": 3.0
+  },
+  "sweep": {
+    "detectors": ["vox", "voxset", "whisperset", "agree"],
+    "thresholds": [0.5, 0.7, 0.8, 0.9, 0.95, 0.98],
+    "min_seconds": [1.0, 2.0, 3.0, 4.0]
+  },
+  "selection": {"tuned_on": "synthetic", "min_span_precision": 0.97, "maximise": "long_run_recall"},
+  "fallback_gate": {
+    "detector": "agree",
+    "threshold": 0.9,
+    "min_seconds": 2.0,
+    "min_units": 0,
+    "max_compression_ratio": 2.4,
+    "min_logprob_margin": null,
+    "text_lid_veto": false
+  },
+  "synth": {
+    "seed": 17,
+    "blocks_per_clip": 8,
+    "pairs": [
+      ["en", "zh"], ["en", "es"], ["en", "pt"], ["en", "fr"], ["en", "it"],
+      ["en", "de"], ["en", "ru"], ["en", "ja"], ["en", "ko"], ["en", "hi"],
+      ["es", "pt"], ["pt", "es"], ["it", "es"], ["es", "it"], ["fr", "it"]
+    ],
+    "voices": ["chatterbox:samantha", "chatterbox:daniel"],
+    "accented_targets": []
+  },
+  "metrics": {
+    "long_run_seconds": 3.0,
+    "run_join_gap_seconds": 1.0,
+    "correct_span_min_target_fraction": 0.8,
+    "hard_failure_max_target_fraction": 0.5
+  },
+  "excluded": {
+    "system_voices": "macOS say voice families (system:Flo) were rendered first but dropped from evaluation: VoxLingua identified their de/fr/it/es/pt utterances as the intended language in only 5 of 22 cases against 36 of 37 for Chatterbox, so their truth labels describe text rather than audible speech.",
+    "system_accented_voices": "An English macOS voice reading target text applies English letter-to-sound rules; VoxLingua heard English (0.8-0.96) on 22 of 24 utterances, so it is not a model of accented target speech. Chatterbox cloning an English reference voice is kept as the milder, more realistic accent condition.",
+    "caption_complement": "Treating uncaptioned speech as target language only works when the other language happens to be captioned; not an audio-only method. Used as an evaluation proxy only.",
+    "script_filter_alone": "Separates zh from en but cannot separate es from pt, it or fr, which share a script.",
+    "whisper_whole_file_forced_language": "Kept as baseline W1 to demonstrate the failure mode, never as a candidate: forcing the language makes Whisper translate other-language speech into plausible target text."
+  }
+}

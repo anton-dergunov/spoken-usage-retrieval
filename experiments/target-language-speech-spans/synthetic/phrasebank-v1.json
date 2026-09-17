@@ -1,0 +1,318 @@
+{
+  "phrasebank_version": 1,
+  "note": "Written for this experiment. Frames are lesson-language sentences a teacher says around an example; items are target-language examples in four length buckets. The es/pt/it/fr items deliberately share cognates and structure so confusable pairs are genuinely hard.",
+  "frames": {
+    "en": {
+      "lead": [
+        "Okay, let's look at the next example.",
+        "Listen carefully to this one.",
+        "Here is how a native speaker would say it.",
+        "Now let's hear it in a full sentence.",
+        "This is something you will hear all the time.",
+        "Pay attention to the rhythm here.",
+        "Let me say that one more time, a little slower.",
+        "A lot of students get this wrong, so listen."
+      ],
+      "explain": [
+        "So in that sentence the verb describes something that was ongoing in the past.",
+        "Notice how the second word almost disappears when people speak quickly.",
+        "That is the most natural way to say it in a casual conversation.",
+        "You would not use that with your boss, it is quite informal.",
+        "The important part is at the end, where the intonation goes down.",
+        "If you only remember one thing from this lesson, remember that.",
+        "Try repeating it out loud a few times before we move on.",
+        "It sounds simple, but the grammar behind it is actually interesting."
+      ],
+      "inline": [
+        ["The word", "is one you will hear constantly."],
+        ["People say", "when they are not sure about something."],
+        ["So remember,", "is the natural way to say it."],
+        ["You might also hear", "at the start of a sentence."]
+      ]
+    },
+    "es": {
+      "lead": [
+        "Bueno, vamos con el siguiente ejemplo.",
+        "Escucha con atención este.",
+        "Así es como lo diría un nativo.",
+        "Ahora vamos a oírlo en una frase completa.",
+        "Esto lo vas a escuchar todo el tiempo.",
+        "Fíjate en el ritmo de esta frase.",
+        "Te lo repito una vez más, un poco más despacio.",
+        "Muchos estudiantes se equivocan con esto, así que escucha."
+      ],
+      "explain": [
+        "En esa frase el verbo describe algo que duraba en el pasado.",
+        "Fíjate cómo la segunda palabra casi desaparece cuando se habla rápido.",
+        "Esa es la forma más natural de decirlo en una conversación informal.",
+        "No lo usarías con tu jefe, es bastante coloquial.",
+        "Lo importante está al final, donde la entonación baja.",
+        "Si solo te acuerdas de una cosa de esta clase, que sea esa.",
+        "Intenta repetirlo en voz alta un par de veces antes de seguir.",
+        "Parece sencillo, pero la gramática que hay detrás es muy interesante."
+      ],
+      "inline": [
+        ["La palabra", "la vas a oír constantemente."],
+        ["La gente dice", "cuando no está segura de algo."],
+        ["Recuerda que", "es la forma natural de decirlo."],
+        ["También puedes oír", "al principio de una frase."]
+      ]
+    },
+    "pt": {
+      "lead": [
+        "Bom, vamos para o próximo exemplo.",
+        "Escuta com atenção este aqui.",
+        "É assim que um nativo falaria.",
+        "Agora vamos ouvir isso numa frase completa.",
+        "Você vai ouvir isso o tempo todo.",
+        "Presta atenção no ritmo dessa frase.",
+        "Vou repetir mais uma vez, um pouco mais devagar.",
+        "Muitos alunos erram isso, então escuta bem."
+      ],
+      "explain": [
+        "Nessa frase o verbo descreve algo que durava no passado.",
+        "Repara como a segunda palavra quase desaparece quando se fala rápido.",
+        "Essa é a forma mais natural de dizer isso numa conversa informal.",
+        "Você não usaria isso com o seu chefe, é bem coloquial.",
+        "O importante está no final, onde a entonação cai.",
+        "Se você só lembrar de uma coisa desta aula, que seja isso.",
+        "Tenta repetir em voz alta algumas vezes antes de continuar.",
+        "Parece simples, mas a gramática por trás é bem interessante."
+      ],
+      "inline": [
+        ["A palavra", "você vai ouvir o tempo todo."],
+        ["As pessoas dizem", "quando não têm certeza de alguma coisa."],
+        ["Lembra que", "é o jeito natural de dizer isso."],
+        ["Você também pode ouvir", "no começo de uma frase."]
+      ]
+    },
+    "it": {
+      "lead": [
+        "Bene, passiamo al prossimo esempio.",
+        "Ascolta bene questo.",
+        "Ecco come lo direbbe un madrelingua.",
+        "Adesso lo sentiamo in una frase completa.",
+        "Questo lo sentirai continuamente.",
+        "Fai attenzione al ritmo di questa frase.",
+        "Te lo ripeto ancora una volta, un po' più lentamente.",
+        "Molti studenti sbagliano qui, quindi ascolta."
+      ],
+      "explain": [
+        "In quella frase il verbo descrive qualcosa che durava nel passato.",
+        "Nota come la seconda parola quasi scompare quando si parla velocemente.",
+        "È il modo più naturale di dirlo in una conversazione informale.",
+        "Non lo useresti con il tuo capo, è piuttosto colloquiale.",
+        "La parte importante è alla fine, dove l'intonazione scende.",
+        "Se ricordi solo una cosa di questa lezione, ricorda questa.",
+        "Prova a ripeterlo ad alta voce un paio di volte prima di andare avanti.",
+        "Sembra semplice, ma la grammatica dietro è davvero interessante."
+      ],
+      "inline": [
+        ["La parola", "la sentirai di continuo."],
+        ["La gente dice", "quando non è sicura di qualcosa."],
+        ["Ricorda che", "è il modo naturale di dirlo."],
+        ["Puoi sentire anche", "all'inizio di una frase."]
+      ]
+    },
+    "fr": {
+      "lead": [
+        "Bon, passons à l'exemple suivant.",
+        "Écoute bien celui-ci.",
+        "Voici comment un natif le dirait.",
+        "Maintenant, écoutons-le dans une phrase complète.",
+        "Tu vas entendre ça tout le temps.",
+        "Fais attention au rythme de cette phrase.",
+        "Je le répète encore une fois, un peu plus lentement.",
+        "Beaucoup d'élèves se trompent là-dessus, alors écoute."
+      ],
+      "explain": [
+        "Dans cette phrase, le verbe décrit quelque chose qui durait dans le passé.",
+        "Remarque comme le deuxième mot disparaît presque quand on parle vite.",
+        "C'est la façon la plus naturelle de le dire dans une conversation détendue.",
+        "Tu ne dirais pas ça à ton patron, c'est assez familier.",
+        "Le plus important est à la fin, là où l'intonation descend.",
+        "Si tu ne retiens qu'une chose de cette leçon, retiens celle-là.",
+        "Essaie de le répéter à voix haute plusieurs fois avant de continuer.",
+        "Ça a l'air simple, mais la grammaire derrière est vraiment intéressante."
+      ],
+      "inline": [
+        ["Le mot", "revient tout le temps."],
+        ["Les gens disent", "quand ils ne sont pas sûrs de quelque chose."],
+        ["Retiens que", "est la façon naturelle de le dire."],
+        ["On peut aussi entendre", "au début d'une phrase."]
+      ]
+    }
+  },
+  "items": {
+    "zh": {
+      "word": ["认识", "知道", "已经", "其实"],
+      "phrase": ["我不知道", "慢慢说", "你说得对", "没关系"],
+      "sentence": [
+        "我昨天在朋友家吃了晚饭。",
+        "你知道这家店几点关门吗？",
+        "我认识他很多年了。",
+        "这个周末我们一起去爬山吧。",
+        "他说话太快，我听不懂。",
+        "我已经把作业做完了。"
+      ],
+      "long": [
+        "我小时候住在一个很小的城市，每天放学以后都会和邻居的孩子一起在楼下玩到天黑。",
+        "如果你想提高听力，最好的办法就是每天坚持听一些自己感兴趣的内容，哪怕只有十分钟。",
+        "上个月我第一次一个人去旅行，虽然有点紧张，但是遇到的人都特别友好。"
+      ]
+    },
+    "es": {
+      "word": ["estaba", "todavía", "entonces", "madrugada"],
+      "phrase": ["no lo sé", "ya me voy", "qué te pasa", "a lo mejor"],
+      "sentence": [
+        "Ayer estaba en casa cuando me llamó mi hermana.",
+        "¿Sabes a qué hora cierra la tienda?",
+        "Lo conozco desde hace muchos años.",
+        "Este fin de semana vamos a subir a la montaña.",
+        "Habla tan rápido que no le entiendo nada.",
+        "Ya terminé todos los deberes de la semana."
+      ],
+      "long": [
+        "Cuando era pequeño vivía en un pueblo muy tranquilo y todas las tardes jugaba en la calle con los niños del barrio hasta que se hacía de noche.",
+        "Si quieres mejorar tu comprensión auditiva, lo mejor es escuchar todos los días algo que te interese, aunque sean solo diez minutos.",
+        "El mes pasado viajé solo por primera vez y, aunque estaba un poco nervioso, la gente fue muy amable conmigo."
+      ]
+    },
+    "pt": {
+      "word": ["estava", "ainda", "então", "madrugada"],
+      "phrase": ["não sei", "já vou", "o que houve", "pode ser"],
+      "sentence": [
+        "Ontem eu estava em casa quando minha irmã me ligou.",
+        "Você sabe a que horas a loja fecha?",
+        "Eu conheço ele há muitos anos.",
+        "Neste fim de semana a gente vai subir a montanha.",
+        "Ele fala tão rápido que eu não entendo nada.",
+        "Eu já terminei toda a lição da semana."
+      ],
+      "long": [
+        "Quando eu era pequeno morava numa cidade muito tranquila e todas as tardes brincava na rua com as crianças do bairro até escurecer.",
+        "Se você quer melhorar a sua compreensão oral, o melhor é ouvir todos os dias alguma coisa que te interesse, mesmo que sejam só dez minutos.",
+        "No mês passado eu viajei sozinho pela primeira vez e, apesar de estar um pouco nervoso, as pessoas foram muito simpáticas comigo."
+      ]
+    },
+    "it": {
+      "word": ["ancora", "allora", "ieri", "davvero"],
+      "phrase": ["non lo so", "me ne vado", "che succede", "può darsi"],
+      "sentence": [
+        "Ieri ero a casa quando mi ha chiamato mia sorella.",
+        "Sai a che ora chiude il negozio?",
+        "Lo conosco da tanti anni.",
+        "Questo fine settimana andiamo in montagna insieme.",
+        "Parla così veloce che non capisco niente.",
+        "Ho già finito tutti i compiti della settimana."
+      ],
+      "long": [
+        "Quando ero piccolo abitavo in un paese molto tranquillo e ogni pomeriggio giocavo in strada con i bambini del quartiere finché non faceva buio.",
+        "Se vuoi migliorare la comprensione orale, la cosa migliore è ascoltare ogni giorno qualcosa che ti interessa, anche solo per dieci minuti.",
+        "Il mese scorso ho viaggiato da solo per la prima volta e, anche se ero un po' nervoso, le persone sono state molto gentili con me."
+      ]
+    },
+    "fr": {
+      "word": ["toujours", "alors", "hier", "vraiment"],
+      "phrase": ["je ne sais pas", "j'y vais", "qu'est-ce qui se passe", "peut-être bien"],
+      "sentence": [
+        "Hier j'étais à la maison quand ma sœur m'a appelé.",
+        "Tu sais à quelle heure ferme le magasin ?",
+        "Je le connais depuis des années.",
+        "Ce week-end on va faire une randonnée en montagne.",
+        "Il parle tellement vite que je ne comprends rien.",
+        "J'ai déjà fini tous les devoirs de la semaine."
+      ],
+      "long": [
+        "Quand j'étais petit, j'habitais dans un village très calme et tous les après-midi je jouais dehors avec les enfants du quartier jusqu'à la tombée de la nuit.",
+        "Si tu veux améliorer ta compréhension orale, le mieux est d'écouter chaque jour quelque chose qui t'intéresse, même si ce n'est que dix minutes.",
+        "Le mois dernier, j'ai voyagé seul pour la première fois et, même si j'étais un peu nerveux, les gens ont été très gentils avec moi."
+      ]
+    },
+    "de": {
+      "word": ["schon", "eigentlich", "gestern", "wirklich"],
+      "phrase": ["ich weiß nicht", "bis gleich", "was ist los", "kann sein"],
+      "sentence": [
+        "Gestern war ich zu Hause, als meine Schwester mich angerufen hat.",
+        "Weißt du, wann der Laden zumacht?",
+        "Ich kenne ihn schon seit vielen Jahren.",
+        "Dieses Wochenende gehen wir zusammen wandern.",
+        "Er spricht so schnell, dass ich gar nichts verstehe.",
+        "Ich habe schon alle Hausaufgaben für diese Woche gemacht."
+      ],
+      "long": [
+        "Als ich klein war, habe ich in einem ruhigen Dorf gewohnt und jeden Nachmittag mit den Kindern aus der Nachbarschaft draußen gespielt, bis es dunkel wurde.",
+        "Wenn du dein Hörverständnis verbessern willst, hörst du am besten jeden Tag etwas, das dich interessiert, auch wenn es nur zehn Minuten sind.",
+        "Letzten Monat bin ich zum ersten Mal allein verreist, und obwohl ich ein bisschen nervös war, waren alle Leute sehr freundlich zu mir."
+      ]
+    },
+    "ru": {
+      "word": ["уже", "вообще", "вчера", "правда"],
+      "phrase": ["я не знаю", "ну ладно", "что случилось", "может быть"],
+      "sentence": [
+        "Вчера я был дома, когда мне позвонила сестра.",
+        "Ты не знаешь, во сколько закрывается магазин?",
+        "Я знаю его уже много лет.",
+        "В эти выходные мы вместе поедем в горы.",
+        "Он говорит так быстро, что я ничего не понимаю.",
+        "Я уже сделал все домашние задания на эту неделю."
+      ],
+      "long": [
+        "Когда я был маленьким, я жил в тихом городке и каждый день после школы играл во дворе с соседскими детьми, пока не становилось темно.",
+        "Если ты хочешь лучше понимать речь на слух, лучше всего каждый день слушать что-нибудь интересное, пусть даже всего десять минут.",
+        "В прошлом месяце я впервые путешествовал один, и хотя немного волновался, люди были ко мне очень добры."
+      ]
+    },
+    "ja": {
+      "word": ["やっぱり", "知っている", "昨日", "本当に"],
+      "phrase": ["わかりません", "ちょっと待って", "どうしたの", "そうかもしれない"],
+      "sentence": [
+        "昨日は家にいたときに姉から電話がありました。",
+        "あの店が何時に閉まるか知っていますか。",
+        "彼とはもう何年も前からの知り合いです。",
+        "今週末はみんなで山に登りに行きましょう。",
+        "彼は話すのが速すぎて、全然わかりません。",
+        "今週の宿題はもう全部終わりました。"
+      ],
+      "long": [
+        "子どものころは静かな小さい町に住んでいて、毎日学校が終わると暗くなるまで近所の子どもたちと外で遊んでいました。",
+        "聞き取りの力を伸ばしたいなら、たとえ十分だけでも、自分が興味を持てるものを毎日聞くのが一番いい方法です。",
+        "先月初めて一人で旅行に行きましたが、少し緊張していたものの、出会った人たちはみんなとても親切でした。"
+      ]
+    },
+    "ko": {
+      "word": ["벌써", "사실", "어제", "정말"],
+      "phrase": ["잘 모르겠어요", "잠깐만요", "무슨 일이야", "그럴 수도 있어"],
+      "sentence": [
+        "어제 집에 있을 때 언니한테서 전화가 왔어요.",
+        "그 가게가 몇 시에 문을 닫는지 알아요?",
+        "그 사람을 안 지 벌써 몇 년 됐어요.",
+        "이번 주말에 같이 등산하러 가요.",
+        "그 사람은 말이 너무 빨라서 하나도 못 알아듣겠어요.",
+        "이번 주 숙제는 벌써 다 끝냈어요."
+      ],
+      "long": [
+        "어렸을 때 조용한 작은 마을에 살았는데, 매일 학교가 끝나면 어두워질 때까지 동네 아이들이랑 밖에서 놀았어요.",
+        "듣기 실력을 늘리고 싶으면 하루에 십 분이라도 자기가 관심 있는 걸 매일 듣는 게 제일 좋은 방법이에요.",
+        "지난달에 처음으로 혼자 여행을 갔는데, 조금 긴장했지만 만난 사람들이 모두 정말 친절했어요."
+      ]
+    },
+    "hi": {
+      "word": ["पहले", "असल में", "कल", "सचमुच"],
+      "phrase": ["मुझे नहीं पता", "एक मिनट रुको", "क्या हुआ", "हो सकता है"],
+      "sentence": [
+        "कल जब मैं घर पर था तब मेरी बहन का फ़ोन आया।",
+        "क्या तुम्हें पता है दुकान कितने बजे बंद होती है?",
+        "मैं उसे कई सालों से जानता हूँ।",
+        "इस हफ़्ते के आख़िर में हम सब पहाड़ों पर घूमने चलेंगे।",
+        "वह इतनी जल्दी बोलता है कि मुझे कुछ समझ नहीं आता।",
+        "मैंने इस हफ़्ते का सारा होमवर्क पहले ही कर लिया है।"
+      ],
+      "long": [
+        "जब मैं छोटा था तब मैं एक शांत छोटे शहर में रहता था और हर शाम अंधेरा होने तक मोहल्ले के बच्चों के साथ बाहर खेलता था।",
+        "अगर तुम अपनी सुनने की समझ बेहतर करना चाहते हो तो सबसे अच्छा तरीका है कि रोज़ कुछ ऐसा सुनो जिसमें तुम्हारी रुचि हो, चाहे सिर्फ़ दस मिनट ही क्यों न हो।",
+        "पिछले महीने मैं पहली बार अकेले सफ़र पर गया और थोड़ा घबराया हुआ था, लेकिन सब लोग मेरे साथ बहुत अच्छे से पेश आए।"
+      ]
+    }
+  }
+}

@@ -1,0 +1,498 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$defs": {
+    "ChunkSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "merge_gap_seconds": {
+          "minimum": 0,
+          "title": "Merge Gap Seconds",
+          "type": "number"
+        },
+        "max_chunk_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Max Chunk Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "merge_gap_seconds",
+        "max_chunk_seconds"
+      ],
+      "title": "ChunkSettings",
+      "type": "object"
+    },
+    "ClipSpec": {
+      "additionalProperties": false,
+      "description": "One real test clip. ``evaluation_only`` is never passed to the method.",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "file_pattern": {
+          "title": "File Pattern",
+          "type": "string"
+        },
+        "target_language": {
+          "title": "Target Language",
+          "type": "string"
+        },
+        "evaluation_only": {
+          "additionalProperties": true,
+          "title": "Evaluation Only",
+          "type": "object"
+        }
+      },
+      "required": [
+        "id",
+        "file_pattern",
+        "target_language"
+      ],
+      "title": "ClipSpec",
+      "type": "object"
+    },
+    "GateSettings": {
+      "additionalProperties": false,
+      "description": "One operating point of the precision gate.",
+      "properties": {
+        "detector": {
+          "title": "Detector",
+          "type": "string"
+        },
+        "threshold": {
+          "maximum": 1,
+          "minimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        },
+        "min_seconds": {
+          "minimum": 0,
+          "title": "Min Seconds",
+          "type": "number"
+        },
+        "min_units": {
+          "minimum": 0,
+          "title": "Min Units",
+          "type": "number"
+        },
+        "max_compression_ratio": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Max Compression Ratio"
+        },
+        "min_logprob_margin": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Logprob Margin"
+        },
+        "min_script_share": {
+          "anyOf": [
+            {
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Min Script Share"
+        },
+        "text_lid_veto": {
+          "default": false,
+          "title": "Text Lid Veto",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "detector",
+        "threshold",
+        "min_seconds",
+        "min_units"
+      ],
+      "title": "GateSettings",
+      "type": "object"
+    },
+    "MetricSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "long_run_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Long Run Seconds",
+          "type": "number"
+        },
+        "run_join_gap_seconds": {
+          "minimum": 0,
+          "title": "Run Join Gap Seconds",
+          "type": "number"
+        },
+        "correct_span_min_target_fraction": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Correct Span Min Target Fraction",
+          "type": "number"
+        },
+        "hard_failure_max_target_fraction": {
+          "exclusiveMaximum": 1,
+          "minimum": 0,
+          "title": "Hard Failure Max Target Fraction",
+          "type": "number"
+        }
+      },
+      "required": [
+        "long_run_seconds",
+        "run_join_gap_seconds",
+        "correct_span_min_target_fraction",
+        "hard_failure_max_target_fraction"
+      ],
+      "title": "MetricSettings",
+      "type": "object"
+    },
+    "RefineSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "window_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Window Seconds",
+          "type": "number"
+        },
+        "hop_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Hop Seconds",
+          "type": "number"
+        },
+        "min_chunk_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Min Chunk Seconds",
+          "type": "number"
+        },
+        "switch_penalty": {
+          "minimum": 0,
+          "title": "Switch Penalty",
+          "type": "number"
+        }
+      },
+      "required": [
+        "window_seconds",
+        "hop_seconds",
+        "min_chunk_seconds",
+        "switch_penalty"
+      ],
+      "title": "RefineSettings",
+      "type": "object"
+    },
+    "ReviewUnitSettings": {
+      "additionalProperties": false,
+      "description": "Method-independent labelling units: fine VAD pieces, capped so a unit is rarely mixed.",
+      "properties": {
+        "merge_gap_seconds": {
+          "minimum": 0,
+          "title": "Merge Gap Seconds",
+          "type": "number"
+        },
+        "max_unit_seconds": {
+          "exclusiveMinimum": 0,
+          "title": "Max Unit Seconds",
+          "type": "number"
+        }
+      },
+      "required": [
+        "merge_gap_seconds",
+        "max_unit_seconds"
+      ],
+      "title": "ReviewUnitSettings",
+      "type": "object"
+    },
+    "SelectionRule": {
+      "additionalProperties": false,
+      "description": "How the operating point is chosen, fixed before any real clip is scored.",
+      "properties": {
+        "tuned_on": {
+          "const": "synthetic",
+          "default": "synthetic",
+          "title": "Tuned On",
+          "type": "string"
+        },
+        "min_span_precision": {
+          "exclusiveMinimum": 0,
+          "maximum": 1,
+          "title": "Min Span Precision",
+          "type": "number"
+        },
+        "maximise": {
+          "const": "long_run_recall",
+          "default": "long_run_recall",
+          "title": "Maximise",
+          "type": "string"
+        }
+      },
+      "required": [
+        "min_span_precision"
+      ],
+      "title": "SelectionRule",
+      "type": "object"
+    },
+    "SweepSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "detectors": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Detectors",
+          "type": "array"
+        },
+        "thresholds": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "Thresholds",
+          "type": "array"
+        },
+        "min_seconds": {
+          "items": {
+            "type": "number"
+          },
+          "minItems": 1,
+          "title": "Min Seconds",
+          "type": "array"
+        }
+      },
+      "required": [
+        "detectors",
+        "thresholds",
+        "min_seconds"
+      ],
+      "title": "SweepSettings",
+      "type": "object"
+    },
+    "SynthSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "seed": {
+          "title": "Seed",
+          "type": "integer"
+        },
+        "blocks_per_clip": {
+          "minimum": 1,
+          "title": "Blocks Per Clip",
+          "type": "integer"
+        },
+        "pairs": {
+          "items": {
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "type": "array"
+          },
+          "minItems": 1,
+          "title": "Pairs",
+          "type": "array"
+        },
+        "voices": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Voices",
+          "type": "array"
+        },
+        "accented_targets": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Accented Targets",
+          "type": "array"
+        }
+      },
+      "required": [
+        "seed",
+        "blocks_per_clip",
+        "pairs",
+        "voices"
+      ],
+      "title": "SynthSettings",
+      "type": "object"
+    },
+    "VadSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "threshold": {
+          "exclusiveMaximum": 1,
+          "exclusiveMinimum": 0,
+          "title": "Threshold",
+          "type": "number"
+        },
+        "min_silence_ms": {
+          "minimum": 0,
+          "title": "Min Silence Ms",
+          "type": "integer"
+        },
+        "speech_pad_ms": {
+          "minimum": 0,
+          "title": "Speech Pad Ms",
+          "type": "integer"
+        },
+        "min_speech_ms": {
+          "minimum": 0,
+          "title": "Min Speech Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "threshold",
+        "min_silence_ms",
+        "speech_pad_ms",
+        "min_speech_ms"
+      ],
+      "title": "VadSettings",
+      "type": "object"
+    },
+    "WhisperSettings": {
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "title": "Model",
+          "type": "string"
+        },
+        "compute_type": {
+          "title": "Compute Type",
+          "type": "string"
+        },
+        "cpu_threads": {
+          "minimum": 1,
+          "title": "Cpu Threads",
+          "type": "integer"
+        },
+        "beam_size": {
+          "minimum": 1,
+          "title": "Beam Size",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "model",
+        "compute_type",
+        "cpu_threads",
+        "beam_size"
+      ],
+      "title": "WhisperSettings",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "config_version": {
+      "const": 1,
+      "title": "Config Version",
+      "type": "integer"
+    },
+    "run_id": {
+      "title": "Run Id",
+      "type": "string"
+    },
+    "clips": {
+      "items": {
+        "$ref": "#/$defs/ClipSpec"
+      },
+      "minItems": 1,
+      "title": "Clips",
+      "type": "array"
+    },
+    "vad": {
+      "$ref": "#/$defs/VadSettings"
+    },
+    "chunks": {
+      "$ref": "#/$defs/ChunkSettings"
+    },
+    "review_units": {
+      "$ref": "#/$defs/ReviewUnitSettings"
+    },
+    "whisper": {
+      "$ref": "#/$defs/WhisperSettings"
+    },
+    "whisper_reference": {
+      "$ref": "#/$defs/WhisperSettings"
+    },
+    "voxlingua_model": {
+      "title": "Voxlingua Model",
+      "type": "string"
+    },
+    "closed_set_languages": {
+      "items": {
+        "type": "string"
+      },
+      "minItems": 2,
+      "title": "Closed Set Languages",
+      "type": "array"
+    },
+    "refine": {
+      "$ref": "#/$defs/RefineSettings"
+    },
+    "sweep": {
+      "$ref": "#/$defs/SweepSettings"
+    },
+    "selection": {
+      "$ref": "#/$defs/SelectionRule"
+    },
+    "fallback_gate": {
+      "$ref": "#/$defs/GateSettings"
+    },
+    "synth": {
+      "$ref": "#/$defs/SynthSettings"
+    },
+    "metrics": {
+      "$ref": "#/$defs/MetricSettings"
+    },
+    "excluded": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "title": "Excluded",
+      "type": "object"
+    }
+  },
+  "required": [
+    "config_version",
+    "run_id",
+    "clips",
+    "vad",
+    "chunks",
+    "review_units",
+    "whisper",
+    "whisper_reference",
+    "voxlingua_model",
+    "closed_set_languages",
+    "refine",
+    "sweep",
+    "selection",
+    "fallback_gate",
+    "synth",
+    "metrics"
+  ],
+  "title": "ExperimentConfig",
+  "type": "object"
+}
