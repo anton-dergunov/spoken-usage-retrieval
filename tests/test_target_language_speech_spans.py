@@ -19,10 +19,16 @@ from speech_spans import (  # noqa: E402
     MetricSettings,
     SelectionRule,
     TruthInterval,
+    bucket_edges,
     compose_lesson,
+    duration_breakdown,
     gate,
     merge_intervals,
+    mixed_unit_report,
     normalise_language,
+    pool_duration_breakdowns,
+    pool_mixed_units,
+    pool_scores,
     probability_of,
     runs_from_windows,
     score_against_labels,
@@ -42,6 +48,7 @@ METRICS = MetricSettings(
     correct_span_min_target_fraction=0.8,
     hard_failure_max_target_fraction=0.5,
 )
+LADDER = METRICS.model_copy(update={"duration_buckets": [2.0, 5.0], "useful_span_seconds": 5.0})
 
 
 def load_config() -> ExperimentConfig:
@@ -222,6 +229,103 @@ def test_label_scoring_sets_mixed_and_unsure_time_aside():
     assert result["spans_touching_mixed_or_unsure"] == 1
     assert result["labelled_units"] == 3
     assert result["label_counts"]["mixed"] == 1
+
+
+def test_strict_label_scoring_counts_mixed_units_as_other_language():
+    labels = [
+        LabelRecord(clip_id="c", unit_id="u1", start=0, end=3, label="target"),
+        LabelRecord(clip_id="c", unit_id="u2", start=3, end=6, label="mixed"),
+    ]
+
+    lenient = score_against_labels([(0, 6)], labels, METRICS)
+    strict = score_against_labels([(0, 6)], labels, METRICS, mixed_as_other=True)
+
+    assert lenient["judged_spans"] == 1 and lenient["span_precision"] == 1.0
+    assert lenient["mixed_as_other"] is False
+    # Half the span's judged speech is now other-language: below 0.8, and a hard failure at 0.5.
+    assert strict["span_precision"] == 0.0 and strict["hard_failures"] == 1
+    assert strict["accepted_other_seconds"] == 3.0
+    # The mixed seconds are still reported, so both readings carry the same evidence.
+    assert strict["unjudgeable_seconds_in_spans"] == 3.0
+
+
+def test_a_span_over_mixed_units_alone_is_unjudged_but_strictly_wrong():
+    labels = [LabelRecord(clip_id="c", unit_id="u1", start=0, end=4, label="mixed")]
+
+    assert score_against_labels([(0, 4)], labels, METRICS)["judged_spans"] == 0
+    assert score_against_labels([(0, 4)], labels, METRICS, mixed_as_other=True)["judged_spans"] == 1
+
+
+def test_bucket_edges_span_zero_to_infinity():
+    assert [name for name, _, _ in bucket_edges([1.0, 3.0])] == ["<1s", "1-3s", ">=3s"]
+    assert bucket_edges([1.0, 3.0])[-1][2] == float("inf")
+    assert [name for name, _, _ in bucket_edges([])] == [">=0s"]
+
+
+def test_duration_breakdown_keys_precision_by_span_and_recall_by_run():
+    labels = [
+        LabelRecord(clip_id="c", unit_id="u1", start=0.0, end=1.0, label="target"),
+        LabelRecord(clip_id="c", unit_id="u2", start=10.0, end=20.0, label="target"),
+        LabelRecord(clip_id="c", unit_id="u3", start=21.0, end=24.0, label="other"),
+    ]
+    # One short span on the short run, one long span covering half of the long run.
+    result = duration_breakdown([(0.0, 1.0), (10.0, 15.0), (21.0, 23.0)], labels, LADDER)
+
+    by_span = result["by_span_duration"]
+    assert by_span["<2s"]["spans"] == 1 and by_span["<2s"]["span_precision"] == 1.0
+    assert by_span["2-5s"]["spans"] == 1 and by_span["2-5s"]["span_precision"] == 0.0
+    assert by_span["2-5s"]["hard_failures"] == 1
+    assert by_span[">=5s"]["spans"] == 1 and by_span[">=5s"]["span_precision"] == 1.0
+
+    by_run = result["by_run_duration"]
+    assert by_run["<2s"] == {
+        "runs": 1,
+        "runs_half_covered": 1,
+        "target_seconds": 1.0,
+        "accepted_seconds": 1.0,
+        "time_recall": 1.0,
+    }
+    assert by_run[">=5s"]["runs"] == 1 and by_run[">=5s"]["time_recall"] == 0.5
+
+    # useful_span_seconds keeps only the 5 s span, which is entirely on target.
+    assert result["useful_spans_only"]["spans"] == 1
+    assert result["useful_spans_only"]["span_precision"] == 1.0
+
+
+def test_duration_breakdowns_pool_by_summing_counts_not_averaging_ratios():
+    labels = [LabelRecord(clip_id="c", unit_id="u1", start=0.0, end=10.0, label="target")]
+    other = [LabelRecord(clip_id="d", unit_id="u1", start=0.0, end=10.0, label="other")]
+    rows = [
+        duration_breakdown([(0.0, 6.0)], labels, LADDER),
+        duration_breakdown([(0.0, 6.0)], other, LADDER),
+    ]
+
+    pooled = pool_duration_breakdowns(rows, LADDER)
+
+    assert pooled["by_span_duration"][">=5s"]["judged_spans"] == 2
+    assert pooled["by_span_duration"][">=5s"]["span_precision"] == 0.5
+    assert pooled["useful_spans_only"] == pool_scores([row["useful_spans_only"] for row in rows])
+
+
+def test_mixed_unit_report_separates_units_the_spans_cut_into():
+    labels = [
+        LabelRecord(clip_id="c", unit_id="u1", start=0.0, end=4.0, label="mixed"),
+        LabelRecord(clip_id="c", unit_id="u2", start=10.0, end=14.0, label="mixed"),
+        LabelRecord(clip_id="c", unit_id="u3", start=20.0, end=24.0, label="unsure"),
+        LabelRecord(clip_id="c", unit_id="u4", start=30.0, end=34.0, label="target"),
+    ]
+    # Cuts into the first, swallows the second, never reaches the third.
+    result = mixed_unit_report([(0.0, 1.0), (9.0, 15.0)], labels)
+
+    assert result["units"] == 3
+    assert (result["untouched"], result["partially_cut"], result["fully_inside_a_span"]) == (
+        1,
+        1,
+        1,
+    )
+    assert result["covered_seconds"] == 5.0
+    assert result["covered_fraction"] == pytest.approx(5.0 / 12.0)
+    assert pool_mixed_units([result, result])["units"] == 6
 
 
 def test_union_length_merges_overlaps():

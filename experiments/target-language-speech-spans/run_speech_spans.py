@@ -55,11 +55,15 @@ from speech_spans import (  # noqa: E402
     caption_proxy_labels,
     closed_set_probability,
     covered,
+    duration_breakdown,
     gate,
     merge_intervals,
+    mixed_unit_report,
     normalise_language,
     pairwise_probability,
     parse_vtt,
+    pool_duration_breakdowns,
+    pool_mixed_units,
     pool_scores,
     probability_of,
     runs_from_windows,
@@ -76,6 +80,11 @@ DEFAULT_CONFIG = HERE / "config-v1.json"
 DEFAULT_RUN_ROOT = REPOSITORY / "data/experiments/target-language-speech-spans"
 DEFAULT_MEDIA_DIR = Path.home() / "tmp"
 LABELS_DIR = HERE / "labels"
+RESULTS = HERE / "results.json"
+RESULTS_NOTE = (
+    "Aggregate metrics only; no transcript text. Full per-span outputs stay in the gitignored "
+    "run directory."
+)
 SAMPLE_RATE = 16000
 VOXLINGUA_BATCH = 4
 NON_LATIN = {"zh", "ja", "ko", "ru", "hi"}
@@ -1244,6 +1253,77 @@ def proxy_labels_for(clip: dict[str, Any], run_root: Path, captions_dir: Path) -
     return caption_proxy_labels(units, cues, clip["target_language"], clip_id=clip["clip_id"])
 
 
+def real_sweep_rows(
+    features: dict[str, list[dict[str, Any]]],
+    clips: Sequence[dict[str, Any]],
+    labels: Sequence[LabelRecord],
+    config: ExperimentConfig,
+) -> list[dict[str, Any]]:
+    """The whole operating-point sweep scored against human labels instead of synthetic truth.
+
+    Diagnostic only. The operating point is selected on synthetic clips in ``decide`` and never
+    touches these numbers, so the labels stay an unbiased estimate of the selected method.
+    """
+    rows: list[dict[str, Any]] = []
+    for method in METHODS:
+        for vetoes in (False, True):
+            for threshold in config.sweep.thresholds:
+                for min_seconds in config.sweep.min_seconds:
+                    settings = gate_for(config, threshold, min_seconds, vetoes)
+                    per_clip = []
+                    for clip in clips:
+                        clip_labels = [x for x in labels if x.clip_id == clip["clip_id"]]
+                        if not clip_labels or not features.get(clip["clip_id"]):
+                            continue
+                        spans = decide_spans(
+                            features[clip["clip_id"]], method, clip["target_language"], settings
+                        )
+                        per_clip.append(
+                            score_against_labels(
+                                [(s["start"], s["end"]) for s in spans],
+                                clip_labels,
+                                config.metrics,
+                            )
+                        )
+                    if not per_clip:
+                        continue
+                    rows.append(
+                        {
+                            "method": method,
+                            "vetoes": vetoes,
+                            "threshold": threshold,
+                            "min_seconds": min_seconds,
+                            **pool_scores(per_clip),
+                        }
+                    )
+    return rows
+
+
+def script_contamination(spans: Sequence[dict[str, Any]], target: str) -> dict[str, Any] | None:
+    """Other-script share of the forced transcript of each accepted span.
+
+    Independent of the human labels and of both detectors: for a non-Latin target, Latin letters in
+    the transcript are lesson-language words the span swallowed. There is no equivalent check for a
+    Latin-script target.
+    """
+    if target not in NON_LATIN:
+        return None
+    shares = [
+        share
+        for span in spans
+        if (share := script_share(span.get("text") or "", target)) is not None
+    ]
+    if not shares:
+        return None
+    return {
+        "spans_with_transcript": len(shares),
+        "mean_target_script_share": sum(shares) / len(shares),
+        "spans_below_0.9": sum(1 for share in shares if share < 0.9),
+        "spans_below_0.7": sum(1 for share in shares if share < 0.7),
+        "worst_target_script_share": min(shares),
+    }
+
+
 def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
     run_root = args.run_root / config.run_id
     model = args.model or config.whisper.model
@@ -1267,6 +1347,9 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
         rows = [row for row in sweep["rows"] if row["method"] == method]
         report["best_per_method"][method] = select_operating_point(rows, config.selection)
     labels = load_labels(run_root, config)
+    proxies = {
+        clip["clip_id"]: proxy_labels_for(clip, run_root, args.captions_dir) for clip in clips
+    }
     by_pair: dict[str, list[dict[str, Any]]] = defaultdict(list)
     by_voice: dict[str, list[dict[str, Any]]] = defaultdict(list)
     buckets: dict[str, dict[str, int]] = {}
@@ -1289,14 +1372,29 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
         else:
             clip_labels = [label for label in labels if label.clip_id == clip["clip_id"]]
             real: dict[str, Any] = {
+                "target_language": clip["target_language"],
                 "accepted_spans": len(spans),
                 "accepted_seconds": sum(e - s for s, e in spans),
+                "script_contamination": script_contamination(
+                    read_json(spans_path)["spans"], clip["target_language"]
+                ),
             }
             if clip_labels:
                 real["against_labels"] = score_against_labels(spans, clip_labels, config.metrics)
-            proxy = proxy_labels_for(clip, run_root, args.captions_dir)
+                real["against_labels_strict"] = score_against_labels(
+                    spans, clip_labels, config.metrics, mixed_as_other=True
+                )
+                real["duration_breakdown"] = duration_breakdown(spans, clip_labels, config.metrics)
+                real["mixed_units"] = mixed_unit_report(spans, clip_labels)
+            proxy = proxies[clip["clip_id"]]
             if proxy:
                 real["against_caption_proxy"] = score_against_labels(spans, proxy, config.metrics)
+                if clip_labels:
+                    real["caption_proxy_against_labels"] = score_against_labels(
+                        [(x.start, x.end) for x in proxy if x.label == "target"],
+                        clip_labels,
+                        config.metrics,
+                    )
             report["real"][clip["clip_id"]] = real
         for baseline in run_root.glob(f"baseline-{model}/{clip['clip_id']}.json"):
             payload = read_json(baseline)
@@ -1304,14 +1402,17 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
                 base_spans = baseline_spans(payload, name, clip["target_language"])
                 value: dict[str, Any] = {"accepted_spans": len(base_spans)}
                 if clip["source"] == "synthetic":
-                    value = score_against_truth(base_spans, load_truth(clip), config.metrics)
+                    value |= score_against_truth(base_spans, load_truth(clip), config.metrics)
                 else:
                     clip_labels = [x for x in labels if x.clip_id == clip["clip_id"]]
                     if clip_labels:
                         value["against_labels"] = score_against_labels(
                             base_spans, clip_labels, config.metrics
                         )
-                    proxy = proxy_labels_for(clip, run_root, args.captions_dir)
+                        value["against_labels_strict"] = score_against_labels(
+                            base_spans, clip_labels, config.metrics, mixed_as_other=True
+                        )
+                    proxy = proxies[clip["clip_id"]]
                     if proxy:
                         value["against_caption_proxy"] = score_against_labels(
                             base_spans, proxy, config.metrics
@@ -1328,7 +1429,10 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
         for key, value in sorted(buckets.items())
     }
     if labels:
-        real_rows = []
+        real_rows: list[dict[str, Any]] = []
+        strict_rows: list[dict[str, Any]] = []
+        by_language: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        labelled_clips = []
         for clip in clips:
             if clip["source"] != "real":
                 continue
@@ -1336,18 +1440,51 @@ def command_report(args: argparse.Namespace, config: ExperimentConfig) -> int:
             spans_path = decide_dir / "spans" / f"{clip['clip_id']}.json"
             if not clip_labels or not spans_path.is_file():
                 continue
+            labelled_clips.append(clip)
             spans = [(s["start"], s["end"]) for s in read_json(spans_path)["spans"]]
-            truth = [
-                TruthInterval(
-                    start=x.start, end=x.end, language=x.label or "", is_target=x.label == "target"
-                )
-                for x in clip_labels
-                if x.label in ("target", "other")
-            ]
-            real_rows.append(scored(spans, truth, config))
+            result = score_against_labels(spans, clip_labels, config.metrics)
+            real_rows.append(result)
+            strict_rows.append(
+                score_against_labels(spans, clip_labels, config.metrics, mixed_as_other=True)
+            )
+            by_language[clip["target_language"]].append(result)
         if real_rows:
             report["real_pooled"] = pool_scores(real_rows)
+            report["real_pooled_strict"] = pool_scores(strict_rows)
+            report["real_pooled_by_language"] = {
+                language: pool_scores(rows) for language, rows in sorted(by_language.items())
+            }
+            report["real_duration_breakdown"] = pool_duration_breakdowns(
+                [report["real"][clip["clip_id"]]["duration_breakdown"] for clip in labelled_clips],
+                config.metrics,
+            )
+            report["real_mixed_units"] = pool_mixed_units(
+                [report["real"][clip["clip_id"]]["mixed_units"] for clip in labelled_clips]
+            )
+            features = {
+                clip["clip_id"]: feature_rows(run_root, run_root / f"whisper-{model}", clip, config)
+                for clip in labelled_clips
+            }
+            rows = real_sweep_rows(features, labelled_clips, labels, config)
+            report["real_sweep"] = {
+                "diagnostic_only": True,
+                "note": (
+                    "Scored against human labels after the operating point was selected on "
+                    "synthetic truth. Never fed back into selection."
+                ),
+                "clips": [clip["clip_id"] for clip in labelled_clips],
+                "rows": rows,
+                "best_per_method": {
+                    method: select_operating_point(
+                        [row for row in rows if row["method"] == method], config.selection
+                    )
+                    for method in METHODS
+                },
+            }
     write_json(decide_dir / "report.json", report)
+    if getattr(args, "write_results", False):
+        write_json(RESULTS, {**report, "note": RESULTS_NOTE})
+        print(f"wrote {RESULTS.relative_to(REPOSITORY)}", flush=True)
     print(
         json.dumps(
             {
@@ -1400,6 +1537,12 @@ def parser() -> argparse.ArgumentParser:
             default=DEFAULT_RUN_ROOT / "captions",
             help="evaluation-only caption tracks named <clip>.en.vtt",
         )
+        if name == "report":
+            stage.add_argument(
+                "--write-results",
+                action="store_true",
+                help=f"also refresh the committed {RESULTS.name}",
+            )
 
     sub.add_parser("review-export")
     sub.add_parser("review-html")

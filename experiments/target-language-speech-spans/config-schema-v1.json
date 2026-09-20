@@ -151,6 +151,19 @@
           "minimum": 0,
           "title": "Hard Failure Max Target Fraction",
           "type": "number"
+        },
+        "duration_buckets": {
+          "items": {
+            "type": "number"
+          },
+          "title": "Duration Buckets",
+          "type": "array"
+        },
+        "useful_span_seconds": {
+          "default": 0.0,
+          "minimum": 0,
+          "title": "Useful Span Seconds",
+          "type": "number"
         }
       },
       "required": [

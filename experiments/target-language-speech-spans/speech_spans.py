@@ -124,6 +124,10 @@ class MetricSettings(Model):
     run_join_gap_seconds: float = Field(ge=0)
     correct_span_min_target_fraction: float = Field(gt=0, le=1)
     hard_failure_max_target_fraction: float = Field(ge=0, lt=1)
+    duration_buckets: list[float] = Field(default_factory=list)
+    """Ascending bucket edges in seconds; ``[1, 2]`` means ``<1``, ``1-2``, ``>=2``."""
+    useful_span_seconds: float = Field(default=0.0, ge=0)
+    """Span length at and above which a span is long enough to be useful downstream."""
 
 
 class ExperimentConfig(Model):
@@ -686,23 +690,52 @@ def pool_scores(results: Sequence[dict[str, Any]]) -> dict[str, Any]:
 # Metrics against human unit labels (real clips)
 
 
+def labelled_truth(
+    labels: Sequence[LabelRecord], *, mixed_as_other: bool = False
+) -> list[TruthInterval]:
+    """Human unit labels as truth intervals.
+
+    ``target`` and ``other`` units are exact truth. ``mixed`` and ``unsure`` units are left out by
+    default, because a unit records only *that* both languages occur in it, never *where* — the
+    review units are raw VAD pieces, while the method cuts spans on a finer grid inside them.
+    With ``mixed_as_other`` they count as other-language speech, which is the worst case for the
+    method: it charges a span for the whole ambiguity of every mixed unit it touches, including
+    units it deliberately cut into.
+    """
+    judged = [row for row in labels if row.label is not None]
+    unclear: tuple[str, ...] = ("mixed", "unsure")
+    truth = [
+        TruthInterval(start=row.start, end=row.end, language="target", is_target=True)
+        for row in judged
+        if row.label == "target"
+    ]
+    truth += [
+        TruthInterval(start=row.start, end=row.end, language="other", is_target=False)
+        for row in judged
+        if row.label == "other" or (mixed_as_other and row.label in unclear)
+    ]
+    return truth
+
+
 def score_against_labels(
-    spans: Sequence[tuple[float, float]], labels: Sequence[LabelRecord], settings: MetricSettings
+    spans: Sequence[tuple[float, float]],
+    labels: Sequence[LabelRecord],
+    settings: MetricSettings,
+    *,
+    mixed_as_other: bool = False,
 ) -> dict[str, Any]:
     """Precision and recall against per-unit human labels.
 
     ``target`` and ``other`` units are exact truth. A span's overlap with ``mixed`` or ``unsure``
     units cannot be judged, so it is reported separately instead of being counted either way;
-    ``no_speech`` time is ignored like silence.
+    ``no_speech`` time is ignored like silence. ``mixed_as_other`` switches to the strict reading
+    described in :func:`labelled_truth`.
     """
     judged = [row for row in labels if row.label is not None]
-    target = [(row.start, row.end) for row in judged if row.label == "target"]
-    other = [(row.start, row.end) for row in judged if row.label == "other"]
     unclear = [(row.start, row.end) for row in judged if row.label in ("mixed", "unsure")]
-    truth = [
-        TruthInterval(start=s, end=e, language="target", is_target=True) for s, e in target
-    ] + [TruthInterval(start=s, end=e, language="other", is_target=False) for s, e in other]
+    truth = labelled_truth(labels, mixed_as_other=mixed_as_other)
     result = score_against_truth(spans, truth, settings)
+    result["mixed_as_other"] = mixed_as_other
     result["unjudgeable_seconds_in_spans"] = sum(
         overlap_with(start, end, unclear) for start, end in spans
     )
@@ -714,6 +747,204 @@ def score_against_labels(
         label: sum(1 for row in judged if row.label == label) for label in HUMAN_LABELS
     }
     return result
+
+
+def bucket_edges(edges: Sequence[float]) -> list[tuple[str, float, float]]:
+    """``[1, 2]`` becomes ``[("<1s", 0, 1), ("1-2s", 1, 2), (">=2s", 2, inf)]``."""
+    if not edges:
+        return [(">=0s", 0.0, math.inf)]
+    ordered = sorted(edges)
+    rows = [(f"<{_edge(ordered[0])}s", 0.0, ordered[0])]
+    rows += [
+        (f"{_edge(low)}-{_edge(high)}s", low, high)
+        for low, high in zip(ordered, ordered[1:], strict=False)
+    ]
+    rows.append((f">={_edge(ordered[-1])}s", ordered[-1], math.inf))
+    return rows
+
+
+def _edge(value: float) -> str:
+    return f"{value:g}"
+
+
+def duration_breakdown(
+    spans: Sequence[tuple[float, float]],
+    labels: Sequence[LabelRecord],
+    settings: MetricSettings,
+    *,
+    mixed_as_other: bool = False,
+) -> dict[str, Any]:
+    """Precision by accepted-span length and recall by target-run length.
+
+    Short spans are of little use downstream — a learner needs a whole sentence — so the headline
+    numbers should be read per length band, not pooled. ``by_span_duration`` buckets accepted spans
+    and applies the usual 80 % criterion inside each bucket; ``by_run_duration`` buckets the truth's
+    target runs and measures how much of each band's speech the spans recovered.
+    """
+    truth = labelled_truth(labels, mixed_as_other=mixed_as_other)
+    target = [(row.start, row.end) for row in truth if row.is_target]
+    other = [(row.start, row.end) for row in truth if not row.is_target]
+    buckets = bucket_edges(settings.duration_buckets)
+
+    by_span: dict[str, dict[str, Any]] = {
+        name: {
+            "spans": 0,
+            "judged_spans": 0,
+            "correct_spans": 0,
+            "hard_failures": 0,
+            "seconds": 0.0,
+        }
+        for name, _, _ in buckets
+    }
+    for start, end in spans:
+        name = _bucket_for(end - start, buckets)
+        row = by_span[name]
+        row["spans"] += 1
+        row["seconds"] += end - start
+        on_target = overlap_with(start, end, target)
+        on_other = overlap_with(start, end, other)
+        speech = on_target + on_other
+        if speech <= 0:
+            continue
+        row["judged_spans"] += 1
+        fraction = on_target / speech
+        if fraction >= settings.correct_span_min_target_fraction:
+            row["correct_spans"] += 1
+        if fraction <= settings.hard_failure_max_target_fraction:
+            row["hard_failures"] += 1
+    for row in by_span.values():
+        judged = row["judged_spans"]
+        row["span_precision"] = row["correct_spans"] / judged if judged else None
+
+    by_run: dict[str, dict[str, Any]] = {
+        name: {"runs": 0, "runs_half_covered": 0, "target_seconds": 0.0, "accepted_seconds": 0.0}
+        for name, _, _ in buckets
+    }
+    for run in target_runs(truth, settings.run_join_gap_seconds):
+        run_speech = [
+            (max(s, run.start), min(e, run.end))
+            for s, e in target
+            if overlap(s, e, run.start, run.end)
+        ]
+        total = union_length(run_speech)
+        hit = covered(run_speech, spans)
+        row = by_run[_bucket_for(run.duration, buckets)]
+        row["runs"] += 1
+        row["runs_half_covered"] += 1 if total > 0 and hit >= 0.5 * total else 0
+        row["target_seconds"] += total
+        row["accepted_seconds"] += hit
+    for row in by_run.values():
+        total = row["target_seconds"]
+        row["time_recall"] = row["accepted_seconds"] / total if total > 0 else None
+
+    useful = [(start, end) for start, end in spans if end - start >= settings.useful_span_seconds]
+    return {
+        "buckets": [name for name, _, _ in buckets],
+        "by_span_duration": by_span,
+        "by_run_duration": by_run,
+        "useful_span_seconds": settings.useful_span_seconds,
+        "useful_spans_only": score_against_labels(
+            useful, labels, settings, mixed_as_other=mixed_as_other
+        ),
+    }
+
+
+def pool_duration_breakdowns(
+    breakdowns: Sequence[dict[str, Any]], settings: MetricSettings
+) -> dict[str, Any]:
+    """Pool per-clip duration ladders by summing counts and seconds, never averaging ratios."""
+    names = breakdowns[0]["buckets"] if breakdowns else [name for name, _, _ in bucket_edges([])]
+    by_span = {
+        name: _pool_bucket(
+            [item["by_span_duration"][name] for item in breakdowns],
+            ("spans", "judged_spans", "correct_spans", "hard_failures", "seconds"),
+        )
+        for name in names
+    }
+    for row in by_span.values():
+        row["span_precision"] = (
+            row["correct_spans"] / row["judged_spans"] if row["judged_spans"] else None
+        )
+    by_run = {
+        name: _pool_bucket(
+            [item["by_run_duration"][name] for item in breakdowns],
+            ("runs", "runs_half_covered", "target_seconds", "accepted_seconds"),
+        )
+        for name in names
+    }
+    for row in by_run.values():
+        row["time_recall"] = (
+            row["accepted_seconds"] / row["target_seconds"] if row["target_seconds"] > 0 else None
+        )
+    return {
+        "buckets": names,
+        "by_span_duration": by_span,
+        "by_run_duration": by_run,
+        "useful_span_seconds": settings.useful_span_seconds,
+        "useful_spans_only": pool_scores([item["useful_spans_only"] for item in breakdowns]),
+    }
+
+
+def _pool_bucket(rows: Sequence[dict[str, Any]], keys: Sequence[str]) -> dict[str, Any]:
+    return {key: sum(row[key] for row in rows) for key in keys}
+
+
+def pool_mixed_units(reports: Sequence[dict[str, Any]]) -> dict[str, Any]:
+    pooled = _pool_bucket(
+        reports,
+        (
+            "units",
+            "seconds",
+            "untouched",
+            "partially_cut",
+            "fully_inside_a_span",
+            "covered_seconds",
+        ),
+    )
+    pooled["covered_fraction"] = (
+        pooled["covered_seconds"] / pooled["seconds"] if pooled["seconds"] > 0 else None
+    )
+    return pooled
+
+
+def _bucket_for(value: float, buckets: Sequence[tuple[str, float, float]]) -> str:
+    for name, low, high in buckets:
+        if low <= value < high:
+            return name
+    return buckets[-1][0]
+
+
+def mixed_unit_report(
+    spans: Sequence[tuple[float, float]], labels: Sequence[LabelRecord]
+) -> dict[str, Any]:
+    """How accepted spans fall across ``mixed``/``unsure`` units.
+
+    A unit the method cut into is evidence that its span boundaries are finer than the labelling
+    granularity, so strict scoring (``mixed_as_other``) charges it for time it never accepted.
+    """
+    unclear = [row for row in labels if row.label in ("mixed", "unsure")]
+    untouched = partial = whole = 0
+    seconds = covered_seconds = 0.0
+    for row in unclear:
+        duration = row.end - row.start
+        hit = overlap_with(row.start, row.end, spans)
+        seconds += duration
+        covered_seconds += hit
+        if hit <= 1e-6:
+            untouched += 1
+        elif hit >= duration - 0.05:
+            whole += 1
+        else:
+            partial += 1
+    return {
+        "units": len(unclear),
+        "seconds": seconds,
+        "untouched": untouched,
+        "partially_cut": partial,
+        "fully_inside_a_span": whole,
+        "covered_seconds": covered_seconds,
+        "covered_fraction": covered_seconds / seconds if seconds > 0 else None,
+    }
 
 
 _VTT_CUE = re.compile(

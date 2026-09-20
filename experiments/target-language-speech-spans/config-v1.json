@@ -70,7 +70,9 @@
     "long_run_seconds": 3.0,
     "run_join_gap_seconds": 1.0,
     "correct_span_min_target_fraction": 0.8,
-    "hard_failure_max_target_fraction": 0.5
+    "hard_failure_max_target_fraction": 0.5,
+    "duration_buckets": [1.0, 2.0, 3.0, 5.0, 10.0],
+    "useful_span_seconds": 5.0
   },
   "excluded": {
     "system_voices": "macOS say voice families (system:Flo) were rendered first but dropped from evaluation: VoxLingua identified their de/fr/it/es/pt utterances as the intended language in only 5 of 22 cases against 36 of 37 for Chatterbox, so their truth labels describe text rather than audible speech.",
